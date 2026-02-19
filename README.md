@@ -1,6 +1,6 @@
 # JobPipeline
 
-> Intelligente Jobsuche mit Bewerbungs-Tracking und Jira-Integration
+> Intelligente Jobsuche mit Bewerbungs-Tracking, Jira-Integration und Mehrbenutzer-Unterstützung
 
 JobPipeline ist eine schlanke Single-Page-App für die strukturierte Jobsuche. Sie durchsucht die **Adzuna-API** parallel nach mehreren Jobtiteln, filtert bereits gespeicherte oder ignorierte Stellen automatisch heraus und verlinkt direkt auf **33+ Jobportale**. Gespeicherte Stellen lassen sich mit Status und Notizen tracken und per Knopfdruck als Jira-Ticket exportieren.
 
@@ -16,13 +16,20 @@ JobPipeline ist eine schlanke Single-Page-App für die strukturierte Jobsuche. S
 - **DACH-Support** — Automatische Länder-Erkennung (DE / AT / CH)
 - **Deduplication** — Bereits gespeicherte oder ignorierte Stellen werden ausgeblendet
 - **Ignorier-Funktion** — Stellen einmalig wegklicken, tauchen bei nächster Suche nicht mehr auf
+- **Ohne Anmeldung nutzbar** — Die Suche funktioniert auch ohne Account
 
 ### Merkzettel & Tracking
 - **Speichern mit einem Klick** — Job landet sofort auf dem Merkzettel
 - **Status-Tracking** — Neu · Interessant · Beworben · Abgelehnt · Angebot
 - **Notizen** — Freies Textfeld je Stelle (Ansprechpartner, Gehaltsvorstellung, Gesprächsnotizen)
 - **Status-Filter** — Merkzettel nach Bewerbungsstatus filtern
-- **Persistenz** — Alles bleibt im `localStorage` erhalten (kein Account nötig)
+- **Serverseitige Persistenz** — Daten werden pro Benutzer in SQLite gespeichert
+
+### Benutzerverwaltung
+- **Registrierung & Login** — Eigenständige Konten mit Benutzername und Passwort
+- **Passwort-Reset** — Per E-Mail-Link (SMTP-konfigurierbar)
+- **Datenisolation** — Jeder Nutzer sieht nur seine eigenen gespeicherten Jobs und Jira-Konfiguration
+- **Mehrbenutzer-fähig** — Beliebig viele Accounts auf einer Instanz
 
 ### Jobportal-Links (33+)
 Nach jeder Suche erscheinen vorausgefüllte Links zu drei Gruppen:
@@ -40,7 +47,6 @@ Nach jeder Suche erscheinen vorausgefüllte Links zu drei Gruppen:
 - **Auto-Detect** — Felder werden nach Namen automatisch erkannt
 - **Feldübersicht** — Alle verfügbaren Felder des Projekts einblenden & IDs kopieren
 - **Verbindungstest** — Zugangsdaten vor dem Speichern prüfen
-- **Fallback** — Bei Custom-Field-Fehler automatischer Retry ohne Zusatzfelder
 - **CORS-Proxy** — Backend leitet Anfragen durch, damit der Browser nicht geblockt wird
 
 ---
@@ -48,6 +54,7 @@ Nach jeder Suche erscheinen vorausgefüllte Links zu drei Gruppen:
 ## Voraussetzungen
 
 - **Docker Desktop** — [docker.com/products/docker-desktop](https://www.docker.com/products/docker-desktop/)
+- Eine Domain mit öffentlicher IP für automatische HTTPS-Zertifikate (Let's Encrypt via Caddy)
 - Kein Node.js, kein Build-Schritt, keine weiteren Abhängigkeiten
 
 ---
@@ -57,18 +64,49 @@ Nach jeder Suche erscheinen vorausgefüllte Links zu drei Gruppen:
 ```bash
 # Repository klonen
 git clone https://github.com/Nilshh/JobFinder.git
-cd jobpipeline
+cd JobFinder
 
-# Container starten (Frontend + API)
+# Konfigurationsdatei anlegen
+cp .env.example .env
+# .env mit echten Werten befüllen (siehe Abschnitt "Konfiguration")
+
+# Container starten
 docker compose up -d
 
-# App öffnen
-open http://localhost:8080
+# App öffnen (nach DNS-Propagation und Zertifikatsausstellung)
+open https://job.raddes.de
 ```
 
 Nach dem Start läuft:
-- **`http://localhost:8080`** — JobPipeline Frontend (nginx)
-- **`http://localhost:5500`** — API-Backend (Flask)
+- **`https://job.raddes.de`** — JobPipeline (Caddy: Frontend + HTTPS-Proxy)
+- **`http://api:5500`** (intern) — API-Backend (Flask, nur intern erreichbar)
+
+---
+
+## Konfiguration (.env)
+
+Vor dem ersten Start muss eine `.env`-Datei im Projektverzeichnis angelegt werden:
+
+```bash
+cp .env.example .env
+```
+
+| Variable | Beschreibung | Pflicht |
+|---|---|---|
+| `ADZUNA_APP_ID` | Adzuna App ID ([developer.adzuna.com](https://developer.adzuna.com/)) | ✅ |
+| `ADZUNA_APP_KEY` | Adzuna API Key | ✅ |
+| `SECRET_KEY` | Flask Session Secret (zufälliger String, mind. 32 Zeichen) | ✅ |
+| `SMTP_HOST` | SMTP-Server (z. B. `smtp.gmail.com`) | für Passwort-Reset |
+| `SMTP_PORT` | SMTP-Port (Standard: `587`) | für Passwort-Reset |
+| `SMTP_USER` | SMTP-Benutzername / Absender-Adresse | für Passwort-Reset |
+| `SMTP_PASSWORD` | SMTP-Passwort / App-Passwort | für Passwort-Reset |
+| `SMTP_FROM` | Absender-Name und -Adresse | für Passwort-Reset |
+| `APP_URL` | Öffentliche URL der App (z. B. `https://job.raddes.de`) | für Passwort-Reset |
+
+Sicheren `SECRET_KEY` generieren:
+```bash
+openssl rand -hex 32
+```
 
 ---
 
@@ -81,7 +119,7 @@ docker compose up -d
 # Stoppen
 docker compose down
 
-# Neu bauen (nach Änderungen an jobfinder.html oder server.py)
+# Neu bauen (nach Änderungen an server.py oder requirements.txt)
 docker compose up -d --build
 
 # Logs anzeigen
@@ -89,6 +127,9 @@ docker compose logs -f
 
 # Nur API-Logs
 docker compose logs -f api
+
+# Nur Caddy-Logs
+docker compose logs -f caddy
 ```
 
 ---
@@ -96,39 +137,62 @@ docker compose logs -f api
 ## Architektur
 
 ```
-Browser
+Internet
   │
-  ├─► jobfinder.html      Single-Page-App (HTML/CSS/JS, kein Framework)
-  │     │
-  │     ├─► Adzuna API    Direkte Fetch-Anfragen (CORS erlaubt)
-  │     └─► localhost:5500  Flask-Proxy für Jira (CORS-Bypass)
-  │
-  └─► server.py           Flask-Backend
-        ├─► /jobs          Adzuna-Proxy (optional)
-        ├─► /jira/test     Verbindungstest → /rest/api/3/myself
-        ├─► /jira/issue    Ticket erstellen → /rest/api/3/issue
-        └─► /jira/fields   Feldliste → /rest/api/3/issue/createmeta/…
+  └─► Caddy (HTTPS, Let's Encrypt)        job.raddes.de:443
+        │
+        ├─► /jobs /jira/* /auth/* /user/*  →  Flask API (intern :5500)
+        │     │
+        │     ├─► /jobs          Adzuna-Proxy (API Key bleibt serverseitig)
+        │     ├─► /auth/*        Registrierung, Login, Logout, Passwort-Reset
+        │     ├─► /user/data     Gespeicherte Jobs & Jira-Config (pro User)
+        │     ├─► /jira/test     Verbindungstest → Jira REST API
+        │     ├─► /jira/issue    Ticket erstellen → Jira REST API
+        │     └─► /jira/fields   Feldliste → Jira REST API
+        │
+        └─► /* (alle anderen Pfade)  →  jobfinder.html (statische SPA)
 ```
 
 ### Dateien
 
 | Datei | Beschreibung |
 |---|---|
-| `jobfinder.html` | Komplette Frontend-App |
-| `server.py` | Flask-Backend (Adzuna + Jira CORS-Proxy) |
-| `Dockerfile` | nginx-Container für das Frontend |
+| `jobfinder.html` | Komplette Frontend-App (Single-Page-App) |
+| `server.py` | Flask-Backend (Auth, Adzuna-Proxy, Jira-Proxy, SQLite) |
+| `Caddyfile` | Caddy-Konfiguration (HTTPS, Reverse Proxy) |
 | `Dockerfile.api` | Python-Container für das Backend |
-| `docker-compose.yml` | Orchestrierung beider Services |
+| `docker-compose.yml` | Orchestrierung aller Services |
+| `.env` | Secrets & Konfiguration (nicht im Repository) |
+| `.env.example` | Vorlage für `.env` |
+| `.gitignore` | Schützt `.env` und Datenbankdateien vor Commits |
 
 ### Datenspeicherung
 
-Alle Daten liegen ausschließlich im `localStorage` des Browsers:
+Benutzerdaten werden serverseitig in einer **SQLite-Datenbank** gespeichert (persistent via Docker Volume):
 
-| Key | Inhalt |
+| Tabelle | Inhalt |
 |---|---|
-| `jf2_saved` | Gespeicherte Jobs (JSON-Objekt, Key → Job) |
-| `jf2_ign` | Ignorierte Job-Keys (JSON-Array) |
-| `jf2_jira` | Jira-Konfiguration |
+| `users` | Benutzerkonten (Benutzername, Passwort-Hash, E-Mail) |
+| `user_data` | Gespeicherte Jobs & Jira-Konfiguration pro Benutzer |
+| `password_reset_tokens` | Temporäre Reset-Tokens (1 Stunde gültig) |
+
+---
+
+## Benutzerverwaltung
+
+### Registrierung
+
+1. **Anmelden**-Button oben rechts klicken
+2. Auf **Registrieren** wechseln
+3. Benutzername, E-Mail (optional, für Passwort-Reset) und Passwort eingeben
+
+### Passwort vergessen
+
+1. Im Login-Dialog auf **Passwort vergessen?** klicken
+2. E-Mail-Adresse eingeben → Reset-Link wird zugeschickt
+3. Link im E-Mail öffnen → neues Passwort setzen
+
+> Passwort-Reset erfordert konfigurierte SMTP-Daten in der `.env`.
 
 ---
 
@@ -164,10 +228,6 @@ Auf **Verfügbare Felder anzeigen →** klicken:
 - URL- und Unternehmens-Felder werden automatisch erkannt (grün markiert)
 - Auf eine Field-ID klicken → kopiert sie in die Zwischenablage
 
-### Proxy-Modus (empfohlen)
-
-Der **Lokale Proxy**-Schalter ist standardmäßig aktiv. Er leitet alle Jira-Anfragen über `server.py`, da Browser CORS-Anfragen direkt zu Atlassian blockieren. Nur deaktivieren, wenn Jira CORS für die eigene Domain explizit erlaubt.
-
 ---
 
 ## Troubleshooting
@@ -175,9 +235,23 @@ Der **Lokale Proxy**-Schalter ist standardmäßig aktiv. Er leitet alle Jira-Anf
 ### Keine Suchergebnisse
 - Anderen Jobtitel oder größeren Umkreis versuchen
 - Ort korrekt eingegeben? (z. B. „München" statt „munich")
+- `ADZUNA_APP_ID` und `ADZUNA_APP_KEY` in der `.env` prüfen
+
+### HTTPS-Zertifikat wird nicht ausgestellt
+- DNS der Domain muss auf den Server zeigen (A-Record)
+- Port 80 und 443 müssen von außen erreichbar sein
+- Caddy-Logs prüfen: `docker compose logs -f caddy`
+
+### Login/Registrierung schlägt fehl
+- `SECRET_KEY` in `.env` gesetzt?
+- Docker-Volume `jobfinder_data` vorhanden? → `docker volume ls`
+
+### Passwort-Reset-Mail kommt nicht an
+- SMTP-Einstellungen in `.env` prüfen
+- Spam-Ordner prüfen
+- SMTP-Verbindung testen: `docker compose logs -f api`
 
 ### Jira: 500-Fehler / „Nicht erreichbar"
-- Läuft Docker? → `docker compose ps`
 - Falsche Domain? → Domain ohne `https://` eingeben, z. B. `firma.atlassian.net`
 - 500 = meist Non-JSON-Response von Jira (Redirect / falsche Domain)
 
@@ -198,17 +272,22 @@ Im Tab **📌 Merkzettel** → **🗑 Ignorierliste leeren** klicken.
 ## Lokal ohne Docker (Entwicklung)
 
 ```bash
-# Python-Abhängigkeiten installieren
+# Abhängigkeiten installieren
 pip install flask requests
+
+# .env mit Minimalwerten anlegen
+echo "ADZUNA_APP_ID=deine_id" > .env
+echo "ADZUNA_APP_KEY=dein_key" >> .env
+echo "SECRET_KEY=$(openssl rand -hex 32)" >> .env
 
 # Backend starten
 python server.py
 
-# Frontend direkt im Browser öffnen (kein Server nötig)
-open jobfinder.html
+# Frontend im Browser öffnen (über http://localhost:5500 oder direkt)
+open http://localhost:5500
 ```
 
-> Die App funktioniert auch ohne Backend — die Jobsuche läuft direkt über die Adzuna-API. Nur die Jira-Integration benötigt `server.py` (CORS).
+> Ohne Docker wird keine HTTPS-Verschlüsselung genutzt. Für Production immer Docker + Caddy verwenden.
 
 ---
 
@@ -218,7 +297,9 @@ open jobfinder.html
 |---|---|
 | Frontend | Vanilla HTML / CSS / JavaScript (kein Framework, kein Build) |
 | Backend | Python 3.12 · Flask · Requests |
+| Datenbank | SQLite (serverseitig, Docker Volume) |
+| Authentifizierung | Session-Cookies · Werkzeug Password Hashing |
+| Reverse Proxy / HTTPS | Caddy (automatisches Let's Encrypt) |
 | Jobdaten | [Adzuna Jobs API](https://developer.adzuna.com/) |
-| Container | Docker · nginx (Alpine) |
+| Container | Docker Compose |
 | Jira | Atlassian REST API v3 · ADF |
-| Datenhaltung | `localStorage` (clientseitig) |
