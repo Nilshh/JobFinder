@@ -141,6 +141,21 @@ body{font-family:'Segoe UI',sans-serif;background:#0a0a0f;color:#f0f0f5;min-heig
 /* Auth */
 .uname{font-size:13px;color:#ffd166;font-weight:600;white-space:nowrap;}
 .authtoggle{background:none;border:none;color:#6b6b80;cursor:pointer;font-size:13px;font-family:inherit;text-decoration:underline;padding:0;}
+
+/* Admin table */
+#adminTable tbody tr{border-bottom:1px solid #1e1e2a;transition:background .15s;}
+#adminTable tbody tr:hover{background:rgba(255,255,255,.03);}
+#adminTable td{padding:10px 10px;vertical-align:middle;}
+.admin-badge{display:inline-block;font-size:11px;font-weight:700;border-radius:6px;padding:2px 8px;}
+.admin-badge.locked{background:rgba(255,77,109,.12);color:#ff4d6d;border:1px solid rgba(255,77,109,.25);}
+.admin-badge.active{background:rgba(34,197,94,.1);color:#22c55e;border:1px solid rgba(34,197,94,.2);}
+.admin-badge.admin{background:rgba(255,209,102,.08);color:#ffd166;border:1px solid rgba(255,209,102,.2);}
+.admin-ipt{background:#0a0a0f;border:1px solid #2a2a3a;border-radius:7px;color:#f0f0f5;font-size:12px;padding:5px 8px;width:170px;font-family:inherit;}
+.admin-ipt:focus{outline:none;border-color:#ff4d6d;}
+.admin-action{background:none;border:1px solid #2a2a3a;border-radius:7px;color:#6b6b80;cursor:pointer;font-size:12px;padding:4px 10px;font-family:inherit;white-space:nowrap;}
+.admin-action:hover{border-color:#ff4d6d;color:#ff4d6d;}
+.admin-action.ok{border-color:rgba(34,197,94,.4);color:#22c55e;}
+.admin-action.ok:hover{background:rgba(34,197,94,.1);}
 </style>
 </head>
 <body>
@@ -180,6 +195,7 @@ body{font-family:'Segoe UI',sans-serif;background:#0a0a0f;color:#f0f0f5;min-heig
     <button type="button" class="cfgbtn" id="jiraCfgBtn" onclick="openJiraSettings()" title="Jira Einstellungen">⚡ Jira</button>
     <div id="userBar" style="display:none;align-items:center;gap:6px;">
       <span class="uname" id="uname"></span>
+      <button type="button" class="cfgbtn" id="adminBtn" style="display:none" onclick="openAdminPanel()" title="Benutzerverwaltung">⚙️ Admin</button>
       <button type="button" class="nbtn" onclick="doLogout()">Abmelden</button>
     </div>
     <button type="button" class="nbtn" id="loginBtn" onclick="openAuthModal()">🔐 Anmelden</button>
@@ -358,6 +374,36 @@ body{font-family:'Segoe UI',sans-serif;background:#0a0a0f;color:#f0f0f5;min-heig
       <button type="button" class="mcancelbtn" onclick="closeJiraSettings()">Abbrechen</button>
       <button type="button" class="mcancelbtn" id="jTestBtn" onclick="testJiraConnection()" style="border-color:rgba(38,132,255,.35);color:#2684ff;">🔗 Testen</button>
       <button type="button" class="msavebtn" onclick="saveJiraSettings()">💾 Speichern</button>
+    </div>
+  </div>
+</div>
+
+<!-- Admin Panel Modal -->
+<div id="adminModal" class="modal-bg" style="display:none" onclick="if(event.target===this)closeAdminPanel()">
+  <div class="modal" style="max-width:720px;width:100%;">
+    <div class="modal-title">⚙️ Benutzerverwaltung</div>
+    <div class="modal-sub">Benutzer anzeigen, sperren/entsperren, E-Mail anpassen oder Konten löschen.</div>
+    <div id="adminStatus" class="mstatus" style="margin-bottom:12px;"></div>
+    <div style="overflow-x:auto;">
+      <table id="adminTable" style="width:100%;border-collapse:collapse;font-size:13px;">
+        <thead>
+          <tr style="color:#6b6b80;text-align:left;border-bottom:1px solid #2a2a3a;">
+            <th style="padding:8px 10px;">Benutzer</th>
+            <th style="padding:8px 10px;">E-Mail</th>
+            <th style="padding:8px 10px;">Registriert</th>
+            <th style="padding:8px 10px;text-align:center;">Admin</th>
+            <th style="padding:8px 10px;text-align:center;">Status</th>
+            <th style="padding:8px 10px;text-align:right;">Aktionen</th>
+          </tr>
+        </thead>
+        <tbody id="adminTbody">
+          <tr><td colspan="6" style="text-align:center;padding:24px;color:#6b6b80;">Wird geladen…</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="mactions" style="margin-top:20px;">
+      <button type="button" class="mcancelbtn" onclick="closeAdminPanel()">Schließen</button>
+      <button type="button" class="msavebtn" style="flex:0;padding:10px 20px;" onclick="loadAdminUsers()">🔄 Aktualisieren</button>
     </div>
   </div>
 </div>
@@ -1126,17 +1172,117 @@ async function checkAuth(){
 }
 
 function updateUserBar(){
-  const bar = document.getElementById("userBar");
-  const btn = document.getElementById("loginBtn");
-  const nm  = document.getElementById("uname");
+  const bar      = document.getElementById("userBar");
+  const btn      = document.getElementById("loginBtn");
+  const nm       = document.getElementById("uname");
+  const adminBtn = document.getElementById("adminBtn");
   if(AUTH.user){
     nm.textContent = "👤 "+AUTH.user.username;
     bar.style.display = "flex";
     btn.style.display = "none";
+    adminBtn.style.display = AUTH.user.is_admin ? "" : "none";
   } else {
     bar.style.display = "none";
     btn.style.display = "";
+    adminBtn.style.display = "none";
   }
+}
+
+// ── Admin Panel ──────────────────────────────────────────────────
+function openAdminPanel(){
+  document.getElementById("adminModal").style.display = "flex";
+  loadAdminUsers();
+}
+
+function closeAdminPanel(){
+  document.getElementById("adminModal").style.display = "none";
+}
+
+async function loadAdminUsers(){
+  const tbody = document.getElementById("adminTbody");
+  const status = document.getElementById("adminStatus");
+  tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:24px;color:#6b6b80;">Wird geladen…</td></tr>';
+  status.innerHTML = "";
+  try {
+    const r = await fetch("/admin/users", { credentials:"include" });
+    if(!r.ok){ status.innerHTML = `<span class="errbx">Fehler: ${(await r.json()).error}</span>`; return; }
+    const users = await r.json();
+    if(!users.length){
+      tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:24px;color:#6b6b80;">Keine Benutzer vorhanden.</td></tr>';
+      return;
+    }
+    tbody.innerHTML = users.map(u => {
+      const isSelf = u.id === AUTH.user.id;
+      const date   = u.created_at ? u.created_at.slice(0,10) : "–";
+      const statusBadge = u.is_locked
+        ? '<span class="admin-badge locked">Gesperrt</span>'
+        : '<span class="admin-badge active">Aktiv</span>';
+      const adminBadge = u.is_admin
+        ? '<span class="admin-badge admin">Admin</span>'
+        : '<span style="color:#6b6b80;font-size:11px;">–</span>';
+      const lockLabel  = u.is_locked ? "Entsperren" : "Sperren";
+      const lockClass  = u.is_locked ? "admin-action ok" : "admin-action";
+      return `<tr data-uid="${u.id}">
+        <td style="font-weight:600">${_esc(u.username)}${isSelf ? ' <span style="color:#6b6b80;font-size:11px;">(du)</span>' : ''}</td>
+        <td><input class="admin-ipt" data-field="email" value="${_esc(u.email||'')}" placeholder="–" onkeydown="if(event.key==='Enter')_adminSaveField(${u.id},this)"></td>
+        <td style="color:#6b6b80">${date}</td>
+        <td style="text-align:center">${adminBadge}</td>
+        <td style="text-align:center">${statusBadge}</td>
+        <td style="text-align:right;white-space:nowrap;display:flex;gap:6px;justify-content:flex-end;">
+          <button class="admin-action ok" onclick="_adminSaveField(${u.id},this.closest('tr').querySelector('[data-field=email]'))">💾</button>
+          ${!isSelf ? `<button class="${lockClass}" onclick="adminToggleLock(${u.id},${u.is_locked?0:1})">${lockLabel}</button>` : ''}
+          ${!isSelf ? `<button class="admin-action" style="border-color:rgba(255,77,109,.3);color:#ff4d6d;" onclick="adminDeleteUser(${u.id},'${_esc(u.username)}')">Löschen</button>` : ''}
+          ${!isSelf ? `<button class="admin-action" onclick="adminToggleAdmin(${u.id},${u.is_admin?0:1})">${u.is_admin ? 'Admin entziehen' : 'Zum Admin'}</button>` : ''}
+        </td>
+      </tr>`;
+    }).join("");
+  } catch(e){
+    status.innerHTML = `<span class="errbx">Netzwerkfehler: ${e.message}</span>`;
+  }
+}
+
+function _esc(s){ const d=document.createElement("div"); d.textContent=String(s||""); return d.innerHTML; }
+
+async function _adminPatch(uid, payload){
+  const r = await fetch(`/admin/users/${uid}`, {
+    method:"PATCH", credentials:"include",
+    headers:{"Content-Type":"application/json"},
+    body: JSON.stringify(payload)
+  });
+  return r;
+}
+
+async function _adminSaveField(uid, input){
+  const val = input.value.trim();
+  const r = await _adminPatch(uid, { email: val });
+  const status = document.getElementById("adminStatus");
+  if(r.ok){
+    status.innerHTML = '<span style="color:#22c55e">✓ E-Mail gespeichert</span>';
+    setTimeout(()=>status.innerHTML="", 2500);
+  } else {
+    const j = await r.json();
+    status.innerHTML = `<span class="errbx">${j.error}</span>`;
+  }
+}
+
+async function adminToggleLock(uid, newVal){
+  const r = await _adminPatch(uid, { is_locked: newVal });
+  if(r.ok){ loadAdminUsers(); }
+  else { const j=await r.json(); document.getElementById("adminStatus").innerHTML=`<span class="errbx">${j.error}</span>`; }
+}
+
+async function adminToggleAdmin(uid, newVal){
+  if(!confirm(newVal ? "Diesem Benutzer Adminrechte geben?" : "Adminrechte entziehen?")) return;
+  const r = await _adminPatch(uid, { is_admin: newVal });
+  if(r.ok){ loadAdminUsers(); }
+  else { const j=await r.json(); document.getElementById("adminStatus").innerHTML=`<span class="errbx">${j.error}</span>`; }
+}
+
+async function adminDeleteUser(uid, username){
+  if(!confirm(`Benutzer „${username}" und alle zugehörigen Daten unwiderruflich löschen?`)) return;
+  const r = await fetch(`/admin/users/${uid}`, { method:"DELETE", credentials:"include" });
+  if(r.ok){ loadAdminUsers(); }
+  else { const j=await r.json(); document.getElementById("adminStatus").innerHTML=`<span class="errbx">${j.error}</span>`; }
 }
 
 async function loadUserData(){

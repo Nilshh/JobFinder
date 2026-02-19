@@ -30,6 +30,7 @@ JobPipeline ist eine schlanke Single-Page-App für die strukturierte Jobsuche. S
 - **Passwort-Reset** — Per E-Mail-Link (SMTP-konfigurierbar)
 - **Datenisolation** — Jeder Nutzer sieht nur seine eigenen gespeicherten Jobs und Jira-Konfiguration
 - **Mehrbenutzer-fähig** — Beliebig viele Accounts auf einer Instanz
+- **Admin-Panel** — Benutzer verwalten, sperren/entsperren, Adminrechte vergeben, Konten löschen
 
 ### Jobportal-Links (33+)
 Nach jeder Suche erscheinen vorausgefüllte Links zu drei Gruppen:
@@ -96,6 +97,7 @@ cp .env.example .env
 | `ADZUNA_APP_ID` | Adzuna App ID ([developer.adzuna.com](https://developer.adzuna.com/)) | ✅ |
 | `ADZUNA_APP_KEY` | Adzuna API Key | ✅ |
 | `SECRET_KEY` | Flask Session Secret (zufälliger String, mind. 32 Zeichen) | ✅ |
+| `ADMIN_USER` | Benutzername, der beim Start zum Admin befördert wird | Ersteinrichtung |
 | `SMTP_HOST` | SMTP-Server (z. B. `smtp.gmail.com`) | für Passwort-Reset |
 | `SMTP_PORT` | SMTP-Port (Standard: `587`) | für Passwort-Reset |
 | `SMTP_USER` | SMTP-Benutzername / Absender-Adresse | für Passwort-Reset |
@@ -141,11 +143,12 @@ Internet
   │
   └─► Caddy (HTTPS, Let's Encrypt)        job.raddes.de:443
         │
-        ├─► /jobs /jira/* /auth/* /user/*  →  Flask API (intern :5500)
+        ├─► /jobs /jira/* /auth/* /user/* /admin/*  →  Flask API (intern :5500)
         │     │
         │     ├─► /jobs          Adzuna-Proxy (API Key bleibt serverseitig)
         │     ├─► /auth/*        Registrierung, Login, Logout, Passwort-Reset
         │     ├─► /user/data     Gespeicherte Jobs & Jira-Config (pro User)
+        │     ├─► /admin/users   Benutzerverwaltung (nur Admins)
         │     ├─► /jira/test     Verbindungstest → Jira REST API
         │     ├─► /jira/issue    Ticket erstellen → Jira REST API
         │     └─► /jira/fields   Feldliste → Jira REST API
@@ -172,7 +175,7 @@ Benutzerdaten werden serverseitig in einer **SQLite-Datenbank** gespeichert (per
 
 | Tabelle | Inhalt |
 |---|---|
-| `users` | Benutzerkonten (Benutzername, Passwort-Hash, E-Mail) |
+| `users` | Benutzerkonten (Benutzername, Passwort-Hash, E-Mail, is_admin, is_locked) |
 | `user_data` | Gespeicherte Jobs & Jira-Konfiguration pro Benutzer |
 | `password_reset_tokens` | Temporäre Reset-Tokens (1 Stunde gültig) |
 
@@ -193,6 +196,35 @@ Benutzerdaten werden serverseitig in einer **SQLite-Datenbank** gespeichert (per
 3. Link im E-Mail öffnen → neues Passwort setzen
 
 > Passwort-Reset erfordert konfigurierte SMTP-Daten in der `.env`.
+
+### Ersten Administrator einrichten
+
+Nach der Erstinstallation gibt es noch keinen Admin-Account. So wird ein bestehender Benutzer zum Admin befördert:
+
+1. Benutzer registrieren (falls noch nicht vorhanden)
+2. In der `.env` eintragen:
+   ```env
+   ADMIN_USER=deinBenutzername
+   ```
+3. Container neu starten:
+   ```bash
+   docker compose up -d --build
+   ```
+4. Der Benutzer hat jetzt Adminrechte — **⚙️ Admin**-Button erscheint im Topbar
+5. `ADMIN_USER` kann danach wieder aus der `.env` entfernt werden (Rechte bleiben erhalten)
+
+### Admin-Panel
+
+Erreichbar über den **⚙️ Admin**-Button (nur für Admins sichtbar):
+
+| Funktion | Beschreibung |
+|---|---|
+| E-Mail anpassen | Inline editierbar, Enter oder 💾-Button |
+| Sperren / Entsperren | Gesperrte Benutzer können sich nicht mehr anmelden |
+| Zum Admin / Admin entziehen | Adminrechte für andere Benutzer verwalten |
+| Benutzer löschen | Löscht Konto + alle gespeicherten Daten (unwiderruflich) |
+
+> Admins können sich nicht selbst sperren, ihre eigenen Adminrechte entziehen oder ihr eigenes Konto löschen.
 
 ---
 
@@ -245,6 +277,14 @@ Auf **Verfügbare Felder anzeigen →** klicken:
 ### Login/Registrierung schlägt fehl
 - `SECRET_KEY` in `.env` gesetzt?
 - Docker-Volume `jobfinder_data` vorhanden? → `docker volume ls`
+
+### Konto gesperrt
+- Admin im **⚙️ Admin**-Panel aufrufen und Benutzer entsperren
+- Kein Admin verfügbar? → `ADMIN_USER=benutzername` in `.env` + `docker compose up -d --build`
+
+### Admin-Button nicht sichtbar
+- Sicherstellen, dass `ADMIN_USER=benutzername` in `.env` gesetzt und Container neu gestartet wurde
+- Nach dem nächsten Login erscheint der Button
 
 ### Passwort-Reset-Mail kommt nicht an
 - SMTP-Einstellungen in `.env` prüfen
