@@ -34,6 +34,7 @@ DB_PATH  = os.path.join(DATA_DIR, "jobfinder.db")
 def get_db():
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA journal_mode=WAL")
     return conn
 
 def init_db():
@@ -71,6 +72,10 @@ def init_db():
                 FOREIGN KEY (user_id) REFERENCES users(id)
             )
         """)
+        # Indexes
+        db.execute("CREATE INDEX IF NOT EXISTS idx_users_email ON users(email)")
+        db.execute("CREATE INDEX IF NOT EXISTS idx_reset_tokens_user ON password_reset_tokens(user_id)")
+        db.execute("CREATE INDEX IF NOT EXISTS idx_reset_tokens_expires ON password_reset_tokens(expires_at)")
 
 init_db()
 
@@ -219,6 +224,11 @@ def auth_forgot():
         return jsonify({"error": "E-Mail-Adresse erforderlich"}), 400
 
     with get_db() as db:
+        # Clean up expired tokens opportunistically
+        db.execute(
+            "DELETE FROM password_reset_tokens WHERE expires_at < ?",
+            [datetime.now(timezone.utc).isoformat()]
+        )
         user = db.execute(
             "SELECT * FROM users WHERE lower(email) = ?", [email]
         ).fetchone()
