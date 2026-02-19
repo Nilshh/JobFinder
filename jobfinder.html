@@ -1413,7 +1413,7 @@ async function doAuth(){
     if(!r){ st.innerHTML='<span style="color:#ff4d6d">Verbindungsfehler.</span>'; btn.disabled=false; return; }
     const d = await r.json();
     if(!r.ok){ st.innerHTML='<span style="color:#ff4d6d">'+esc(d.error||"Fehler")+'</span>'; btn.disabled=false; return; }
-    AUTH.user = { username: d.username };
+    AUTH.user = { username: d.username, is_admin: d.is_admin || false };
   } else {
     const r = await fetch("/auth/login", {
       method:"POST", credentials:"include",
@@ -1423,7 +1423,7 @@ async function doAuth(){
     if(!r){ st.innerHTML='<span style="color:#ff4d6d">Verbindungsfehler.</span>'; btn.disabled=false; return; }
     const d = await r.json();
     if(!r.ok){ st.innerHTML='<span style="color:#ff4d6d">'+esc(d.error||"Fehler")+'</span>'; btn.disabled=false; return; }
-    AUTH.user = { username: d.username };
+    AUTH.user = { username: d.username, is_admin: d.is_admin || false };
     await loadUserData();
   }
   updateUserBar();
