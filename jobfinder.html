@@ -319,7 +319,6 @@ body{font-family:'Segoe UI',sans-serif;background:#0a0a0f;color:#f0f0f5;min-heig
 
 <script>
 // ── State ──
-const AID = "a353f160", AKEY = "195c838b71947625e6c13ed1a329c629";
 let km = 50, days = 7;
 const titles = new Set();
 const JOBS = {}; // storeId → job object
@@ -433,8 +432,8 @@ async function doSearch(){
 
   try {
     const results = await Promise.all(arr.map(title => {
-      const p = new URLSearchParams({app_id:AID,app_key:AKEY,results_per_page:20,what:title,distance:km,"content-type":"application/json",where});
-      return fetch("https://api.adzuna.com/v1/api/jobs/"+country+"/search/1?"+p)
+      const p = new URLSearchParams({what:title,where,distance:km,country});
+      return fetch("/jobs?"+p)
         .then(r=>r.json()).then(d=>({title,list:d.results||[],count:d.count||0})).catch(()=>({title,list:[],count:0}));
     }));
 

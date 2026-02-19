@@ -1,10 +1,11 @@
 from flask import Flask, request, jsonify
 import requests
+import os
 
 app = Flask(__name__)
 
-APP_ID  = "a353f160"
-APP_KEY = "195c838b71947625e6c13ed1a329c629"
+APP_ID  = os.environ.get("ADZUNA_APP_ID",  "")
+APP_KEY = os.environ.get("ADZUNA_APP_KEY", "")
 
 @app.after_request
 def add_cors(response):
