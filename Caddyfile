@@ -1,0 +1,14 @@
+job.raddes.de {
+    handle /jobs {
+        reverse_proxy api:5500
+    }
+
+    handle /jira/* {
+        reverse_proxy api:5500
+    }
+
+    handle {
+        root * /usr/share/caddy
+        file_server
+    }
+}

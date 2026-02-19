@@ -1,16 +1,23 @@
 services:
-  jobfinder:
-    build:
-      context: .
-      dockerfile: Dockerfile
+  caddy:
+    image: caddy:alpine
     ports:
-      - "8080:80"
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./jobfinder.html:/usr/share/caddy/index.html:ro
+      - caddy_data:/data
+      - caddy_config:/config
     restart: unless-stopped
 
   api:
     build:
       context: .
       dockerfile: Dockerfile.api
-    ports:
-      - "5500:5500"
     restart: unless-stopped
+
+volumes:
+  caddy_data:
+  caddy_config:

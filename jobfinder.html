@@ -847,7 +847,7 @@ async function exportToJira(key, btn){
 
   const useProxy = cfg.useProxy !== false;
   const apiUrl   = useProxy
-    ? "http://localhost:5500/jira/issue"
+    ? "/jira/issue"
     : "https://"+cfg.domain+"/rest/api/3/issue";
   const hdrs = {
     "Authorization": "Basic "+auth,
@@ -939,7 +939,7 @@ async function loadJiraFields(){
   const auth = btoa(email+":"+token);
   const hdrs = { "Authorization":"Basic "+auth, "Accept":"application/json" };
   let url;
-  if(useProxy){ url=`http://localhost:5500/jira/fields?project=${encodeURIComponent(project)}`; hdrs["X-Jira-Domain"]=domain; }
+  if(useProxy){ url=`/jira/fields?project=${encodeURIComponent(project)}`; hdrs["X-Jira-Domain"]=domain; }
   else         { url=`https://${domain}/rest/api/3/issue/createmeta/${encodeURIComponent(project)}/issuetypes`; }
 
   try {
@@ -954,7 +954,7 @@ async function loadJiraFields(){
     if(!types.length){ box.innerHTML='<span style="color:#6b6b80">Keine Issue-Typen gefunden.</span>'; return; }
     const typeId = types[0].id;
     const furl = useProxy
-      ? `http://localhost:5500/jira/fields?project=${encodeURIComponent(project)}&issuetype=${typeId}`
+      ? `/jira/fields?project=${encodeURIComponent(project)}&issuetype=${typeId}`
       : `https://${domain}/rest/api/3/issue/createmeta/${encodeURIComponent(project)}/issuetypes/${typeId}`;
     const fr = await fetch(furl, { headers:hdrs });
     const fd = await fr.json().catch(()=>({}));
@@ -1017,7 +1017,7 @@ async function testJiraConnection(){
   const auth = btoa(email+":"+token);
   const hdrs = { "Authorization":"Basic "+auth, "Accept":"application/json" };
   let testUrl;
-  if(useProxy){ testUrl="http://localhost:5500/jira/test"; hdrs["X-Jira-Domain"]=domain; }
+  if(useProxy){ testUrl="/jira/test"; hdrs["X-Jira-Domain"]=domain; }
   else         { testUrl="https://"+domain+"/rest/api/3/myself"; }
 
   try {
