@@ -234,10 +234,18 @@ def auth_logout():
 def auth_me():
     if "user_id" not in session:
         return jsonify({"user": None})
+    with get_db() as db:
+        user = db.execute(
+            "SELECT is_admin, is_locked FROM users WHERE id = ?", [session["user_id"]]
+        ).fetchone()
+    if not user or user["is_locked"]:
+        session.clear()
+        return jsonify({"user": None})
+    session["is_admin"] = bool(user["is_admin"])
     return jsonify({"user": {
         "id":       session["user_id"],
         "username": session["username"],
-        "is_admin": session.get("is_admin", False),
+        "is_admin": bool(user["is_admin"]),
     }})
 
 
