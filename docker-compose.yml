@@ -16,8 +16,15 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.api
+    env_file:
+      - .env
+    environment:
+      - DATA_DIR=/app/data
+    volumes:
+      - jobfinder_data:/app/data
     restart: unless-stopped
 
 volumes:
   caddy_data:
   caddy_config:
+  jobfinder_data:
