@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>JobPipeline</title>
+<title>JobFinder</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box;}
 body{font-family:'Segoe UI',sans-serif;background:#0a0a0f;color:#f0f0f5;min-height:100vh;padding:24px 16px;}
@@ -11,7 +11,7 @@ body{font-family:'Segoe UI',sans-serif;background:#0a0a0f;color:#f0f0f5;min-heig
 
 /* Nav */
 .topbar{display:flex;align-items:center;justify-content:space-between;margin-bottom:24px;gap:12px;flex-wrap:wrap;}
-.logo{display:flex;align-items:center;gap:10px;font-family:Georgia,serif;font-size:clamp(22px,4vw,38px);font-weight:900;background:linear-gradient(135deg,#ff4d6d,#ffd166);-webkit-background-clip:text;-webkit-text-fill-color:transparent;}
+.logo{font-family:Georgia,serif;font-size:clamp(26px,5vw,44px);font-weight:900;background:linear-gradient(135deg,#ff4d6d,#ffd166);-webkit-background-clip:text;-webkit-text-fill-color:transparent;}
 .nav{display:flex;gap:8px;}
 .nbtn{background:#12121a;border:1px solid #2a2a3a;border-radius:10px;color:#6b6b80;cursor:pointer;font-size:13px;font-weight:600;padding:10px 18px;font-family:inherit;position:relative;}
 .nbtn.on{background:rgba(255,209,102,0.1);border-color:#ffd166;color:#ffd166;}
@@ -118,62 +118,18 @@ body{font-family:'Segoe UI',sans-serif;background:#0a0a0f;color:#f0f0f5;min-heig
 .savempty{text-align:center;color:#6b6b80;padding:60px 0;font-size:15px;}
 .footer{text-align:center;color:#2a2a3a;font-size:11px;margin-top:12px;padding-bottom:20px;}
 @keyframes spin{to{transform:rotate(360deg);}}
-
-/* Jira */
-.cfgbtn{background:#12121a;border:1px solid #2a2a3a;border-radius:10px;color:#6b6b80;cursor:pointer;font-size:13px;font-weight:600;padding:10px 14px;font-family:inherit;transition:border-color .2s,color .2s;}
-.cfgbtn:hover{border-color:#2684ff;color:#2684ff;}
-.cfgbtn.active{background:rgba(38,132,255,0.1);border-color:#2684ff;color:#2684ff;}
-.jirabtn{background:rgba(38,132,255,0.1);border:1px solid rgba(38,132,255,0.25);border-radius:8px;color:#2684ff;cursor:pointer;font-size:12px;font-weight:700;padding:7px 14px;font-family:inherit;text-decoration:none;display:inline-flex;align-items:center;transition:opacity .2s;}
-.jirabtn:disabled{opacity:.5;cursor:default;}
-.jirabtn.ok{background:rgba(34,197,94,0.1);border-color:rgba(34,197,94,0.25);color:#22c55e;}
-.jirabtn.err{background:rgba(255,77,109,0.1);border-color:rgba(255,77,109,0.25);color:#ff4d6d;}
-.modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.78);backdrop-filter:blur(5px);z-index:1000;display:flex;align-items:center;justify-content:center;padding:16px;}
-.modal{background:#12121a;border:1px solid #2a2a3a;border-radius:16px;padding:28px;width:100%;max-width:460px;}
-.modal-title{font-size:18px;font-weight:800;margin-bottom:4px;}
-.modal-sub{font-size:13px;color:#6b6b80;margin-bottom:22px;line-height:1.6;}
-.mfield{margin-bottom:14px;}
-.mfield .lbl{margin-bottom:6px;}
-.mactions{display:flex;gap:10px;margin-top:22px;}
-.msavebtn{flex:1;background:linear-gradient(135deg,#2684ff,#0052cc);border:none;border-radius:10px;color:#fff;cursor:pointer;font-size:14px;font-weight:700;padding:12px;font-family:inherit;}
-.mcancelbtn{background:#0a0a0f;border:1px solid #2a2a3a;border-radius:10px;color:#6b6b80;cursor:pointer;font-size:14px;font-weight:600;padding:12px 18px;font-family:inherit;}
-.mstatus{font-size:13px;margin-top:12px;min-height:18px;}
 </style>
 </head>
 <body>
 <div class="wrap">
 
 <div class="topbar">
-  <div class="logo">
-    <svg viewBox="0 0 60 30" height="36" width="60" fill="none" style="flex-shrink:0" xmlns="http://www.w3.org/2000/svg">
-      <defs>
-        <linearGradient id="plg" x1="0" y1="0" x2="60" y2="0" gradientUnits="userSpaceOnUse">
-          <stop stop-color="#ff4d6d"/>
-          <stop offset="0.5" stop-color="#ff8c42"/>
-          <stop offset="1" stop-color="#ffd166"/>
-        </linearGradient>
-      </defs>
-      <!-- connecting pipe -->
-      <rect x="8" y="12" width="44" height="6" rx="3" fill="url(#plg)" opacity="0.28"/>
-      <!-- stage nodes -->
-      <circle cx="8" cy="15" r="8" fill="#ff4d6d"/>
-      <circle cx="30" cy="15" r="8" fill="url(#plg)"/>
-      <circle cx="52" cy="15" r="8" fill="#ffd166"/>
-      <!-- icons inside nodes: briefcase, gear, checkmark -->
-      <rect x="5" y="13" width="6" height="4" rx="1" fill="rgba(255,255,255,0.85)"/>
-      <path d="M6.5 13v-1a1 1 0 011-1h1a1 1 0 011 1v1" stroke="rgba(255,255,255,0.85)" stroke-width="0.9" fill="none" stroke-linecap="round"/>
-      <circle cx="30" cy="15" r="2.5" fill="none" stroke="rgba(255,255,255,0.85)" stroke-width="1.2"/>
-      <circle cx="30" cy="15" r="1" fill="rgba(255,255,255,0.85)"/>
-      <path d="M27.5 12.5l1.2 1.2M32.5 17.5l-1.2-1.2M27.5 17.5l1.2-1.2M32.5 12.5l-1.2 1.2" stroke="rgba(255,255,255,0.75)" stroke-width="1" stroke-linecap="round"/>
-      <path d="M49 15.2l2 2 4-4" stroke="rgba(255,255,255,0.9)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
-    </svg>
-    JobPipeline
-  </div>
+  <div class="logo">JobFinder</div>
   <div class="nav">
     <button type="button" class="nbtn on" id="nb1" onclick="showTab('search')">🔍 Suche</button>
     <button type="button" class="nbtn" id="nb2" onclick="showTab('saved')">
       📌 Merkzettel<span class="badge" id="badge">0</span>
     </button>
-    <button type="button" class="cfgbtn" id="jiraCfgBtn" onclick="openJiraSettings()" title="Jira Einstellungen">⚡ Jira</button>
   </div>
 </div>
 
@@ -263,60 +219,6 @@ body{font-family:'Segoe UI',sans-serif;background:#0a0a0f;color:#f0f0f5;min-heig
 </div>
 
 </div><!-- /wrap -->
-
-<!-- Jira Settings Modal -->
-<div id="jiraModal" class="modal-bg" style="display:none" onclick="if(event.target===this)closeJiraSettings()">
-  <div class="modal">
-    <div class="modal-title">⚡ Jira Anbindung</div>
-    <div class="modal-sub">Verbinde JobPipeline mit deinem Jira-Projekt, um gespeicherte Jobs als Tickets zu exportieren.<br>Den API-Token findest du unter <a href="https://id.atlassian.com/manage-profile/security/api-tokens" target="_blank" rel="noopener" style="color:#2684ff;">id.atlassian.com → Security → API Tokens</a>.</div>
-
-    <div class="mfield">
-      <label class="lbl">🌐 Jira Cloud Domain</label>
-      <input type="text" class="inp" id="jDomain" placeholder="meinunternehmen.atlassian.net" autocomplete="off">
-    </div>
-    <div class="mfield">
-      <label class="lbl">✉️ E-Mail Adresse</label>
-      <input type="email" class="inp" id="jEmail" placeholder="name@unternehmen.de" autocomplete="email">
-    </div>
-    <div class="mfield">
-      <label class="lbl">🔑 API Token</label>
-      <input type="password" class="inp" id="jToken" placeholder="API Token von Atlassian" autocomplete="off">
-    </div>
-    <div class="mfield">
-      <label class="lbl">📁 Projekt-Key</label>
-      <input type="text" class="inp" id="jProject" placeholder="z.B. JOBS" style="text-transform:uppercase;" autocomplete="off">
-    </div>
-    <div class="mfield">
-      <label class="lbl">🎫 Issue-Typ</label>
-      <input type="text" class="inp" id="jIssueType" placeholder="Task" autocomplete="off">
-    </div>
-    <div class="mfield">
-      <label class="lbl">🔗 Jira-Feld: URL <span style="color:#6b6b80;font-weight:400;">(optional)</span></label>
-      <input type="text" class="inp" id="jUrlField" placeholder="customfield_10050" autocomplete="off">
-    </div>
-    <div class="mfield">
-      <label class="lbl">🏢 Jira-Feld: Unternehmen <span style="color:#6b6b80;font-weight:400;">(optional)</span></label>
-      <input type="text" class="inp" id="jCompanyField" placeholder="customfield_10051" autocomplete="off">
-      <div style="font-size:11px;color:#6b6b80;margin-top:5px;">Field-IDs: <button type="button" onclick="loadJiraFields()" style="background:none;border:none;color:#2684ff;cursor:pointer;font-size:11px;padding:0;font-family:inherit;text-decoration:underline;">Verfügbare Felder anzeigen →</button></div>
-    </div>
-    <div id="jiraFieldsBox" style="display:none;background:#0a0a0f;border:1px solid #2a2a3a;border-radius:10px;padding:12px;margin-bottom:14px;max-height:180px;overflow-y:auto;font-size:11px;"></div>
-    <div class="mfield" style="display:flex;align-items:flex-start;gap:12px;background:#0a0a0f;border:1px solid #2a2a3a;border-radius:10px;padding:13px 15px;">
-      <input type="checkbox" id="jUseProxy" style="width:16px;height:16px;flex-shrink:0;margin-top:2px;cursor:pointer;accent-color:#2684ff;" checked>
-      <div>
-        <label for="jUseProxy" style="cursor:pointer;font-size:13px;font-weight:600;display:block;">🔀 Lokalen Proxy verwenden <span style="color:#6b6b80;font-weight:400;">(empfohlen)</span></label>
-        <div style="font-size:11px;color:#6b6b80;margin-top:3px;line-height:1.5;">Leitet Requests über <code style="color:#ffd166;">localhost:5500</code> (server.py). Umgeht CORS. Deaktivieren nur wenn Jira CORS für deine Domain erlaubt.</div>
-      </div>
-    </div>
-
-    <div id="jiraModalStatus" class="mstatus"></div>
-    <div class="mactions">
-      <button type="button" class="mcancelbtn" onclick="closeJiraSettings()">Abbrechen</button>
-      <button type="button" class="mcancelbtn" id="jTestBtn" onclick="testJiraConnection()" style="border-color:rgba(38,132,255,.35);color:#2684ff;">🔗 Testen</button>
-      <button type="button" class="msavebtn" onclick="saveJiraSettings()">💾 Speichern</button>
-    </div>
-  </div>
-</div>
-
 <script>
 // ── State ──
 const AID = "a353f160", AKEY = "195c838b71947625e6c13ed1a329c629";
@@ -615,7 +517,6 @@ function renderSaved(){
       '<div class="sactions">'+
         '<button type="button" class="nsavebtn" data-cid="'+cid+'" data-key="'+esc(j.key)+'">💾 Notiz speichern</button>'+
         '<span class="nhint" id="nh'+cid+'">✓ Gespeichert</span>'+
-        jiraActionBtn(j)+
         '<button type="button" class="delbtn" data-cid="'+cid+'" data-key="'+esc(j.key)+'">🗑 Entfernen</button>'+
       '</div>';
     el.appendChild(card);
@@ -629,8 +530,6 @@ function renderSaved(){
   el.addEventListener("click", e => {
     const nb = e.target.closest(".nsavebtn");
     const db = e.target.closest(".delbtn");
-    const jb = e.target.closest(".jirabtn[data-key]");
-    if(jb){ exportToJira(jb.dataset.key, jb); }
     if(nb){
       const saved=LS.saved(); const cid=nb.dataset.cid; const k=nb.dataset.key;
       const ta=document.getElementById("sn"+cid);
@@ -740,307 +639,7 @@ function fmtSal(mn,mx){
   if(mn&&mx) return f(mn)+" – "+f(mx); if(mn) return "ab "+f(mn); if(mx) return "bis "+f(mx); return null;
 }
 
-// ── Jira Integration ──
-const JIRA = {
-  get: () => { try{ return JSON.parse(localStorage.getItem("jf2_jira")||"{}"); }catch(e){return {};} },
-  set: d => localStorage.setItem("jf2_jira", JSON.stringify(d))
-};
-
-function jiraConfigured(){ const c=JIRA.get(); return !!(c.domain&&c.email&&c.token&&c.project); }
-
-function updateJiraCfgBtn(){
-  const btn = document.getElementById("jiraCfgBtn");
-  if(btn) btn.classList.toggle("active", jiraConfigured());
-}
-
-function openJiraSettings(){
-  const c = JIRA.get();
-  document.getElementById("jDomain").value    = c.domain    || "";
-  document.getElementById("jEmail").value     = c.email     || "";
-  document.getElementById("jToken").value     = c.token     || "";
-  document.getElementById("jProject").value   = c.project   || "";
-  document.getElementById("jIssueType").value   = c.issueType   || "Task";
-  document.getElementById("jUrlField").value     = c.urlField     || "";
-  document.getElementById("jCompanyField").value = c.companyField || "";
-  document.getElementById("jUseProxy").checked   = c.useProxy !== false;
-  document.getElementById("jiraFieldsBox").style.display = "none";
-  document.getElementById("jiraModalStatus").innerHTML = "";
-  document.getElementById("jiraModal").style.display = "flex";
-}
-
-function closeJiraSettings(){
-  document.getElementById("jiraModal").style.display = "none";
-}
-
-function saveJiraSettings(){
-  const domain    = document.getElementById("jDomain").value.trim().replace(/^https?:\/\//,"").replace(/\/+$/,"");
-  const email     = document.getElementById("jEmail").value.trim();
-  const token     = document.getElementById("jToken").value.trim();
-  const project   = document.getElementById("jProject").value.trim().toUpperCase();
-  const issueType    = document.getElementById("jIssueType").value.trim() || "Task";
-  const urlField     = document.getElementById("jUrlField").value.trim();
-  const companyField = document.getElementById("jCompanyField").value.trim();
-  const useProxy     = document.getElementById("jUseProxy").checked;
-  const st           = document.getElementById("jiraModalStatus");
-
-  if(!domain||!email||!token||!project){
-    st.innerHTML = '<span style="color:#ff4d6d">\u26A0\uFE0F Bitte alle Pflichtfelder ausf\u00FCller.</span>';
-    return;
-  }
-  JIRA.set({domain, email, token, project, issueType, urlField, companyField, useProxy});
-  st.innerHTML = '<span style="color:#22c55e">\u2713 Einstellungen gespeichert</span>';
-  updateJiraCfgBtn();
-  setTimeout(closeJiraSettings, 1200);
-}
-
-function jiraActionBtn(j){
-  if(j.jiraKey){
-    const cfg = JIRA.get();
-    const url = cfg.domain ? "https://"+cfg.domain+"/browse/"+esc(j.jiraKey) : "#";
-    return '<a href="'+url+'" target="_blank" rel="noopener" class="jirabtn ok">\u2713 '+esc(j.jiraKey)+'</a>';
-  }
-  return '<button type="button" class="jirabtn" data-key="'+esc(j.key)+'">\u26A1 Nach Jira</button>';
-}
-
-async function exportToJira(key, btn){
-  const cfg = JIRA.get();
-  if(!cfg.domain||!cfg.email||!cfg.token||!cfg.project){ openJiraSettings(); return; }
-
-  const saved = LS.saved();
-  const job   = saved[key];
-  if(!job) return;
-
-  if(btn){ btn.disabled=true; btn.textContent="\u23F3 Exportiere\u2026"; }
-
-  const auth    = btoa(cfg.email+":"+cfg.token);
-  const summary = (job.title||"Job")+" @ "+(job.company||"");
-
-  // Atlassian Document Format (ADF)
-  const para = (parts) => ({ type:"paragraph", content:parts });
-  const bold = (t)     => ({ type:"text", text:t, marks:[{type:"strong"}] });
-  const text = (t)     => ({ type:"text", text:t });
-  const link = (t,u)   => ({ type:"text", text:t, marks:[{type:"link",attrs:{href:u}}] });
-
-  const rows = [];
-  rows.push(para([bold("Jobtitel: "),       text(job.title||"\u2013")]));
-  rows.push(para([bold("Unternehmen: "),    text(job.company||"\u2013")]));
-  if(job.location) rows.push(para([bold("Standort: "),      text(job.location)]));
-  const sal = fmtSal(job.salary_min, job.salary_max);
-  if(sal)          rows.push(para([bold("Gehalt: "),        text(sal)]));
-  if(job.url)      rows.push(para([bold("Stellenanzeige: "), link(job.url, job.url)]));
-  if(job.searchedAs) rows.push(para([bold("Gesucht als: "), text(job.searchedAs)]));
-  if(job.note){
-    rows.push({ type:"rule" });
-    rows.push(para([bold("Notizen:")]));
-    rows.push(para([text(job.note)]));
-  }
-
-  const fields = {
-    project:     { key: cfg.project },
-    summary:     summary,
-    description: { type:"doc", version:1, content:rows },
-    issuetype:   { name: cfg.issueType||"Task" }
-  };
-  if(cfg.urlField     && job.url)     fields[cfg.urlField]     = job.url;
-  if(cfg.companyField && job.company) fields[cfg.companyField] = job.company;
-  const body = { fields };
-
-  const useProxy = cfg.useProxy !== false;
-  const apiUrl   = useProxy
-    ? "http://localhost:5500/jira/issue"
-    : "https://"+cfg.domain+"/rest/api/3/issue";
-  const hdrs = {
-    "Authorization": "Basic "+auth,
-    "Content-Type":  "application/json",
-    "Accept":        "application/json"
-  };
-  if(useProxy) hdrs["X-Jira-Domain"] = cfg.domain;
-
-  const doFetch = (f) => fetch(apiUrl, { method:"POST", headers:hdrs, body:JSON.stringify({fields:f}) });
-
-  function jiraErrMsg(err, status){
-    if(status===401) return "Zugangsdaten ungültig — E-Mail oder API Token falsch";
-    if(status===403) return "Keine Berechtigung für dieses Projekt";
-    if(status===404) return "Projekt-Key nicht gefunden";
-    if(err.errors && Object.keys(err.errors).length)
-      return Object.entries(err.errors).map(([k,v])=>k+": "+v).join(" | ");
-    return (err.errorMessages&&err.errorMessages[0]) || err.message || ("HTTP "+status);
-  }
-
-  function jiraSuccess(data, btn){
-    const sv = LS.saved();
-    if(sv[key]){ sv[key].jiraKey = data.key; LS.setSaved(sv); }
-    if(btn){
-      const url = "https://"+cfg.domain+"/browse/"+data.key;
-      const a = document.createElement("a");
-      a.href=url; a.target="_blank"; a.rel="noopener";
-      a.className="jirabtn ok"; a.textContent="\u2713 "+data.key;
-      btn.replaceWith(a);
-    }
-  }
-
-  try {
-    let resp = await doFetch(fields);
-
-    // If 400 and custom fields are configured → retry without them
-    if(resp.status===400 && (cfg.urlField||cfg.companyField)){
-      const fallback = {...fields};
-      delete fallback[cfg.urlField];
-      delete fallback[cfg.companyField];
-      const resp2 = await doFetch(fallback);
-      if(resp2.ok){
-        const data = await resp2.json();
-        jiraSuccess(data, btn);
-        const warn = document.createElement("div");
-        warn.style.cssText = "position:fixed;bottom:1rem;right:1rem;background:#f59e0b;color:#fff;padding:.75rem 1rem;border-radius:.5rem;z-index:9999;font-size:.85rem;max-width:22rem;line-height:1.4";
-        warn.textContent = "\u26A0\uFE0F Ticket erstellt, aber Custom Fields konnten nicht gesetzt werden \u2014 Felder im Jira-Screen des Issue-Typs aktivieren oder Field-IDs pr\u00FCfen";
-        document.body.appendChild(warn);
-        setTimeout(()=>warn.remove(), 7000);
-        return;
-      }
-      // fallback also failed — show that error
-      const err2 = await resp2.json().catch(()=>({}));
-      const msg2 = jiraErrMsg(err2, resp2.status);
-      if(btn){ btn.disabled=false; btn.textContent="\u26A0\uFE0F Fehler"; btn.classList.add("err"); btn.title=msg2; }
-      return;
-    }
-
-    if(resp.ok){
-      const data = await resp.json();
-      jiraSuccess(data, btn);
-    } else {
-      const err = await resp.json().catch(()=>({}));
-      const msg = jiraErrMsg(err, resp.status);
-      if(btn){ btn.disabled=false; btn.textContent="\u26A0\uFE0F Fehler"; btn.classList.add("err"); btn.title=msg; }
-    }
-  } catch(ex){
-    const isProxy = (JIRA.get().useProxy !== false);
-    const hint = isProxy ? " (läuft server.py / Docker?)" : "";
-    if(btn){ btn.disabled=false; btn.textContent="\u26A0\uFE0F Nicht erreichbar"; btn.classList.add("err"); btn.title=ex.message+hint; }
-  }
-}
-
-async function loadJiraFields(){
-  const domain   = document.getElementById("jDomain").value.trim().replace(/^https?:\/\//,"").replace(/\/+$/,"");
-  const email    = document.getElementById("jEmail").value.trim();
-  const token    = document.getElementById("jToken").value.trim();
-  const project  = document.getElementById("jProject").value.trim().toUpperCase();
-  const useProxy = document.getElementById("jUseProxy").checked;
-  const box      = document.getElementById("jiraFieldsBox");
-
-  if(!domain||!email||!token||!project){
-    box.style.display="block";
-    box.innerHTML='<span style="color:#ff4d6d">\u26A0\uFE0F Bitte zuerst Domain, E-Mail, Token und Projekt-Key eingeben.</span>';
-    return;
-  }
-  box.style.display="block";
-  box.innerHTML='<span style="color:#6b6b80">\u23F3 Lade Felder\u2026</span>';
-
-  const auth = btoa(email+":"+token);
-  const hdrs = { "Authorization":"Basic "+auth, "Accept":"application/json" };
-  let url;
-  if(useProxy){ url=`http://localhost:5500/jira/fields?project=${encodeURIComponent(project)}`; hdrs["X-Jira-Domain"]=domain; }
-  else         { url=`https://${domain}/rest/api/3/issue/createmeta/${encodeURIComponent(project)}/issuetypes`; }
-
-  try {
-    const resp = await fetch(url, { headers:hdrs });
-    const data = await resp.json().catch(()=>({}));
-    if(!resp.ok){
-      box.innerHTML='<span style="color:#ff4d6d">\u274C '+(data.errorMessages?.[0]||data.error||"HTTP "+resp.status)+'</span>';
-      return;
-    }
-    // Fetch fields for first issue type
-    const types = data.issueTypes || data.values || [];
-    if(!types.length){ box.innerHTML='<span style="color:#6b6b80">Keine Issue-Typen gefunden.</span>'; return; }
-    const typeId = types[0].id;
-    const furl = useProxy
-      ? `http://localhost:5500/jira/fields?project=${encodeURIComponent(project)}&issuetype=${typeId}`
-      : `https://${domain}/rest/api/3/issue/createmeta/${encodeURIComponent(project)}/issuetypes/${typeId}`;
-    const fr = await fetch(furl, { headers:hdrs });
-    const fd = await fr.json().catch(()=>({}));
-    const fieldMap = fd.fields || {};
-    const rows = Object.entries(fieldMap)
-      .filter(([id])=>id.startsWith("customfield_")||["summary","description","url","labels"].includes(id))
-      .sort((a,b)=>(a[1].name||a[0]).localeCompare(b[1].name||b[0]));
-    if(!rows.length){ box.innerHTML='<span style="color:#6b6b80">Keine Custom Fields gefunden.</span>'; return; }
-
-    // Auto-detect URL and Unternehmen fields by name
-    const urlKw     = ["url","link","webseite","website","stellenanzeige"];
-    const companyKw = ["unternehmen","company","firma","arbeitgeber","organisation"];
-    const urlInp     = document.getElementById("jUrlField");
-    const companyInp = document.getElementById("jCompanyField");
-    let autoUrl="", autoCompany="";
-    for(const [id,f] of rows){
-      const n = (f.name||"").toLowerCase();
-      if(!autoUrl     && urlKw.some(k=>n.includes(k)))     { autoUrl=id; }
-      if(!autoCompany && companyKw.some(k=>n.includes(k))) { autoCompany=id; }
-    }
-    const didUrl     = autoUrl     && !urlInp.value;
-    const didCompany = autoCompany && !companyInp.value;
-    if(didUrl)     urlInp.value     = autoUrl;
-    if(didCompany) companyInp.value = autoCompany;
-
-    const autoHint = (didUrl||didCompany)
-      ? `<div style="color:#22c55e;margin-bottom:6px;">\u2713 Automatisch erkannt: ${[didUrl?"URL ("+autoUrl+")":"",didCompany?"Unternehmen ("+autoCompany+")":""].filter(Boolean).join(", ")}</div>`
-      : "";
-
-    box.innerHTML = autoHint+
-      '<div style="color:#ffd166;font-weight:700;margin-bottom:6px;">Alle Felder — Klick auf ID zum Kopieren:</div>'+
-      rows.map(([id,f])=>{
-        const isAuto = id===autoUrl||id===autoCompany;
-        return `<div style="display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px solid #1a1a26;${isAuto?"background:rgba(34,197,94,0.05);":""}">`+
-          `<span style="color:${isAuto?"#22c55e":"#f0f0f5"};">${esc(f.name||id)}</span>`+
-          `<code style="color:#ffd166;cursor:pointer;" onclick="navigator.clipboard.writeText('${id}')" title="Kopieren">${id}</code>`+
-          `</div>`;
-      }).join('');
-  } catch(ex){
-    box.innerHTML='<span style="color:#ff4d6d">\u274C Nicht erreichbar.</span>';
-  }
-}
-
-async function testJiraConnection(){
-  const domain   = document.getElementById("jDomain").value.trim().replace(/^https?:\/\//,"").replace(/\/+$/,"");
-  const email    = document.getElementById("jEmail").value.trim();
-  const token    = document.getElementById("jToken").value.trim();
-  const useProxy = document.getElementById("jUseProxy").checked;
-  const st       = document.getElementById("jiraModalStatus");
-  const btn      = document.getElementById("jTestBtn");
-
-  if(!domain||!email||!token){
-    st.innerHTML = '<span style="color:#ff4d6d">\u26A0\uFE0F Bitte Domain, E-Mail und Token eingeben.</span>';
-    return;
-  }
-
-  st.innerHTML = '<span style="color:#6b6b80">\u23F3 Teste Verbindung\u2026</span>';
-  btn.disabled = true;
-
-  const auth = btoa(email+":"+token);
-  const hdrs = { "Authorization":"Basic "+auth, "Accept":"application/json" };
-  let testUrl;
-  if(useProxy){ testUrl="http://localhost:5500/jira/test"; hdrs["X-Jira-Domain"]=domain; }
-  else         { testUrl="https://"+domain+"/rest/api/3/myself"; }
-
-  try {
-    const resp = await fetch(testUrl, { headers:hdrs });
-    const data = await resp.json().catch(()=>({}));
-    if(resp.ok){
-      const name = data.displayName || data.emailAddress || "OK";
-      st.innerHTML = '<span style="color:#22c55e">\u2713 Verbunden als: <b>'+esc(name)+'</b></span>';
-    } else if(resp.status===401){
-      st.innerHTML = '<span style="color:#ff4d6d">\u274C Zugangsdaten ungültig (401) — E-Mail oder API Token prüfen.</span>';
-    } else {
-      const msg = (data.errorMessages&&data.errorMessages[0]) || data.message || ("HTTP "+resp.status);
-      st.innerHTML = '<span style="color:#ff4d6d">\u274C '+esc(msg)+'</span>';
-    }
-  } catch(ex){
-    const hint = useProxy ? " Läuft der Docker-Container / server.py?" : "";
-    st.innerHTML = '<span style="color:#ff4d6d">\u274C Nicht erreichbar.'+esc(hint)+'</span>';
-  }
-  btn.disabled = false;
-}
-
 refreshBadge();
-updateJiraCfgBtn();
 </script>
 </body>
 </html>

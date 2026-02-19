@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>JobPipeline</title>
+<title>JobFinder</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box;}
 body{font-family:'Segoe UI',sans-serif;background:#0a0a0f;color:#f0f0f5;min-height:100vh;padding:24px 16px;}
@@ -11,7 +11,7 @@ body{font-family:'Segoe UI',sans-serif;background:#0a0a0f;color:#f0f0f5;min-heig
 
 /* Nav */
 .topbar{display:flex;align-items:center;justify-content:space-between;margin-bottom:24px;gap:12px;flex-wrap:wrap;}
-.logo{display:flex;align-items:center;gap:10px;font-family:Georgia,serif;font-size:clamp(22px,4vw,38px);font-weight:900;background:linear-gradient(135deg,#ff4d6d,#ffd166);-webkit-background-clip:text;-webkit-text-fill-color:transparent;}
+.logo{font-family:Georgia,serif;font-size:clamp(26px,5vw,44px);font-weight:900;background:linear-gradient(135deg,#ff4d6d,#ffd166);-webkit-background-clip:text;-webkit-text-fill-color:transparent;}
 .nav{display:flex;gap:8px;}
 .nbtn{background:#12121a;border:1px solid #2a2a3a;border-radius:10px;color:#6b6b80;cursor:pointer;font-size:13px;font-weight:600;padding:10px 18px;font-family:inherit;position:relative;}
 .nbtn.on{background:rgba(255,209,102,0.1);border-color:#ffd166;color:#ffd166;}
@@ -143,31 +143,7 @@ body{font-family:'Segoe UI',sans-serif;background:#0a0a0f;color:#f0f0f5;min-heig
 <div class="wrap">
 
 <div class="topbar">
-  <div class="logo">
-    <svg viewBox="0 0 60 30" height="36" width="60" fill="none" style="flex-shrink:0" xmlns="http://www.w3.org/2000/svg">
-      <defs>
-        <linearGradient id="plg" x1="0" y1="0" x2="60" y2="0" gradientUnits="userSpaceOnUse">
-          <stop stop-color="#ff4d6d"/>
-          <stop offset="0.5" stop-color="#ff8c42"/>
-          <stop offset="1" stop-color="#ffd166"/>
-        </linearGradient>
-      </defs>
-      <!-- connecting pipe -->
-      <rect x="8" y="12" width="44" height="6" rx="3" fill="url(#plg)" opacity="0.28"/>
-      <!-- stage nodes -->
-      <circle cx="8" cy="15" r="8" fill="#ff4d6d"/>
-      <circle cx="30" cy="15" r="8" fill="url(#plg)"/>
-      <circle cx="52" cy="15" r="8" fill="#ffd166"/>
-      <!-- icons inside nodes: briefcase, gear, checkmark -->
-      <rect x="5" y="13" width="6" height="4" rx="1" fill="rgba(255,255,255,0.85)"/>
-      <path d="M6.5 13v-1a1 1 0 011-1h1a1 1 0 011 1v1" stroke="rgba(255,255,255,0.85)" stroke-width="0.9" fill="none" stroke-linecap="round"/>
-      <circle cx="30" cy="15" r="2.5" fill="none" stroke="rgba(255,255,255,0.85)" stroke-width="1.2"/>
-      <circle cx="30" cy="15" r="1" fill="rgba(255,255,255,0.85)"/>
-      <path d="M27.5 12.5l1.2 1.2M32.5 17.5l-1.2-1.2M27.5 17.5l1.2-1.2M32.5 12.5l-1.2 1.2" stroke="rgba(255,255,255,0.75)" stroke-width="1" stroke-linecap="round"/>
-      <path d="M49 15.2l2 2 4-4" stroke="rgba(255,255,255,0.9)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
-    </svg>
-    JobPipeline
-  </div>
+  <div class="logo">JobFinder</div>
   <div class="nav">
     <button type="button" class="nbtn on" id="nb1" onclick="showTab('search')">🔍 Suche</button>
     <button type="button" class="nbtn" id="nb2" onclick="showTab('saved')">
@@ -268,7 +244,7 @@ body{font-family:'Segoe UI',sans-serif;background:#0a0a0f;color:#f0f0f5;min-heig
 <div id="jiraModal" class="modal-bg" style="display:none" onclick="if(event.target===this)closeJiraSettings()">
   <div class="modal">
     <div class="modal-title">⚡ Jira Anbindung</div>
-    <div class="modal-sub">Verbinde JobPipeline mit deinem Jira-Projekt, um gespeicherte Jobs als Tickets zu exportieren.<br>Den API-Token findest du unter <a href="https://id.atlassian.com/manage-profile/security/api-tokens" target="_blank" rel="noopener" style="color:#2684ff;">id.atlassian.com → Security → API Tokens</a>.</div>
+    <div class="modal-sub">Verbinde JobFinder mit deinem Jira-Projekt, um gespeicherte Jobs als Tickets zu exportieren.<br>Den API-Token findest du unter <a href="https://id.atlassian.com/manage-profile/security/api-tokens" target="_blank" rel="noopener" style="color:#2684ff;">id.atlassian.com → Security → API Tokens</a>.</div>
 
     <div class="mfield">
       <label class="lbl">🌐 Jira Cloud Domain</label>

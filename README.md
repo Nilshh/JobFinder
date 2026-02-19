@@ -1,4 +1,4 @@
-# JobFinder — Docker Setup
+# JobPipeline — Docker Setup
 
 ## Voraussetzungen
 - Docker Desktop installiert (https://www.docker.com/products/docker-desktop/)
