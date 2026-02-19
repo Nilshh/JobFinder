@@ -137,6 +137,10 @@ body{font-family:'Segoe UI',sans-serif;background:#0a0a0f;color:#f0f0f5;min-heig
 .msavebtn{flex:1;background:linear-gradient(135deg,#2684ff,#0052cc);border:none;border-radius:10px;color:#fff;cursor:pointer;font-size:14px;font-weight:700;padding:12px;font-family:inherit;}
 .mcancelbtn{background:#0a0a0f;border:1px solid #2a2a3a;border-radius:10px;color:#6b6b80;cursor:pointer;font-size:14px;font-weight:600;padding:12px 18px;font-family:inherit;}
 .mstatus{font-size:13px;margin-top:12px;min-height:18px;}
+
+/* Auth */
+.uname{font-size:13px;color:#ffd166;font-weight:600;white-space:nowrap;}
+.authtoggle{background:none;border:none;color:#6b6b80;cursor:pointer;font-size:13px;font-family:inherit;text-decoration:underline;padding:0;}
 </style>
 </head>
 <body>
@@ -174,6 +178,11 @@ body{font-family:'Segoe UI',sans-serif;background:#0a0a0f;color:#f0f0f5;min-heig
       📌 Merkzettel<span class="badge" id="badge">0</span>
     </button>
     <button type="button" class="cfgbtn" id="jiraCfgBtn" onclick="openJiraSettings()" title="Jira Einstellungen">⚡ Jira</button>
+    <div id="userBar" style="display:none;align-items:center;gap:6px;">
+      <span class="uname" id="uname"></span>
+      <button type="button" class="nbtn" onclick="doLogout()">Abmelden</button>
+    </div>
+    <button type="button" class="nbtn" id="loginBtn" onclick="openAuthModal()">🔐 Anmelden</button>
   </div>
 </div>
 
@@ -264,6 +273,42 @@ body{font-family:'Segoe UI',sans-serif;background:#0a0a0f;color:#f0f0f5;min-heig
 
 </div><!-- /wrap -->
 
+<!-- Auth Modal -->
+<div id="authModal" class="modal-bg" style="display:none" onclick="if(event.target===this)closeAuthModal()">
+  <div class="modal">
+    <div class="modal-title" id="authTitle">🔐 Anmelden</div>
+    <div class="modal-sub" id="authSub">Melde dich an, um Stellen zu speichern und Jira zu nutzen.</div>
+    <div id="authHint" class="infobx" style="display:none;margin-bottom:14px;"></div>
+    <div class="mfield" id="authUserWrap">
+      <label class="lbl">👤 Benutzername</label>
+      <input type="text" class="inp" id="authUser" autocomplete="username">
+    </div>
+    <div class="mfield" id="authEmailWrap" style="display:none">
+      <label class="lbl" id="authEmailLabel">✉️ E-Mail-Adresse</label>
+      <input type="email" class="inp" id="authEmail" autocomplete="email" placeholder="name@beispiel.de">
+    </div>
+    <div class="mfield" id="authPwWrap">
+      <label class="lbl" id="authPwLabel">🔑 Passwort</label>
+      <input type="password" class="inp" id="authPw" autocomplete="current-password">
+      <div id="authForgotLink" style="text-align:right;margin-top:5px;">
+        <button type="button" class="authtoggle" onclick="switchToForgot()">Passwort vergessen?</button>
+      </div>
+    </div>
+    <div class="mfield" id="authPw2Wrap" style="display:none">
+      <label class="lbl">🔁 Passwort bestätigen</label>
+      <input type="password" class="inp" id="authPw2" autocomplete="new-password">
+    </div>
+    <div id="authStatus" class="mstatus"></div>
+    <div class="mactions">
+      <button type="button" class="mcancelbtn" onclick="closeAuthModal()">Abbrechen</button>
+      <button type="button" class="msavebtn" id="authSubmitBtn" onclick="doAuth()">Anmelden</button>
+    </div>
+    <div style="text-align:center;margin-top:16px;">
+      <button type="button" class="authtoggle" id="authToggle" onclick="toggleAuthMode()">Noch kein Konto? → Registrieren</button>
+    </div>
+  </div>
+</div>
+
 <!-- Jira Settings Modal -->
 <div id="jiraModal" class="modal-bg" style="display:none" onclick="if(event.target===this)closeJiraSettings()">
   <div class="modal">
@@ -304,7 +349,7 @@ body{font-family:'Segoe UI',sans-serif;background:#0a0a0f;color:#f0f0f5;min-heig
       <input type="checkbox" id="jUseProxy" style="width:16px;height:16px;flex-shrink:0;margin-top:2px;cursor:pointer;accent-color:#2684ff;" checked>
       <div>
         <label for="jUseProxy" style="cursor:pointer;font-size:13px;font-weight:600;display:block;">🔀 Lokalen Proxy verwenden <span style="color:#6b6b80;font-weight:400;">(empfohlen)</span></label>
-        <div style="font-size:11px;color:#6b6b80;margin-top:3px;line-height:1.5;">Leitet Requests über <code style="color:#ffd166;">localhost:5500</code> (server.py). Umgeht CORS. Deaktivieren nur wenn Jira CORS für deine Domain erlaubt.</div>
+        <div style="font-size:11px;color:#6b6b80;margin-top:3px;line-height:1.5;">Leitet Requests über den Backend-Proxy (server.py). Umgeht CORS. Deaktivieren nur wenn Jira CORS für deine Domain erlaubt.</div>
       </div>
     </div>
 
@@ -324,12 +369,18 @@ const titles = new Set();
 const JOBS = {}; // storeId → job object
 let sfFilter = "all";
 
+// ── Auth state ──
+let AUTH = { user: null };
+let _authMode = "login";      // "login" | "register" | "forgot" | "reset"
+let _pendingAction = null;    // callback nach erfolgreichem Login
+let _resetToken = null;       // Token aus ?reset=... URL-Parameter
+
 // ── Storage ──
 const LS = {
-  saved:   () => { try{ return JSON.parse(localStorage.getItem("jf2_saved")||"{}"); }catch(e){return {};} },
-  ignored: () => { try{ return JSON.parse(localStorage.getItem("jf2_ign")||"[]"); }catch(e){return [];} },
-  setSaved: d => { localStorage.setItem("jf2_saved", JSON.stringify(d)); refreshBadge(); },
-  setIgnored: a => localStorage.setItem("jf2_ign", JSON.stringify(a))
+  saved:      () => { try{ return JSON.parse(localStorage.getItem("jf2_saved")||"{}"); }catch(e){return {};} },
+  ignored:    () => { try{ return JSON.parse(localStorage.getItem("jf2_ign")||"[]"); }catch(e){return [];} },
+  setSaved:   d => { localStorage.setItem("jf2_saved", JSON.stringify(d)); refreshBadge(); syncUserData(); },
+  setIgnored: a => { localStorage.setItem("jf2_ign",   JSON.stringify(a)); syncUserData(); }
 };
 
 function jobKey(j){ return (j.redirect_url||(j.title+"|"+(j.company?.display_name||""))).slice(0,180); }
@@ -535,27 +586,31 @@ function renderResults(jobs, total, arr, where){
 
 // ── Save / Skip ──
 function saveJob(id){
-  const j = JOBS[id]; if(!j) return;
-  const k = jobKey(j);
-  const saved = LS.saved();
-  if(!saved[k]){
-    saved[k] = {
-      key:k, title:j.title||"", company:j.company?.display_name||"",
-      location:j.location?.display_name||"", url:j.redirect_url||"",
-      salary_min:j.salary_min, salary_max:j.salary_max,
-      contract_type:j.contract_type, created:j.created, searchedAs:j._t||"",
-      savedAt:new Date().toISOString(), status:"neu", note:""
-    };
-    LS.setSaved(saved);
-  }
-  fadeOut("jw"+id);
+  requireAuth("Zum Speichern bitte anmelden.", () => {
+    const j = JOBS[id]; if(!j) return;
+    const k = jobKey(j);
+    const saved = LS.saved();
+    if(!saved[k]){
+      saved[k] = {
+        key:k, title:j.title||"", company:j.company?.display_name||"",
+        location:j.location?.display_name||"", url:j.redirect_url||"",
+        salary_min:j.salary_min, salary_max:j.salary_max,
+        contract_type:j.contract_type, created:j.created, searchedAs:j._t||"",
+        savedAt:new Date().toISOString(), status:"neu", note:""
+      };
+      LS.setSaved(saved);
+    }
+    fadeOut("jw"+id);
+  });
 }
 function skipJob(id){
-  const j = JOBS[id]; if(!j) return;
-  const k = jobKey(j);
-  const ign = LS.ignored();
-  if(!ign.includes(k)){ ign.push(k); LS.setIgnored(ign); }
-  fadeOut("jw"+id);
+  requireAuth("Zum Ignorieren bitte anmelden.", () => {
+    const j = JOBS[id]; if(!j) return;
+    const k = jobKey(j);
+    const ign = LS.ignored();
+    if(!ign.includes(k)){ ign.push(k); LS.setIgnored(ign); }
+    fadeOut("jw"+id);
+  });
 }
 function fadeOut(id){
   const el = document.getElementById(id);
@@ -742,7 +797,7 @@ function fmtSal(mn,mx){
 // ── Jira Integration ──
 const JIRA = {
   get: () => { try{ return JSON.parse(localStorage.getItem("jf2_jira")||"{}"); }catch(e){return {};} },
-  set: d => localStorage.setItem("jf2_jira", JSON.stringify(d))
+  set: d => { localStorage.setItem("jf2_jira", JSON.stringify(d)); syncUserData(); }
 };
 
 function jiraConfigured(){ const c=JIRA.get(); return !!(c.domain&&c.email&&c.token&&c.project); }
@@ -753,6 +808,7 @@ function updateJiraCfgBtn(){
 }
 
 function openJiraSettings(){
+  if(!AUTH.user){ openAuthModal("Zum Einrichten von Jira bitte anmelden."); return; }
   const c = JIRA.get();
   document.getElementById("jDomain").value    = c.domain    || "";
   document.getElementById("jEmail").value     = c.email     || "";
@@ -1038,8 +1094,254 @@ async function testJiraConnection(){
   btn.disabled = false;
 }
 
-refreshBadge();
-updateJiraCfgBtn();
+// ── Auth functions ────────────────────────────────────────────────
+
+async function checkAuth(){
+  // Passwort-Reset-Token aus der URL lesen
+  const params = new URLSearchParams(window.location.search);
+  const resetToken = params.get("reset");
+  if(resetToken){
+    _resetToken = resetToken;
+    _authMode   = "reset";
+    _updateAuthModal();
+    document.getElementById("authPw").value  = "";
+    document.getElementById("authPw2").value = "";
+    document.getElementById("authStatus").innerHTML = "";
+    document.getElementById("authModal").style.display = "flex";
+    setTimeout(()=>document.getElementById("authPw").focus(), 50);
+    return; // Kein Session-Check nötig beim Reset
+  }
+
+  try {
+    const r = await fetch("/auth/me", { credentials:"include" });
+    const d = await r.json();
+    if(d.user){
+      AUTH.user = d.user;
+      await loadUserData();
+    }
+  } catch(e) { /* Server nicht erreichbar – App funktioniert trotzdem */ }
+  updateUserBar();
+  refreshBadge();
+  updateJiraCfgBtn();
+}
+
+function updateUserBar(){
+  const bar = document.getElementById("userBar");
+  const btn = document.getElementById("loginBtn");
+  const nm  = document.getElementById("uname");
+  if(AUTH.user){
+    nm.textContent = "👤 "+AUTH.user.username;
+    bar.style.display = "flex";
+    btn.style.display = "none";
+  } else {
+    bar.style.display = "none";
+    btn.style.display = "";
+  }
+}
+
+async function loadUserData(){
+  try {
+    const r = await fetch("/user/data", { credentials:"include" });
+    if(!r.ok) return;
+    const d = await r.json();
+    localStorage.setItem("jf2_saved", JSON.stringify(d.saved   || {}));
+    localStorage.setItem("jf2_ign",   JSON.stringify(d.ignored || []));
+    localStorage.setItem("jf2_jira",  JSON.stringify(d.jira    || {}));
+  } catch(e) {}
+}
+
+async function syncUserData(){
+  if(!AUTH.user) return;
+  try {
+    await fetch("/user/data", {
+      method:"POST", credentials:"include",
+      headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({ saved:LS.saved(), ignored:LS.ignored(), jira:JIRA.get() })
+    });
+  } catch(e) {}
+}
+
+function requireAuth(hint, action){
+  if(AUTH.user){ action(); return; }
+  _pendingAction = action;
+  openAuthModal(hint);
+}
+
+function openAuthModal(hint){
+  _authMode = "login";
+  _updateAuthModal();
+  const h = document.getElementById("authHint");
+  if(hint){ h.textContent = hint; h.style.display = "block"; }
+  else { h.style.display = "none"; }
+  document.getElementById("authStatus").innerHTML = "";
+  document.getElementById("authUser").value  = "";
+  document.getElementById("authEmail").value = "";
+  document.getElementById("authPw").value    = "";
+  document.getElementById("authPw2").value   = "";
+  document.getElementById("authModal").style.display = "flex";
+  setTimeout(()=>document.getElementById("authUser").focus(), 50);
+}
+
+function closeAuthModal(){
+  document.getElementById("authModal").style.display = "none";
+  _pendingAction = null;
+}
+
+function _updateAuthModal(){
+  const m = _authMode;
+  const show = (id, v) => document.getElementById(id).style.display = v ? "" : "none";
+  const titles = {
+    login:    "🔐 Anmelden",
+    register: "🆕 Registrieren",
+    forgot:   "🔑 Passwort vergessen",
+    reset:    "🔒 Neues Passwort"
+  };
+  const subs = {
+    login:    "Melde dich an, um Stellen zu speichern und Jira zu nutzen.",
+    register: "Erstelle dein Konto für JobPipeline.",
+    forgot:   "Gib deine E-Mail ein – du erhältst einen Reset-Link.",
+    reset:    "Vergib ein neues Passwort für dein Konto."
+  };
+  const btnTxt = { login:"Anmelden", register:"Registrieren", forgot:"Link senden", reset:"Passwort speichern" };
+  const toggleTxt = {
+    login:    "Noch kein Konto? → Registrieren",
+    register: "Bereits ein Konto? → Anmelden",
+    forgot:   "← Zurück zur Anmeldung",
+    reset:    ""
+  };
+  document.getElementById("authTitle").textContent     = titles[m];
+  document.getElementById("authSub").textContent       = subs[m];
+  document.getElementById("authSubmitBtn").textContent = btnTxt[m];
+  document.getElementById("authToggle").textContent    = toggleTxt[m];
+  show("authToggle",    m !== "reset");
+  show("authUserWrap",  m === "login" || m === "register");
+  show("authEmailWrap", m === "register" || m === "forgot");
+  show("authPwWrap",    m === "login" || m === "register" || m === "reset");
+  show("authPw2Wrap",   m === "register" || m === "reset");
+  show("authForgotLink",m === "login");
+  document.getElementById("authEmailLabel").textContent =
+    m === "register" ? "✉️ E-Mail (für Passwort-Reset)" : "✉️ E-Mail-Adresse";
+  document.getElementById("authPwLabel").textContent =
+    m === "reset" ? "🔑 Neues Passwort" : "🔑 Passwort";
+}
+
+function toggleAuthMode(){
+  _authMode = (_authMode === "login") ? "register" : "login";
+  _updateAuthModal();
+  document.getElementById("authStatus").innerHTML = "";
+}
+
+function switchToForgot(){
+  _authMode = "forgot";
+  _updateAuthModal();
+  document.getElementById("authStatus").innerHTML = "";
+  document.getElementById("authEmail").value = "";
+  setTimeout(()=>document.getElementById("authEmail").focus(), 50);
+}
+
+async function doAuth(){
+  if(_authMode === "forgot") { await doForgot(); return; }
+  if(_authMode === "reset")  { await doReset();  return; }
+
+  const username = document.getElementById("authUser").value.trim();
+  const password = document.getElementById("authPw").value;
+  const st  = document.getElementById("authStatus");
+  const btn = document.getElementById("authSubmitBtn");
+  if(!username || !password){
+    st.innerHTML = '<span style="color:#ff4d6d">Bitte alle Felder ausfüllen.</span>'; return;
+  }
+  btn.disabled = true;
+
+  if(_authMode === "register"){
+    const pw2   = document.getElementById("authPw2").value;
+    const email = document.getElementById("authEmail").value.trim();
+    if(password !== pw2){
+      st.innerHTML = '<span style="color:#ff4d6d">Passwörter stimmen nicht überein.</span>';
+      btn.disabled = false; return;
+    }
+    const r = await fetch("/auth/register", {
+      method:"POST", credentials:"include",
+      headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({username, password, email: email||undefined})
+    }).catch(()=>null);
+    if(!r){ st.innerHTML='<span style="color:#ff4d6d">Verbindungsfehler.</span>'; btn.disabled=false; return; }
+    const d = await r.json();
+    if(!r.ok){ st.innerHTML='<span style="color:#ff4d6d">'+esc(d.error||"Fehler")+'</span>'; btn.disabled=false; return; }
+    AUTH.user = { username: d.username };
+  } else {
+    const r = await fetch("/auth/login", {
+      method:"POST", credentials:"include",
+      headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({username, password})
+    }).catch(()=>null);
+    if(!r){ st.innerHTML='<span style="color:#ff4d6d">Verbindungsfehler.</span>'; btn.disabled=false; return; }
+    const d = await r.json();
+    if(!r.ok){ st.innerHTML='<span style="color:#ff4d6d">'+esc(d.error||"Fehler")+'</span>'; btn.disabled=false; return; }
+    AUTH.user = { username: d.username };
+    await loadUserData();
+  }
+  updateUserBar();
+  refreshBadge();
+  updateJiraCfgBtn();
+  closeAuthModal();
+  if(_pendingAction){ const fn=_pendingAction; _pendingAction=null; fn(); }
+}
+
+async function doForgot(){
+  const email = document.getElementById("authEmail").value.trim();
+  const st  = document.getElementById("authStatus");
+  const btn = document.getElementById("authSubmitBtn");
+  if(!email){ st.innerHTML='<span style="color:#ff4d6d">Bitte E-Mail eingeben.</span>'; return; }
+  btn.disabled = true;
+  const r = await fetch("/auth/forgot", {
+    method:"POST", credentials:"include",
+    headers:{"Content-Type":"application/json"},
+    body: JSON.stringify({email})
+  }).catch(()=>null);
+  btn.disabled = false;
+  if(!r){ st.innerHTML='<span style="color:#ff4d6d">Verbindungsfehler.</span>'; return; }
+  const d = await r.json();
+  if(!r.ok){ st.innerHTML='<span style="color:#ff4d6d">'+esc(d.error||"Fehler")+'</span>'; return; }
+  st.innerHTML = '<span style="color:#22c55e">✓ Falls ein Konto existiert, wurde ein Reset-Link gesendet.</span>';
+  btn.disabled = true;
+}
+
+async function doReset(){
+  const password = document.getElementById("authPw").value;
+  const pw2      = document.getElementById("authPw2").value;
+  const st  = document.getElementById("authStatus");
+  const btn = document.getElementById("authSubmitBtn");
+  if(!password){ st.innerHTML='<span style="color:#ff4d6d">Bitte Passwort eingeben.</span>'; return; }
+  if(password !== pw2){ st.innerHTML='<span style="color:#ff4d6d">Passwörter stimmen nicht überein.</span>'; return; }
+  btn.disabled = true;
+  const r = await fetch("/auth/reset", {
+    method:"POST", credentials:"include",
+    headers:{"Content-Type":"application/json"},
+    body: JSON.stringify({token: _resetToken, password})
+  }).catch(()=>null);
+  if(!r){ st.innerHTML='<span style="color:#ff4d6d">Verbindungsfehler.</span>'; btn.disabled=false; return; }
+  const d = await r.json();
+  if(!r.ok){ st.innerHTML='<span style="color:#ff4d6d">'+esc(d.error||"Fehler")+'</span>'; btn.disabled=false; return; }
+  st.innerHTML = '<span style="color:#22c55e">✓ Passwort gespeichert. Du kannst dich jetzt anmelden.</span>';
+  _resetToken = null;
+  history.replaceState({}, document.title, window.location.pathname);
+  setTimeout(()=>{ _authMode="login"; _updateAuthModal(); document.getElementById("authStatus").innerHTML=""; }, 2500);
+}
+
+async function doLogout(){
+  await fetch("/auth/logout", { method:"POST", credentials:"include" }).catch(()=>{});
+  AUTH.user = null;
+  updateUserBar();
+  localStorage.removeItem("jf2_saved");
+  localStorage.removeItem("jf2_ign");
+  localStorage.removeItem("jf2_jira");
+  refreshBadge();
+  updateJiraCfgBtn();
+  if(document.getElementById("tabSaved").style.display !== "none") renderSaved();
+}
+
+// ── Init ──────────────────────────────────────────────────────────
+checkAuth();
 </script>
 </body>
 </html>
