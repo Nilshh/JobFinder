@@ -1,5 +1,5 @@
 job.raddes.de {
-    @api path /jobs /jobs/* /jira/* /auth/* /user/*
+    @api path /jobs /jobs/* /jira/* /auth/* /user/* /admin/*
     handle @api {
         reverse_proxy api:5500
     }

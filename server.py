@@ -14,8 +14,9 @@ from functools import wraps
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "dev-secret-change-in-production")
 
-APP_ID  = os.environ.get("ADZUNA_APP_ID",  "")
-APP_KEY = os.environ.get("ADZUNA_APP_KEY", "")
+APP_ID     = os.environ.get("ADZUNA_APP_ID",  "")
+APP_KEY    = os.environ.get("ADZUNA_APP_KEY", "")
+ADMIN_USER = os.environ.get("ADMIN_USER", "").strip()
 
 SMTP_HOST = os.environ.get("SMTP_HOST", "")
 SMTP_PORT = int(os.environ.get("SMTP_PORT", "587"))
@@ -72,10 +73,28 @@ def init_db():
                 FOREIGN KEY (user_id) REFERENCES users(id)
             )
         """)
+        # Migrations: new columns for existing installations
+        for col, definition in [
+            ("is_admin",  "INTEGER NOT NULL DEFAULT 0"),
+            ("is_locked", "INTEGER NOT NULL DEFAULT 0"),
+        ]:
+            try:
+                db.execute(f"ALTER TABLE users ADD COLUMN {col} {definition}")
+            except Exception:
+                pass
         # Indexes
         db.execute("CREATE INDEX IF NOT EXISTS idx_users_email ON users(email)")
         db.execute("CREATE INDEX IF NOT EXISTS idx_reset_tokens_user ON password_reset_tokens(user_id)")
         db.execute("CREATE INDEX IF NOT EXISTS idx_reset_tokens_expires ON password_reset_tokens(expires_at)")
+
+    # Bootstrap: promote ADMIN_USER from env if set
+    if ADMIN_USER:
+        with get_db() as db:
+            db.execute(
+                "UPDATE users SET is_admin = 1 WHERE username = ? COLLATE NOCASE",
+                [ADMIN_USER]
+            )
+        print(f"[init] Admin-Promotion: '{ADMIN_USER}'")
 
 init_db()
 
@@ -175,7 +194,8 @@ def auth_register():
         session.permanent = True
         session["user_id"]  = user["id"]
         session["username"] = username
-        return jsonify({"ok": True, "username": username})
+        session["is_admin"] = False
+        return jsonify({"ok": True, "username": username, "is_admin": False})
     except sqlite3.IntegrityError:
         return jsonify({"error": "Benutzername bereits vergeben"}), 409
 
@@ -193,10 +213,13 @@ def auth_login():
         ).fetchone()
     if not user or not check_password_hash(user["password_hash"], password):
         return jsonify({"error": "Ungültiger Benutzername oder Passwort"}), 401
+    if user["is_locked"]:
+        return jsonify({"error": "Dieses Konto ist gesperrt. Bitte wende dich an einen Administrator."}), 403
     session.permanent = True
     session["user_id"]  = user["id"]
     session["username"] = user["username"]
-    return jsonify({"ok": True, "username": user["username"]})
+    session["is_admin"] = bool(user["is_admin"])
+    return jsonify({"ok": True, "username": user["username"], "is_admin": bool(user["is_admin"])})
 
 
 @app.route("/auth/logout", methods=["POST", "OPTIONS"])
@@ -211,7 +234,11 @@ def auth_logout():
 def auth_me():
     if "user_id" not in session:
         return jsonify({"user": None})
-    return jsonify({"user": {"id": session["user_id"], "username": session["username"]}})
+    return jsonify({"user": {
+        "id":       session["user_id"],
+        "username": session["username"],
+        "is_admin": session.get("is_admin", False),
+    }})
 
 
 @app.route("/auth/forgot", methods=["POST", "OPTIONS"])
@@ -428,6 +455,76 @@ def jira_issue():
     except Exception as e:
         print(f"[jira/issue] Exception: {e}")
         return jsonify({"errorMessages": [str(e)]}), 500
+
+
+# ── Admin ─────────────────────────────────────────────────────────
+
+def admin_required(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        if request.method == "OPTIONS":
+            return "", 204
+        if "user_id" not in session:
+            return jsonify({"error": "Nicht angemeldet"}), 401
+        if not session.get("is_admin"):
+            return jsonify({"error": "Keine Administratorrechte"}), 403
+        return f(*args, **kwargs)
+    return decorated
+
+
+@app.route("/admin/users", methods=["GET", "OPTIONS"])
+@admin_required
+def admin_list_users():
+    with get_db() as db:
+        rows = db.execute(
+            "SELECT id, username, email, is_admin, is_locked, created_at FROM users ORDER BY created_at DESC"
+        ).fetchall()
+    return jsonify([dict(r) for r in rows])
+
+
+@app.route("/admin/users/<int:uid>", methods=["PATCH", "OPTIONS"])
+@admin_required
+def admin_update_user(uid):
+    if request.method == "OPTIONS":
+        return "", 204
+    data = request.get_json(force=True)
+    allowed = {"email", "is_locked", "is_admin"}
+    updates = {k: v for k, v in data.items() if k in allowed}
+    if not updates:
+        return jsonify({"error": "Keine gültigen Felder"}), 400
+
+    # Admins dürfen sich nicht selbst sperren oder Adminrechte entziehen
+    if uid == session["user_id"]:
+        if "is_locked" in updates and updates["is_locked"]:
+            return jsonify({"error": "Du kannst dich nicht selbst sperren"}), 400
+        if "is_admin" in updates and not updates["is_admin"]:
+            return jsonify({"error": "Du kannst dir nicht selbst die Adminrechte entziehen"}), 400
+
+    if "email" in updates:
+        email = (updates["email"] or "").strip().lower()
+        if email and "@" not in email:
+            return jsonify({"error": "Ungültige E-Mail-Adresse"}), 400
+        updates["email"] = email or None
+
+    set_clause = ", ".join(f"{k} = ?" for k in updates)
+    values = list(updates.values()) + [uid]
+    with get_db() as db:
+        db.execute(f"UPDATE users SET {set_clause} WHERE id = ?", values)
+    return jsonify({"ok": True})
+
+
+@app.route("/admin/users/<int:uid>", methods=["DELETE", "OPTIONS"])
+@admin_required
+def admin_delete_user(uid):
+    if request.method == "OPTIONS":
+        return "", 204
+    if uid == session["user_id"]:
+        return jsonify({"error": "Du kannst dich nicht selbst löschen"}), 400
+    with get_db() as db:
+        db.execute("DELETE FROM user_data WHERE user_id = ?", [uid])
+        db.execute("DELETE FROM password_reset_tokens WHERE user_id = ?", [uid])
+        db.execute("DELETE FROM users WHERE id = ?", [uid])
+    return jsonify({"ok": True})
 
 
 if __name__ == "__main__":
