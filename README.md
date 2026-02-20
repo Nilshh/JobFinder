@@ -32,14 +32,14 @@ JobPipeline ist eine schlanke Single-Page-App für die strukturierte Jobsuche. S
 - **Mehrbenutzer-fähig** — Beliebig viele Accounts auf einer Instanz
 - **Admin-Panel** — Benutzer verwalten, sperren/entsperren, Adminrechte vergeben, Konten löschen
 
-### Jobportal-Links (33+)
+### Jobportal-Links (45+)
 Dauerhaft über den **🌐 Portale**-Tab erreichbar — nach einer Suche zusätzlich unten in den Ergebnissen. Links werden mit den aktuellen Formularwerten (Jobtitel, Ort, Umkreis) vorausgefüllt.
 
 | Gruppe | Portale (Auswahl) |
 |---|---|
-| 💻 IT & Tech | Jobvector, Heise Jobs, t3n, DEVjobs, GULP, Stack Overflow, Get in IT |
-| 👔 C-Level & Executive | Korn Ferry, Egon Zehnder, Spencer Stuart, MEYHEADHUNTER, Headgate, Kienbaum |
-| 🔍 Generelle Portale | StepStone, Indeed, LinkedIn, XING, HeyJobs, Bundesagentur für Arbeit |
+| 💻 IT & Tech | Jobvector, Heise Jobs, t3n, DEVjobs, GULP, Stack Overflow, Get in IT, Gallmond, Wellfound, Talent.io, Welcome to the Jungle |
+| 👔 C-Level & Executive | Korn Ferry, Egon Zehnder, Spencer Stuart, MEYHEADHUNTER, Headgate, Kienbaum, Robert Walters, Hays Executive, Mercuri Urval, i-potentials |
+| 🔍 Generelle Portale | StepStone, Indeed, LinkedIn, XING, HeyJobs, Bundesagentur für Arbeit, Interamt |
 
 ### Jira-Integration
 - **Export** — Gespeicherte Jobs als Jira-Ticket anlegen (ein Klick)
