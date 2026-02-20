@@ -33,7 +33,7 @@ JobPipeline ist eine schlanke Single-Page-App für die strukturierte Jobsuche. S
 - **Admin-Panel** — Benutzer verwalten, sperren/entsperren, Adminrechte vergeben, Konten löschen
 
 ### Jobportal-Links (33+)
-Nach jeder Suche erscheinen vorausgefüllte Links zu drei Gruppen:
+Dauerhaft über den **🌐 Portale**-Tab erreichbar — nach einer Suche zusätzlich unten in den Ergebnissen. Links werden mit den aktuellen Formularwerten (Jobtitel, Ort, Umkreis) vorausgefüllt.
 
 | Gruppe | Portale (Auswahl) |
 |---|---|
@@ -122,6 +122,7 @@ docker compose up -d
 docker compose down
 
 # Neu bauen (nach Änderungen an server.py oder requirements.txt)
+# Änderungen an public/ (index.html, style.css, app.js) sind sofort aktiv – kein Rebuild nötig
 docker compose up -d --build
 
 # Logs anzeigen
@@ -153,14 +154,16 @@ Internet
         │     ├─► /jira/issue    Ticket erstellen → Jira REST API
         │     └─► /jira/fields   Feldliste → Jira REST API
         │
-        └─► /* (alle anderen Pfade)  →  jobfinder.html (statische SPA)
+        └─► /* (alle anderen Pfade)  →  public/ (statische SPA: index.html, style.css, app.js)
 ```
 
 ### Dateien
 
-| Datei | Beschreibung |
+| Datei / Verzeichnis | Beschreibung |
 |---|---|
-| `jobfinder.html` | Komplette Frontend-App (Single-Page-App) |
+| `public/index.html` | HTML-Skelett der Single-Page-App |
+| `public/style.css` | Alle CSS-Regeln |
+| `public/app.js` | Komplette Frontend-Logik (Vanilla JS) |
 | `server.py` | Flask-Backend (Auth, Adzuna-Proxy, Jira-Proxy, SQLite) |
 | `Caddyfile` | Caddy-Konfiguration (HTTPS, Reverse Proxy) |
 | `Dockerfile.api` | Python-Container für das Backend |
@@ -283,7 +286,7 @@ Auf **Verfügbare Felder anzeigen →** klicken:
 - Kein Admin verfügbar? → `ADMIN_USER=benutzername` in `.env` + `docker compose up -d --build`
 
 ### Admin-Button nicht sichtbar
-- Sicherstellen, dass `ADMIN_USER=benutzername` in `.env` gesetzt und Container neu gestartet wurde
+- Sicherstellen, dass `ADMIN_USER=benutzername` in `.env` gesetzt und Container neu gestartet wurde (`docker compose up -d --build`)
 - Nach dem nächsten Login erscheint der Button
 
 ### Passwort-Reset-Mail kommt nicht an
@@ -323,7 +326,7 @@ echo "SECRET_KEY=$(openssl rand -hex 32)" >> .env
 # Backend starten
 python server.py
 
-# Frontend im Browser öffnen (über http://localhost:5500 oder direkt)
+# Frontend im Browser öffnen
 open http://localhost:5500
 ```
 
