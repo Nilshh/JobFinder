@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>JobPipeline</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="wrap">
+
+<div class="topbar">
+  <div class="logo">
+    <svg viewBox="0 0 60 30" height="36" width="60" fill="none" style="flex-shrink:0" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <linearGradient id="plg" x1="0" y1="0" x2="60" y2="0" gradientUnits="userSpaceOnUse">
+          <stop stop-color="#ff4d6d"/>
+          <stop offset="0.5" stop-color="#ff8c42"/>
+          <stop offset="1" stop-color="#ffd166"/>
+        </linearGradient>
+      </defs>
+      <!-- connecting pipe -->
+      <rect x="8" y="12" width="44" height="6" rx="3" fill="url(#plg)" opacity="0.28"/>
+      <!-- stage nodes -->
+      <circle cx="8" cy="15" r="8" fill="#ff4d6d"/>
+      <circle cx="30" cy="15" r="8" fill="url(#plg)"/>
+      <circle cx="52" cy="15" r="8" fill="#ffd166"/>
+      <!-- icons inside nodes: briefcase, gear, checkmark -->
+      <rect x="5" y="13" width="6" height="4" rx="1" fill="rgba(255,255,255,0.85)"/>
+      <path d="M6.5 13v-1a1 1 0 011-1h1a1 1 0 011 1v1" stroke="rgba(255,255,255,0.85)" stroke-width="0.9" fill="none" stroke-linecap="round"/>
+      <circle cx="30" cy="15" r="2.5" fill="none" stroke="rgba(255,255,255,0.85)" stroke-width="1.2"/>
+      <circle cx="30" cy="15" r="1" fill="rgba(255,255,255,0.85)"/>
+      <path d="M27.5 12.5l1.2 1.2M32.5 17.5l-1.2-1.2M27.5 17.5l1.2-1.2M32.5 12.5l-1.2 1.2" stroke="rgba(255,255,255,0.75)" stroke-width="1" stroke-linecap="round"/>
+      <path d="M49 15.2l2 2 4-4" stroke="rgba(255,255,255,0.9)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+    JobPipeline
+  </div>
+  <div class="nav">
+    <button type="button" class="nbtn on" id="nb1" onclick="showTab('search')">🔍 Suche</button>
+    <button type="button" class="nbtn" id="nb2" onclick="showTab('saved')">
+      📌 Merkzettel<span class="badge" id="badge">0</span>
+    </button>
+    <button type="button" class="nbtn" id="nb3" onclick="showTab('portals')">🌐 Portale</button>
+    <button type="button" class="cfgbtn" id="jiraCfgBtn" onclick="openJiraSettings()" title="Jira Einstellungen">⚡ Jira</button>
+    <div id="userBar" style="display:none;align-items:center;gap:6px;">
+      <span class="uname" id="uname"></span>
+      <button type="button" class="cfgbtn" id="adminBtn" style="display:none" onclick="openAdminPanel()" title="Benutzerverwaltung">⚙️ Admin</button>
+      <button type="button" class="nbtn" onclick="doLogout()">Abmelden</button>
+    </div>
+    <button type="button" class="nbtn" id="loginBtn" onclick="openAuthModal()">🔐 Anmelden</button>
+  </div>
+</div>
+
+<!-- SEARCH TAB -->
+<div id="tabSearch">
+
+  <div class="card">
+    <div class="card-stripe"></div>
+    <div class="lbl">🎯 Jobtitel — Mehrfachauswahl möglich</div>
+    <div class="chips" id="chips">
+      <button type="button" class="chip" data-t="CTO">CTO</button>
+      <button type="button" class="chip" data-t="CIO">CIO</button>
+      <button type="button" class="chip" data-t="CDO">CDO</button>
+      <button type="button" class="chip" data-t="Head of IT">Head of IT</button>
+      <button type="button" class="chip" data-t="Leiter IT">Leiter IT</button>
+      <button type="button" class="chip" data-t="Direktor IT">Direktor IT</button>
+      <button type="button" class="chip" data-t="IT-Manager">IT-Manager</button>
+      <button type="button" class="chip" data-t="VP of Engineering">VP of Engineering</button>
+    </div>
+    <div class="lbl">✏️ Eigener Jobtitel</div>
+    <div class="ftrow">
+      <input type="text" class="inp" id="ftInp" placeholder="z.B. CISO, Head of Digital…">
+      <button type="button" class="ftadd" id="ftBtn">+ Hinzufügen</button>
+    </div>
+    <div class="seltags" id="selTags"></div>
+    <div class="hint" id="selHint" style="display:none"><span id="selCnt">0</span> Jobtitel ausgewählt</div>
+  </div>
+
+  <div class="card">
+    <div class="card-stripe"></div>
+    <div class="lbl">📍 Ort &amp; PLZ</div>
+    <div class="row2" style="margin-bottom:14px;">
+      <input type="text" class="inp" id="inpLoc" placeholder="z.B. Berlin, München…">
+      <input type="text" class="inp" id="inpPlz" placeholder="PLZ" maxlength="5" inputmode="numeric">
+    </div>
+    <div class="lbl">📡 Umkreis</div>
+    <div class="rrow" id="rrowKm">
+      <button type="button" class="rbtn" data-v="10">10 km</button>
+      <button type="button" class="rbtn" data-v="25">25 km</button>
+      <button type="button" class="rbtn on" data-v="50">50 km</button>
+      <button type="button" class="rbtn" data-v="100">100 km</button>
+      <button type="button" class="rbtn" data-v="150">150 km</button>
+    </div>
+    <div class="lbl">📅 Veröffentlichungsdatum</div>
+    <div class="rrow" id="rrowDays">
+      <button type="button" class="rbtn on" data-v="7">1 Woche</button>
+      <button type="button" class="rbtn" data-v="14">2 Wochen</button>
+      <button type="button" class="rbtn" data-v="30">1 Monat</button>
+      <button type="button" class="rbtn" data-v="0">Egal</button>
+    </div>
+    <button type="button" class="gobtn" id="goBtn">🔍 Stellen suchen</button>
+  </div>
+
+  <div id="errbx" style="display:none" class="errbx"></div>
+  <div id="infobx" style="display:none" class="infobx"></div>
+  <div id="loadbox" style="display:none"><div class="spinner"></div><div class="stxt" id="stxt">Suche…</div></div>
+  <div id="reshdr" style="display:none" class="reshdr"></div>
+  <div id="restags" class="restags"></div>
+  <div id="joblist"></div>
+  <div id="nores" style="display:none" class="nores">😕 Keine Ergebnisse. Anderen Suchbegriff oder größeren Umkreis versuchen.</div>
+  <div id="platbox" style="display:none"></div>
+  <div class="footer" id="footer" style="display:none">Live-Daten via Adzuna API · Direktlinks zu 33 Portalen</div>
+
+</div><!-- /tabSearch -->
+
+<!-- SAVED TAB -->
+<div id="tabSaved" style="display:none">
+  <div class="saved-hdr">
+    <div class="savtitle">📌 Merkzettel <span id="savCntTitle">0</span></div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+      <div class="sfrow" id="sfrow">
+        <button type="button" class="sfbtn on" data-s="all">Alle</button>
+        <button type="button" class="sfbtn" data-s="neu">🔵 Neu</button>
+        <button type="button" class="sfbtn" data-s="interessant">⭐ Interessant</button>
+        <button type="button" class="sfbtn" data-s="beworben">✅ Beworben</button>
+        <button type="button" class="sfbtn" data-s="abgelehnt">❌ Abgelehnt</button>
+        <button type="button" class="sfbtn" data-s="angebot">🎉 Angebot</button>
+      </div>
+      <button type="button" class="clrbtn" id="clrIgnBtn">🗑 Ignorierliste leeren</button>
+    </div>
+  </div>
+  <div id="savedList"></div>
+  <div id="savEmpty" class="savempty" style="display:none">
+    Noch keine Stellen gespeichert.<br>
+    <span style="font-size:13px;">Klicke bei einem Suchergebnis auf 💾 Speichern.</span>
+  </div>
+</div>
+
+<!-- PORTALS TAB -->
+<div id="tabPortals" style="display:none">
+  <div id="portalTabBox" style="margin-top:8px;"></div>
+</div>
+
+</div><!-- /wrap -->
+
+<!-- Auth Modal -->
+<div id="authModal" class="modal-bg" style="display:none" onclick="if(event.target===this)closeAuthModal()">
+  <div class="modal">
+    <div class="modal-title" id="authTitle">🔐 Anmelden</div>
+    <div class="modal-sub" id="authSub">Melde dich an, um Stellen zu speichern und Jira zu nutzen.</div>
+    <div id="authHint" class="infobx" style="display:none;margin-bottom:14px;"></div>
+    <div class="mfield" id="authUserWrap">
+      <label class="lbl">👤 Benutzername</label>
+      <input type="text" class="inp" id="authUser" autocomplete="username">
+    </div>
+    <div class="mfield" id="authEmailWrap" style="display:none">
+      <label class="lbl" id="authEmailLabel">✉️ E-Mail-Adresse</label>
+      <input type="email" class="inp" id="authEmail" autocomplete="email" placeholder="name@beispiel.de">
+    </div>
+    <div class="mfield" id="authPwWrap">
+      <label class="lbl" id="authPwLabel">🔑 Passwort</label>
+      <input type="password" class="inp" id="authPw" autocomplete="current-password">
+      <div id="authForgotLink" style="text-align:right;margin-top:5px;">
+        <button type="button" class="authtoggle" onclick="switchToForgot()">Passwort vergessen?</button>
+      </div>
+    </div>
+    <div class="mfield" id="authPw2Wrap" style="display:none">
+      <label class="lbl">🔁 Passwort bestätigen</label>
+      <input type="password" class="inp" id="authPw2" autocomplete="new-password">
+    </div>
+    <div id="authStatus" class="mstatus"></div>
+    <div class="mactions">
+      <button type="button" class="mcancelbtn" onclick="closeAuthModal()">Abbrechen</button>
+      <button type="button" class="msavebtn" id="authSubmitBtn" onclick="doAuth()">Anmelden</button>
+    </div>
+    <div style="text-align:center;margin-top:16px;">
+      <button type="button" class="authtoggle" id="authToggle" onclick="toggleAuthMode()">Noch kein Konto? → Registrieren</button>
+    </div>
+  </div>
+</div>
+
+<!-- Jira Settings Modal -->
+<div id="jiraModal" class="modal-bg" style="display:none" onclick="if(event.target===this)closeJiraSettings()">
+  <div class="modal">
+    <div class="modal-title">⚡ Jira Anbindung</div>
+    <div class="modal-sub">Verbinde JobPipeline mit deinem Jira-Projekt, um gespeicherte Jobs als Tickets zu exportieren.<br>Den API-Token findest du unter <a href="https://id.atlassian.com/manage-profile/security/api-tokens" target="_blank" rel="noopener" style="color:#2684ff;">id.atlassian.com → Security → API Tokens</a>.</div>
+
+    <div class="mfield">
+      <label class="lbl">🌐 Jira Cloud Domain</label>
+      <input type="text" class="inp" id="jDomain" placeholder="meinunternehmen.atlassian.net" autocomplete="off">
+    </div>
+    <div class="mfield">
+      <label class="lbl">✉️ E-Mail Adresse</label>
+      <input type="email" class="inp" id="jEmail" placeholder="name@unternehmen.de" autocomplete="email">
+    </div>
+    <div class="mfield">
+      <label class="lbl">🔑 API Token</label>
+      <input type="password" class="inp" id="jToken" placeholder="API Token von Atlassian" autocomplete="off">
+    </div>
+    <div class="mfield">
+      <label class="lbl">📁 Projekt-Key</label>
+      <input type="text" class="inp" id="jProject" placeholder="z.B. JOBS" style="text-transform:uppercase;" autocomplete="off">
+    </div>
+    <div class="mfield">
+      <label class="lbl">🎫 Issue-Typ</label>
+      <input type="text" class="inp" id="jIssueType" placeholder="Task" autocomplete="off">
+    </div>
+    <div class="mfield">
+      <label class="lbl">🔗 Jira-Feld: URL <span style="color:#6b6b80;font-weight:400;">(optional)</span></label>
+      <input type="text" class="inp" id="jUrlField" placeholder="customfield_10050" autocomplete="off">
+    </div>
+    <div class="mfield">
+      <label class="lbl">🏢 Jira-Feld: Unternehmen <span style="color:#6b6b80;font-weight:400;">(optional)</span></label>
+      <input type="text" class="inp" id="jCompanyField" placeholder="customfield_10051" autocomplete="off">
+      <div style="font-size:11px;color:#6b6b80;margin-top:5px;">Field-IDs: <button type="button" onclick="loadJiraFields()" style="background:none;border:none;color:#2684ff;cursor:pointer;font-size:11px;padding:0;font-family:inherit;text-decoration:underline;">Verfügbare Felder anzeigen →</button></div>
+    </div>
+    <div id="jiraFieldsBox" style="display:none;background:#0a0a0f;border:1px solid #2a2a3a;border-radius:10px;padding:12px;margin-bottom:14px;max-height:180px;overflow-y:auto;font-size:11px;"></div>
+    <div class="mfield" style="display:flex;align-items:flex-start;gap:12px;background:#0a0a0f;border:1px solid #2a2a3a;border-radius:10px;padding:13px 15px;">
+      <input type="checkbox" id="jUseProxy" style="width:16px;height:16px;flex-shrink:0;margin-top:2px;cursor:pointer;accent-color:#2684ff;" checked>
+      <div>
+        <label for="jUseProxy" style="cursor:pointer;font-size:13px;font-weight:600;display:block;">🔀 Lokalen Proxy verwenden <span style="color:#6b6b80;font-weight:400;">(empfohlen)</span></label>
+        <div style="font-size:11px;color:#6b6b80;margin-top:3px;line-height:1.5;">Leitet Requests über den Backend-Proxy (server.py). Umgeht CORS. Deaktivieren nur wenn Jira CORS für deine Domain erlaubt.</div>
+      </div>
+    </div>
+
+    <div id="jiraModalStatus" class="mstatus"></div>
+    <div class="mactions">
+      <button type="button" class="mcancelbtn" onclick="closeJiraSettings()">Abbrechen</button>
+      <button type="button" class="mcancelbtn" id="jTestBtn" onclick="testJiraConnection()" style="border-color:rgba(38,132,255,.35);color:#2684ff;">🔗 Testen</button>
+      <button type="button" class="msavebtn" onclick="saveJiraSettings()">💾 Speichern</button>
+    </div>
+  </div>
+</div>
+
+<!-- Admin Panel Modal -->
+<div id="adminModal" class="modal-bg" style="display:none" onclick="if(event.target===this)closeAdminPanel()">
+  <div class="modal" style="max-width:720px;width:100%;">
+    <div class="modal-title">⚙️ Benutzerverwaltung</div>
+    <div class="modal-sub">Benutzer anzeigen, sperren/entsperren, E-Mail anpassen oder Konten löschen.</div>
+    <div id="adminStatus" class="mstatus" style="margin-bottom:12px;"></div>
+    <div style="overflow-x:auto;">
+      <table id="adminTable" style="width:100%;border-collapse:collapse;font-size:13px;">
+        <thead>
+          <tr style="color:#6b6b80;text-align:left;border-bottom:1px solid #2a2a3a;">
+            <th style="padding:8px 10px;">Benutzer</th>
+            <th style="padding:8px 10px;">E-Mail</th>
+            <th style="padding:8px 10px;">Registriert</th>
+            <th style="padding:8px 10px;text-align:center;">Admin</th>
+            <th style="padding:8px 10px;text-align:center;">Status</th>
+            <th style="padding:8px 10px;text-align:right;">Aktionen</th>
+          </tr>
+        </thead>
+        <tbody id="adminTbody">
+          <tr><td colspan="6" style="text-align:center;padding:24px;color:#6b6b80;">Wird geladen…</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="mactions" style="margin-top:20px;">
+      <button type="button" class="mcancelbtn" onclick="closeAdminPanel()">Schließen</button>
+      <button type="button" class="msavebtn" style="flex:0;padding:10px 20px;" onclick="loadAdminUsers()">🔄 Aktualisieren</button>
+    </div>
+  </div>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>
