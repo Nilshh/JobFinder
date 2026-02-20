@@ -2,7 +2,7 @@
 
 > Intelligente Jobsuche mit Bewerbungs-Tracking, Jira-Integration und Mehrbenutzer-Unterstützung
 
-JobPipeline ist eine schlanke Single-Page-App für die strukturierte Jobsuche. Sie durchsucht die **Adzuna-API** parallel nach mehreren Jobtiteln, filtert bereits gespeicherte oder ignorierte Stellen automatisch heraus und verlinkt direkt auf **33+ Jobportale**. Gespeicherte Stellen lassen sich mit Status und Notizen tracken und per Knopfdruck als Jira-Ticket exportieren.
+JobPipeline ist eine schlanke Single-Page-App für die strukturierte Jobsuche. Sie durchsucht die **Adzuna-API** und die **Bundesagentur für Arbeit** parallel nach mehreren Jobtiteln, filtert bereits gespeicherte oder ignorierte Stellen automatisch heraus und verlinkt direkt auf **45+ Jobportale**. Gespeicherte Stellen lassen sich mit Status und Notizen tracken und per Knopfdruck als Jira-Ticket exportieren.
 
 ---
 
