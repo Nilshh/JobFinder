@@ -353,6 +353,10 @@ function _buildGRP(t0, l, r){
       {n:"Get in IT",i:"🎯",s:"IT-Karriere",aw:0,u:()=>`https://www.get-in-it.de/jobs?q=${t0}&location=${l}`},
       {n:"Stack Overflow",i:"🔶",s:"Entwickler weltweit",aw:0,u:()=>`https://stackoverflow.com/jobs?q=${t0}&l=${l}&d=${r}&u=Km`},
       {n:"ICTJob.de",i:"📡",s:"IT & Telekom",aw:0,u:()=>`https://www.ictjob.de/jobs?keywords=${t0}&location=${l}`},
+      {n:"Gallmond",i:"🎯",s:"IT Headhunter 95%",aw:1,u:()=>`https://gallmond.com/headhunter-it`},
+      {n:"Wellfound",i:"🚀",s:"Startup-Jobs DE",aw:0,u:()=>`https://wellfound.com/location/germany?q=${t0}`},
+      {n:"Talent.io",i:"💡",s:"Tech-Vermittlung",aw:0,u:()=>`https://www.talent.io/p/de-de/jobs?q=${t0}`},
+      {n:"Welcome to Jungle",i:"🌿",s:"Modernes Jobboard",aw:0,u:()=>`https://www.welcometothejungle.com/de/jobs?query=${t0}&aroundQuery=${l}`},
     ]},
     {h:"👔 C-Level & Executive Search",hc:"ex-hdr",list:[
       {n:"Korn Ferry",i:"🌍",s:"Global #1",aw:1,u:()=>`https://jobs.kornferry.com/?q=${t0}&location=${l}`},
@@ -374,6 +378,10 @@ function _buildGRP(t0, l, r){
       {n:"Experteer",i:"🏢",s:"ab 60k€ Portal",aw:0,u:()=>`https://www.experteer.de/search?q=${t0}&location=${l}&radius=${r}`},
       {n:"LinkedIn Exec",i:"💼",s:"C-Level Filter",aw:0,u:()=>`https://www.linkedin.com/jobs/search/?keywords=${t0}&location=${l}&distance=${r}&f_E=5%2C6`},
       {n:"The Ladders",i:"💰",s:"100k+ Jobs",aw:0,u:()=>`https://www.theladders.com/jobs/${t0}`},
+      {n:"Robert Walters",i:"🔵",s:"CIO/CTO Spezialist",aw:0,u:()=>`https://www.robertwalters.de/expertise/information-technologie/cio-cto-jobs.html`},
+      {n:"Hays Executive",i:"🏗️",s:"IT Führungskräfte",aw:0,u:()=>`https://www.hays.de/jobsuche/stellenangebote-jobs#q=${t0}&location=${l}`},
+      {n:"Mercuri Urval",i:"🌐",s:"Global Exec Search",aw:0,u:()=>`https://www.mercuriurval.com/de-de/offene-positionen/`},
+      {n:"i-potentials",i:"⚡",s:"DACH Digital Exec",aw:0,u:()=>`https://i-potentials.de/en/executive-search/`},
     ]},
     {h:"🔍 Generelle Portale",hc:"gn-hdr",list:[
       {n:"StepStone",i:"📋",s:"#1 Generalist",aw:1,u:()=>`https://www.stepstone.de/work/ergebnisliste/?ke=${t0}&la=${l}&ws=${r}KM`},
@@ -387,6 +395,7 @@ function _buildGRP(t0, l, r){
       {n:"Kimeta",i:"🔶",s:"Metasuche",aw:1,u:()=>`https://www.kimeta.de/jobs?q=${t0}&where=${l}&radius=${r}`},
       {n:"Jooble",i:"⚡",s:"Aggregator",aw:0,u:()=>`https://de.jooble.org/jobs-${t0}/${l}`},
       {n:"Stellenanzeigen",i:"📰",s:"3,5 Mio/Monat",aw:0,u:()=>`https://www.stellenanzeigen.de/job-suche/${t0}/?q=${t0}&lo=${l}`},
+      {n:"Interamt",i:"🏛️",s:"Öffentlicher Dienst",aw:0,u:()=>`https://www.interamt.de/koop/app/stelle?WT.mc_id=1&stelle=alle&q=${t0}`},
     ]},
   ];
 }
