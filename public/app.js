@@ -97,6 +97,26 @@ document.getElementById("rrowDays").addEventListener("click", e => {
   days = parseInt(btn.dataset.v);
 });
 
+// ── BA Job Normalizer ──
+function normBaJob(j, title){
+  const refnr = j.refnr || "";
+  const loc   = j.arbeitsort
+    ? [j.arbeitsort.ort, j.arbeitsort.region].filter(Boolean).join(", ")
+    : "";
+  return {
+    title:         j.titel       || "",
+    company:       { display_name: j.arbeitgeber || "" },
+    location:      { display_name: loc },
+    redirect_url:  j.externeUrl  || (refnr ? "https://www.arbeitsagentur.de/jobsuche/jobdetail/"+refnr : ""),
+    created:       j.aktuelleVeroeffentlichungsdatum || "",
+    contract_type: j.befristung===1 ? "permanent" : j.befristung===2 ? "temporary" : undefined,
+    salary_min:    undefined,
+    salary_max:    undefined,
+    _t:            title,
+    _source:       "BA"
+  };
+}
+
 // ── Search ──
 document.getElementById("goBtn").addEventListener("click", doSearch);
 
@@ -120,10 +140,23 @@ async function doSearch(){
   document.getElementById("stxt").textContent = arr.length>1 ? "Suche nach "+arr.length+" Jobtiteln parallel…" : "Suche nach „"+arr[0]+"\"…";
 
   try {
-    const results = await Promise.all(arr.map(title => {
+    const results = await Promise.all(arr.map(async title => {
       const p = new URLSearchParams({what:title,where,distance:km,country});
-      return fetch("/jobs?"+p)
-        .then(r=>r.json()).then(d=>({title,list:d.results||[],count:d.count||0})).catch(()=>({title,list:[],count:0}));
+
+      const azProm = fetch("/jobs?"+p)
+        .then(r=>r.json())
+        .then(d=>({ list:(d.results||[]).map(j=>({...j,_source:"Adzuna"})), count:d.count||0 }))
+        .catch(()=>({ list:[], count:0 }));
+
+      const baProm = country==="de"
+        ? fetch("/jobs/ba?"+new URLSearchParams({what:title,where,distance:km}))
+            .then(r=>r.json())
+            .then(d=>({ list:(d.stellenangebote||[]).map(j=>normBaJob(j,title)), count:d.maxErgebnisse||0 }))
+            .catch(()=>({ list:[], count:0 }))
+        : Promise.resolve({ list:[], count:0 });
+
+      const [az, ba] = await Promise.all([azProm, baProm]);
+      return { title, list:[...az.list,...ba.list], count:az.count+ba.count };
     }));
 
     const saved = LS.saved(), ign = LS.ignored();
@@ -196,7 +229,7 @@ function renderResults(jobs, total, arr, where){
             '</div>'+
           '</div>'+
           '<div class="jright">'+
-            '<span class="jbadge">Adzuna</span>'+
+            '<span class="jbadge">'+(j._source||"Adzuna")+'</span>'+
             '<span class="jas">'+esc(j._t)+'</span>'+
             (sal?'<span class="jsal">'+sal+'</span>':'')+
           '</div>'+

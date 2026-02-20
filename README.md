@@ -2,7 +2,7 @@
 
 > Intelligente Jobsuche mit Bewerbungs-Tracking, Jira-Integration und Mehrbenutzer-Unterstützung
 
-JobPipeline ist eine schlanke Single-Page-App für die strukturierte Jobsuche. Sie durchsucht die **Adzuna-API** parallel nach mehreren Jobtiteln, filtert bereits gespeicherte oder ignorierte Stellen automatisch heraus und verlinkt direkt auf **33+ Jobportale**. Gespeicherte Stellen lassen sich mit Status und Notizen tracken und per Knopfdruck als Jira-Ticket exportieren.
+JobPipeline ist eine schlanke Single-Page-App für die strukturierte Jobsuche. Sie durchsucht die **Adzuna-API** und die **Bundesagentur für Arbeit** parallel nach mehreren Jobtiteln, filtert bereits gespeicherte oder ignorierte Stellen automatisch heraus und verlinkt direkt auf **45+ Jobportale**. Gespeicherte Stellen lassen sich mit Status und Notizen tracken und per Knopfdruck als Jira-Ticket exportieren.
 
 ---
 
@@ -144,9 +144,10 @@ Internet
   │
   └─► Caddy (HTTPS, Let's Encrypt)        job.raddes.de:443
         │
-        ├─► /jobs /jira/* /auth/* /user/* /admin/*  →  Flask API (intern :5500)
+        ├─► /jobs* /jira/* /auth/* /user/* /admin/*  →  Flask API (intern :5500)
         │     │
         │     ├─► /jobs          Adzuna-Proxy (API Key bleibt serverseitig)
+        │     ├─► /jobs/ba       Bundesagentur-Proxy (öffentliche API, nur DE)
         │     ├─► /auth/*        Registrierung, Login, Logout, Passwort-Reset
         │     ├─► /user/data     Gespeicherte Jobs & Jira-Config (pro User)
         │     ├─► /admin/users   Benutzerverwaltung (nur Admins)
@@ -164,7 +165,7 @@ Internet
 | `public/index.html` | HTML-Skelett der Single-Page-App |
 | `public/style.css` | Alle CSS-Regeln |
 | `public/app.js` | Komplette Frontend-Logik (Vanilla JS) |
-| `server.py` | Flask-Backend (Auth, Adzuna-Proxy, Jira-Proxy, SQLite) |
+| `server.py` | Flask-Backend (Auth, Adzuna-Proxy, BA-Proxy, Jira-Proxy, SQLite) |
 | `Caddyfile` | Caddy-Konfiguration (HTTPS, Reverse Proxy) |
 | `Dockerfile.api` | Python-Container für das Backend |
 | `docker-compose.yml` | Orchestrierung aller Services |
@@ -343,6 +344,6 @@ open http://localhost:5500
 | Datenbank | SQLite (serverseitig, Docker Volume) |
 | Authentifizierung | Session-Cookies · Werkzeug Password Hashing |
 | Reverse Proxy / HTTPS | Caddy (automatisches Let's Encrypt) |
-| Jobdaten | [Adzuna Jobs API](https://developer.adzuna.com/) |
+| Jobdaten | [Adzuna Jobs API](https://developer.adzuna.com/) · [Bundesagentur für Arbeit](https://jobsuche.api.bund.dev/) |
 | Container | Docker Compose |
 | Jira | Atlassian REST API v3 · ADF |

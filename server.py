@@ -386,6 +386,34 @@ def jobs():
         return jsonify({"error": str(e)}), 500
 
 
+# ── Jobs (Bundesagentur für Arbeit proxy) ───────────────────────
+
+@app.route("/jobs/ba")
+def jobs_ba():
+    title    = request.args.get("what", "")
+    location = request.args.get("where", "")
+    radius   = request.args.get("distance", "50")
+    params = {
+        "angebotsart": 1,
+        "page":        1,
+        "pav":         "false",
+        "size":        25,
+        "umkreis":     radius,
+    }
+    if title:    params["was"] = title
+    if location: params["wo"]  = location
+    try:
+        r = requests.get(
+            "https://rest.arbeitsagentur.de/jobboerse/jobsuche-service/pc/v4/app/jobs",
+            params  = params,
+            headers = {"X-API-Key": "jobboerse-jobsuche"},
+            timeout = 10
+        )
+        return jsonify(r.json()), r.status_code
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 # ── Jira ──────────────────────────────────────────────────────────
 
 @app.route("/jira/test", methods=["GET", "OPTIONS"])
