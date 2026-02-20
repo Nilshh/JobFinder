@@ -192,7 +192,6 @@ body{font-family:'Segoe UI',sans-serif;background:#0a0a0f;color:#f0f0f5;min-heig
     <button type="button" class="nbtn" id="nb2" onclick="showTab('saved')">
       📌 Merkzettel<span class="badge" id="badge">0</span>
     </button>
-    <button type="button" class="nbtn" id="nb3" onclick="showTab('portals')">🌐 Portale</button>
     <button type="button" class="cfgbtn" id="jiraCfgBtn" onclick="openJiraSettings()" title="Jira Einstellungen">⚡ Jira</button>
     <div id="userBar" style="display:none;align-items:center;gap:6px;">
       <span class="uname" id="uname"></span>
@@ -286,11 +285,6 @@ body{font-family:'Segoe UI',sans-serif;background:#0a0a0f;color:#f0f0f5;min-heig
     Noch keine Stellen gespeichert.<br>
     <span style="font-size:13px;">Klicke bei einem Suchergebnis auf 💾 Speichern.</span>
   </div>
-</div>
-
-<!-- PORTALS TAB -->
-<div id="tabPortals" style="display:none">
-  <div id="portalTabBox" style="margin-top:8px;"></div>
 </div>
 
 </div><!-- /wrap -->
@@ -446,14 +440,11 @@ function refreshBadge(){
 
 // ── Tabs ──
 function showTab(t){
-  document.getElementById("tabSearch").style.display  = t==="search"  ?"block":"none";
-  document.getElementById("tabSaved").style.display   = t==="saved"   ?"block":"none";
-  document.getElementById("tabPortals").style.display = t==="portals" ?"block":"none";
+  document.getElementById("tabSearch").style.display = t==="search"?"block":"none";
+  document.getElementById("tabSaved").style.display  = t==="saved" ?"block":"none";
   document.getElementById("nb1").classList.toggle("on", t==="search");
   document.getElementById("nb2").classList.toggle("on", t==="saved");
-  document.getElementById("nb3").classList.toggle("on", t==="portals");
-  if(t==="saved")   renderSaved();
-  if(t==="portals") renderPortalsTab();
+  if(t==="saved") renderSaved();
 }
 
 // ── Chips ──
@@ -756,8 +747,9 @@ function renderSaved(){
 }
 
 // ── Platforms ──
-function _buildGRP(t0, l, r){
-  return [
+function renderPlats(arr, where){
+  const t0=encodeURIComponent(arr[0]||""), l=encodeURIComponent(where), r=km;
+  const GRP=[
     {h:"💻 IT & Tech — Testsieger 2025",hc:"it-hdr",list:[
       {n:"Jobvector",i:"🥇",s:"#1 IT 2025",aw:1,u:()=>`https://www.jobvector.de/jobs/?q=${t0}&l=${l}&radius=${r}`},
       {n:"Heise Jobs",i:"🔴",s:"Dev & Admin",aw:0,u:()=>`https://jobs.heise.de/suche?q=${t0}&l=${l}&radius=${r}`},
@@ -805,14 +797,14 @@ function _buildGRP(t0, l, r){
       {n:"Stellenanzeigen",i:"📰",s:"3,5 Mio/Monat",aw:0,u:()=>`https://www.stellenanzeigen.de/job-suche/${t0}/?q=${t0}&lo=${l}`},
     ]},
   ];
-}
 
-function _renderGRP(GRP, box, label){
+  const box = document.getElementById("platbox");
   box.innerHTML="";
   const lbl=document.createElement("div");
   lbl.style.cssText="font-size:12px;color:#6b6b80;font-weight:600;letter-spacing:1px;text-transform:uppercase;margin-bottom:10px;";
-  lbl.textContent=label;
+  lbl.textContent="Weitersuchen — mit deiner Suche vorausgefüllt";
   box.appendChild(lbl);
+
   GRP.forEach(g=>{
     const sec=document.createElement("div"); sec.className="platsec";
     const h=document.createElement("div"); h.className="plathdr "+g.hc; h.textContent=g.h;
@@ -829,23 +821,7 @@ function _renderGRP(GRP, box, label){
     sec.appendChild(h); sec.appendChild(gr);
     box.appendChild(sec);
   });
-}
-
-function renderPlats(arr, where){
-  const t0=encodeURIComponent(arr[0]||""), l=encodeURIComponent(where), r=km;
-  _renderGRP(_buildGRP(t0, l, r), document.getElementById("platbox"), "Weitersuchen — mit deiner Suche vorausgefüllt");
   show("platbox"); show("footer");
-}
-
-function renderPortalsTab(){
-  const loc = document.getElementById("inpLoc").value.trim();
-  const plz = document.getElementById("inpPlz").value.trim();
-  const where = plz ? (loc ? plz+" "+loc : plz) : loc;
-  const arr = titles.size ? Array.from(titles) : [];
-  const t0 = encodeURIComponent(arr[0]||"");
-  const l = encodeURIComponent(where);
-  const label = (where||t0) ? "Mit aktuellen Formular-Werten vorausgefüllt" : "Alle Portale — Suchformular ausfüllen für vorausgefüllte Links";
-  _renderGRP(_buildGRP(t0, l, km), document.getElementById("portalTabBox"), label);
 }
 
 // ── Utils ──
