@@ -349,6 +349,48 @@ function saveJob(id){
     fadeOut("jw"+id);
   });
 }
+// ── Manual Add ──
+document.getElementById("manualAddBtn").addEventListener("click", () => {
+  requireAuth("Zum Speichern bitte anmelden.", openManualAdd);
+});
+
+function openManualAdd(){
+  ["maUrl","maTitle","maCompany","maLocation"].forEach(id => {
+    document.getElementById(id).value = "";
+    document.getElementById(id).onkeydown = e => { if(e.key==="Enter") submitManualJob(); };
+  });
+  document.getElementById("maStatus").textContent = "";
+  document.getElementById("manualAddModal").style.display = "flex";
+  setTimeout(()=>document.getElementById("maTitle").focus(), 50);
+}
+function closeManualAdd(){
+  document.getElementById("manualAddModal").style.display = "none";
+}
+function submitManualJob(){
+  const url     = document.getElementById("maUrl").value.trim();
+  const title   = document.getElementById("maTitle").value.trim();
+  const company = document.getElementById("maCompany").value.trim();
+  const location= document.getElementById("maLocation").value.trim();
+  const status  = document.getElementById("maStatus");
+
+  if(!title){ status.style.color="#ff4d6d"; status.textContent="⚠️ Jobtitel ist Pflicht."; return; }
+
+  const k = (url || (title+"|"+company)).slice(0,180);
+  const saved = LS.saved();
+  if(saved[k]){ status.style.color="#ff4d6d"; status.textContent="⚠️ Diese Stelle ist bereits gespeichert."; return; }
+
+  saved[k] = {
+    key:k, title, company, location, url,
+    salary_min:undefined, salary_max:undefined,
+    contract_type:undefined, created:undefined,
+    searchedAs:"manuell", savedAt:new Date().toISOString(), status:"neu", note:""
+  };
+  LS.setSaved(saved);
+  status.style.color="#22c55e"; status.textContent="✅ Gespeichert!";
+  setTimeout(closeManualAdd, 800);
+  if(document.getElementById("tabSaved").style.display !== "none") renderSaved();
+}
+
 function skipJob(id){
   requireAuth("Zum Ignorieren bitte anmelden.", () => {
     const j = JOBS[id]; if(!j) return;

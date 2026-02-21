@@ -131,6 +131,7 @@
         <button type="button" class="sfbtn" data-s="angebot">🎉 Angebot</button>
       </div>
       <button type="button" class="clrbtn" id="clrIgnBtn">🗑 Ignorierliste leeren</button>
+      <button type="button" class="clrbtn" id="manualAddBtn" style="background:rgba(38,132,255,.12);border-color:rgba(38,132,255,.35);color:#4da3ff;">➕ Manuell hinzufügen</button>
     </div>
   </div>
   <div id="savedList"></div>
@@ -146,6 +147,34 @@
 </div>
 
 </div><!-- /wrap -->
+
+<!-- Manual Add Modal -->
+<div id="manualAddModal" class="modal-bg" style="display:none" onclick="if(event.target===this)closeManualAdd()">
+  <div class="modal">
+    <div class="modal-title">➕ Stelle manuell hinzufügen</div>
+    <div class="mfield">
+      <label class="lbl">🔗 Stellenlink (URL)</label>
+      <input type="url" class="inp" id="maUrl" placeholder="https://…">
+    </div>
+    <div class="mfield">
+      <label class="lbl">📝 Jobtitel <span style="color:#ff4d6d">*</span></label>
+      <input type="text" class="inp" id="maTitle" placeholder="z.B. CTO, Head of IT…">
+    </div>
+    <div class="mfield">
+      <label class="lbl">🏢 Unternehmen</label>
+      <input type="text" class="inp" id="maCompany" placeholder="optional">
+    </div>
+    <div class="mfield">
+      <label class="lbl">📍 Standort</label>
+      <input type="text" class="inp" id="maLocation" placeholder="optional">
+    </div>
+    <div id="maStatus" class="mstatus"></div>
+    <div class="mactions">
+      <button type="button" class="mcancelbtn" onclick="closeManualAdd()">Abbrechen</button>
+      <button type="button" class="msavebtn" onclick="submitManualJob()">💾 Speichern</button>
+    </div>
+  </div>
+</div>
 
 <!-- Auth Modal -->
 <div id="authModal" class="modal-bg" style="display:none" onclick="if(event.target===this)closeAuthModal()">
