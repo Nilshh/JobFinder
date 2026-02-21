@@ -137,15 +137,14 @@ function normJobicyJob(j, title){
 }
 
 // ── Remote toggle ──
-function toggleRemote(){
+document.getElementById("remoteToggle").addEventListener("click", () => {
   remoteOnly = !remoteOnly;
-  const btn = document.getElementById("remoteToggle");
-  btn.classList.toggle("on", remoteOnly);
+  document.getElementById("remoteToggle").classList.toggle("on", remoteOnly);
   document.getElementById("locOptHint").style.display = remoteOnly ? "inline" : "none";
-  const locFields = document.getElementById("rrowKm");
-  locFields.style.opacity = remoteOnly ? "0.35" : "1";
-  locFields.style.pointerEvents = remoteOnly ? "none" : "";
-}
+  const rrowKm = document.getElementById("rrowKm");
+  rrowKm.style.opacity = remoteOnly ? "0.35" : "1";
+  rrowKm.style.pointerEvents = remoteOnly ? "none" : "";
+});
 
 // ── Search ──
 document.getElementById("goBtn").addEventListener("click", doSearch);
@@ -156,7 +155,6 @@ async function doSearch(){
   const where = plz ? (loc ? plz+" "+loc : plz) : loc;
 
   if(!titles.size){ showErr("Bitte mindestens einen Jobtitel wählen."); return; }
-  if(!remoteOnly && !where){ showErr("Bitte Ort oder PLZ eingeben."); return; }
 
   hide("errbx"); hide("infobx"); hide("nores"); hide("platbox"); hide("footer"); hide("reshdr");
   document.getElementById("restags").innerHTML = "";
@@ -167,7 +165,7 @@ async function doSearch(){
   const arr = Array.from(titles);
   const country = where.toLowerCase().includes("wien")||where.toLowerCase().includes("österreich")?"at"
                 : where.toLowerCase().includes("zürich")||where.toLowerCase().includes("schweiz")?"ch":"de";
-  const displayWhere = remoteOnly ? (where || "Remote") : where;
+  const displayWhere = remoteOnly ? (where || "Remote") : (where || "Deutschland");
   document.getElementById("stxt").textContent = arr.length>1 ? "Suche nach "+arr.length+" Jobtiteln parallel…" : "Suche nach „"+arr[0]+"\"…";
 
   try {
