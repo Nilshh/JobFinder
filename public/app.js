@@ -156,7 +156,6 @@ async function doSearch(){
 
   if(!titles.size){ showErr("Bitte mindestens einen Jobtitel wählen."); return; }
 
-  document.getElementById("heroSection")?.classList.add("hero-hidden");
   hide("errbx"); hide("infobx"); hide("nores"); hide("platbox"); hide("footer"); hide("reshdr");
   document.getElementById("restags").innerHTML = "";
   document.getElementById("joblist").innerHTML = "";
