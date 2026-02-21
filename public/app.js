@@ -3,6 +3,8 @@ let km = 50, days = 7;
 const titles = new Set();
 const JOBS = {}; // storeId → job object
 let sfFilter = "all";
+let allMerged = [], currentPage = 0, renderMeta = {};
+const PAGE_SIZE = 20;
 
 // ── Auth state ──
 let AUTH = { user: null };
@@ -117,6 +119,22 @@ function normBaJob(j, title){
   };
 }
 
+// ── Jobicy Job Normalizer ──
+function normJobicyJob(j, title){
+  return {
+    title:         j.jobTitle    || "",
+    company:       { display_name: j.companyName || "" },
+    location:      { display_name: j.jobGeo ? j.jobGeo+" (Remote)" : "Remote" },
+    redirect_url:  j.url         || "",
+    created:       j.pubDate     || "",
+    contract_type: j.jobType     || undefined,
+    salary_min:    j.annualSalaryMin || undefined,
+    salary_max:    j.annualSalaryMax || undefined,
+    _t:            title,
+    _source:       "Jobicy"
+  };
+}
+
 // ── Search ──
 document.getElementById("goBtn").addEventListener("click", doSearch);
 
@@ -155,8 +173,13 @@ async function doSearch(){
             .catch(()=>({ list:[], count:0 }))
         : Promise.resolve({ list:[], count:0 });
 
-      const [az, ba] = await Promise.all([azProm, baProm]);
-      return { title, list:[...az.list,...ba.list], count:az.count+ba.count };
+      const jobicyProm = fetch("/jobs/jobicy?"+new URLSearchParams({what:title,country}))
+        .then(r=>r.json())
+        .then(d=>({ list:(d.jobs||[]).map(j=>normJobicyJob(j,title)), count:d.jobCount||0 }))
+        .catch(()=>({ list:[], count:0 }));
+
+      const [az, ba, jobicy] = await Promise.all([azProm, baProm, jobicyProm]);
+      return { title, list:[...az.list,...ba.list,...jobicy.list], count:az.count+ba.count+jobicy.count };
     }));
 
     const saved = LS.saved(), ign = LS.ignored();
@@ -184,31 +207,60 @@ async function doSearch(){
       show("infobx");
     }
 
-    renderResults(merged, total, arr, where);
+    allMerged = merged;
+    renderMeta = {total, arr, where};
+    renderPage(0);
   } catch(ex){ showErr("Fehler: "+ex.message); }
 
   hide("loadbox");
   document.getElementById("goBtn").disabled = false;
 }
 
+// ── Pagination ──
+function renderPage(page){
+  currentPage = page;
+  const {total, arr, where} = renderMeta;
+  const start = page * PAGE_SIZE;
+  renderResults(allMerged.slice(start, start + PAGE_SIZE), total, arr, where);
+  window.scrollTo({top:0, behavior:"smooth"});
+}
+
+function renderPagination(){
+  const el = document.getElementById("pagination");
+  const totalPages = Math.ceil(allMerged.length / PAGE_SIZE);
+  if(totalPages <= 1){ el.innerHTML = ""; return; }
+
+  const start = currentPage * PAGE_SIZE + 1;
+  const end   = Math.min((currentPage + 1) * PAGE_SIZE, allMerged.length);
+
+  let html = '<div class="pgbar">';
+  html += '<button class="pgbtn" '+(currentPage===0?"disabled":"")+' onclick="renderPage('+( currentPage-1)+')">← Zurück</button>';
+  html += '<span class="pginfo">Seite '+(currentPage+1)+' von '+totalPages+' &nbsp;·&nbsp; Treffer '+start+'–'+end+' von '+allMerged.length+'</span>';
+  html += '<button class="pgbtn" '+(currentPage>=totalPages-1?"disabled":"")+' onclick="renderPage('+(currentPage+1)+')">Weiter →</button>';
+  html += '</div>';
+  el.innerHTML = html;
+}
+
 // ── Render results ──
 function renderResults(jobs, total, arr, where){
   const dLabel = days===7?"letzte Woche":days===14?"letzte 2 Wochen":days===30?"letzter Monat":"alle Daten";
 
-  if(!jobs.length){ show("nores"); }
+  if(!allMerged.length){ show("nores"); document.getElementById("pagination").innerHTML=""; }
   else {
     const hdr = document.getElementById("reshdr");
-    hdr.innerHTML = "<span class='rc'>"+jobs.length+"</span> neue Stellen &nbsp;<span class='rt'>("+total.toLocaleString("de-DE")+" gesamt · "+km+" km · "+where+" · "+dLabel+")</span>";
+    hdr.innerHTML = "<span class='rc'>"+allMerged.length+"</span> neue Stellen &nbsp;<span class='rt'>("+total.toLocaleString("de-DE")+" gesamt · "+km+" km · "+where+" · "+dLabel+")</span>";
     show("reshdr");
 
     const rt = document.getElementById("restags");
+    rt.innerHTML = "";
     arr.forEach(t => {
-      const n = jobs.filter(j=>j._t===t).length;
+      const n = allMerged.filter(j=>j._t===t).length;
       const s = document.createElement("span"); s.className="rtag"; s.textContent=t+": "+n+" Treffer";
       rt.appendChild(s);
     });
 
     const list = document.getElementById("joblist");
+    list.innerHTML = "";
     jobs.forEach(j => {
       const id = "j"+Math.random().toString(36).slice(2,9);
       JOBS[id] = j;
@@ -243,17 +295,19 @@ function renderResults(jobs, total, arr, where){
       list.appendChild(card);
     });
 
-    // Single delegated listener on the list
-    list.addEventListener("click", e => {
-      const sb = e.target.closest(".savebtn");
-      const sk = e.target.closest(".skipbtn");
-      if(sb){ e.stopPropagation(); saveJob(sb.dataset.id); }
-      if(sk){ e.stopPropagation(); skipJob(sk.dataset.id); }
-    });
+    renderPagination();
   }
 
   renderPlats(arr, where);
 }
+
+// ── Delegated job list listener (once) ──
+document.getElementById("joblist").addEventListener("click", e => {
+  const sb = e.target.closest(".savebtn");
+  const sk = e.target.closest(".skipbtn");
+  if(sb){ e.stopPropagation(); saveJob(sb.dataset.id); }
+  if(sk){ e.stopPropagation(); skipJob(sk.dataset.id); }
+});
 
 // ── Save / Skip ──
 function saveJob(id){

@@ -148,6 +148,7 @@ Internet
         │     │
         │     ├─► /jobs          Adzuna-Proxy (API Key bleibt serverseitig)
         │     ├─► /jobs/ba       Bundesagentur-Proxy (öffentliche API, nur DE)
+        │     ├─► /jobs/jobicy   Jobicy-Proxy (Remote Jobs, öffentliche API)
         │     ├─► /auth/*        Registrierung, Login, Logout, Passwort-Reset
         │     ├─► /user/data     Gespeicherte Jobs & Jira-Config (pro User)
         │     ├─► /admin/users   Benutzerverwaltung (nur Admins)
@@ -344,6 +345,6 @@ open http://localhost:5500
 | Datenbank | SQLite (serverseitig, Docker Volume) |
 | Authentifizierung | Session-Cookies · Werkzeug Password Hashing |
 | Reverse Proxy / HTTPS | Caddy (automatisches Let's Encrypt) |
-| Jobdaten | [Adzuna Jobs API](https://developer.adzuna.com/) · [Bundesagentur für Arbeit](https://jobsuche.api.bund.dev/) |
+| Jobdaten | [Adzuna Jobs API](https://developer.adzuna.com/) · [Bundesagentur für Arbeit](https://jobsuche.api.bund.dev/) · [Jobicy](https://jobicy.com/jobs-rss-feed) |
 | Container | Docker Compose |
 | Jira | Atlassian REST API v3 · ADF |

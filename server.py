@@ -414,6 +414,31 @@ def jobs_ba():
         return jsonify({"error": str(e)}), 500
 
 
+# ── Jobs (Jobicy proxy – Remote Jobs) ───────────────────────────
+
+@app.route("/jobs/jobicy")
+def jobs_jobicy():
+    title   = request.args.get("what", "")
+    country = request.args.get("country", "")
+    geo_map = {"de": "germany", "at": "austria", "ch": "switzerland",
+               "gb": "uk", "us": "usa"}
+    params  = {"count": 50}
+    if title:
+        params["tag"] = title
+    geo = geo_map.get(country, "")
+    if geo:
+        params["geo"] = geo
+    try:
+        r = requests.get(
+            "https://jobicy.com/api/v2/remote-jobs",
+            params  = params,
+            timeout = 10
+        )
+        return jsonify(r.json()), r.status_code
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 # ── Jira ──────────────────────────────────────────────────────────
 
 @app.route("/jira/test", methods=["GET", "OPTIONS"])
