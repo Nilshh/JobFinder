@@ -170,17 +170,21 @@ async function doSearch(){
 
   try {
     const results = await Promise.all(arr.map(async title => {
-      const p = new URLSearchParams({what:title,where,distance:km,country});
+      // Adzuna params – "where" nur wenn angegeben
+      const azParams = new URLSearchParams({what: remoteOnly ? title+" remote" : title, distance:km, country});
+      if(where) azParams.set("where", where);
 
-      const azProm = remoteOnly
-        ? Promise.resolve({ list:[], count:0 })
-        : fetch("/jobs?"+p)
-            .then(r=>r.json())
-            .then(d=>({ list:(d.results||[]).map(j=>({...j,_source:"Adzuna"})), count:d.count||0 }))
-            .catch(()=>({ list:[], count:0 }));
+      // BA params – nur ohne Remote-Modus
+      const baParams = new URLSearchParams({what:title, distance:km});
+      if(where) baParams.set("where", where);
+
+      const azProm = fetch("/jobs?"+azParams)
+        .then(r=>r.json())
+        .then(d=>({ list:(d.results||[]).map(j=>({...j,_source:"Adzuna"})), count:d.count||0 }))
+        .catch(()=>({ list:[], count:0 }));
 
       const baProm = (!remoteOnly && country==="de")
-        ? fetch("/jobs/ba?"+new URLSearchParams({what:title,where,distance:km}))
+        ? fetch("/jobs/ba?"+baParams)
             .then(r=>r.json())
             .then(d=>({ list:(d.stellenangebote||[]).map(j=>normBaJob(j,title)), count:d.maxErgebnisse||0 }))
             .catch(()=>({ list:[], count:0 }))
@@ -192,7 +196,11 @@ async function doSearch(){
         .catch(()=>({ list:[], count:0 }));
 
       const [az, ba, jobicy] = await Promise.all([azProm, baProm, jobicyProm]);
-      return { title, list:[...az.list,...ba.list,...jobicy.list], count:az.count+ba.count+jobicy.count };
+      // Im Remote-Modus: nur Jobicy + Adzuna-Remote-Treffer; BA immer ausgefiltert
+      const list = remoteOnly
+        ? [...az.list.filter(j=>(j.title||"").toLowerCase().includes("remote")||(j.description||"").toLowerCase().includes("remote")||j._source==="Jobicy"), ...jobicy.list]
+        : [...az.list,...ba.list,...jobicy.list];
+      return { title, list, count:az.count+ba.count+jobicy.count };
     }));
 
     const saved = LS.saved(), ign = LS.ignored();
@@ -661,8 +669,6 @@ async function exportToJira(key, btn){
   };
   if(cfg.urlField     && job.url)     fields[cfg.urlField]     = job.url;
   if(cfg.companyField && job.company) fields[cfg.companyField] = job.company;
-  const body = { fields };
-
   const useProxy = cfg.useProxy !== false;
   const apiUrl   = useProxy
     ? "/jira/issue"
