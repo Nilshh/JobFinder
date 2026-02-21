@@ -5,6 +5,7 @@ const JOBS = {}; // storeId → job object
 let sfFilter = "all";
 let allMerged = [], currentPage = 0, renderMeta = {};
 const PAGE_SIZE = 20;
+let remoteOnly = false;
 
 // ── Auth state ──
 let AUTH = { user: null };
@@ -135,6 +136,17 @@ function normJobicyJob(j, title){
   };
 }
 
+// ── Remote toggle ──
+function toggleRemote(){
+  remoteOnly = !remoteOnly;
+  const btn = document.getElementById("remoteToggle");
+  btn.classList.toggle("on", remoteOnly);
+  document.getElementById("locOptHint").style.display = remoteOnly ? "inline" : "none";
+  const locFields = document.getElementById("rrowKm");
+  locFields.style.opacity = remoteOnly ? "0.35" : "1";
+  locFields.style.pointerEvents = remoteOnly ? "none" : "";
+}
+
 // ── Search ──
 document.getElementById("goBtn").addEventListener("click", doSearch);
 
@@ -144,7 +156,7 @@ async function doSearch(){
   const where = plz ? (loc ? plz+" "+loc : plz) : loc;
 
   if(!titles.size){ showErr("Bitte mindestens einen Jobtitel wählen."); return; }
-  if(!where)      { showErr("Bitte Ort oder PLZ eingeben."); return; }
+  if(!remoteOnly && !where){ showErr("Bitte Ort oder PLZ eingeben."); return; }
 
   hide("errbx"); hide("infobx"); hide("nores"); hide("platbox"); hide("footer"); hide("reshdr");
   document.getElementById("restags").innerHTML = "";
@@ -155,18 +167,21 @@ async function doSearch(){
   const arr = Array.from(titles);
   const country = where.toLowerCase().includes("wien")||where.toLowerCase().includes("österreich")?"at"
                 : where.toLowerCase().includes("zürich")||where.toLowerCase().includes("schweiz")?"ch":"de";
+  const displayWhere = remoteOnly ? (where || "Remote") : where;
   document.getElementById("stxt").textContent = arr.length>1 ? "Suche nach "+arr.length+" Jobtiteln parallel…" : "Suche nach „"+arr[0]+"\"…";
 
   try {
     const results = await Promise.all(arr.map(async title => {
       const p = new URLSearchParams({what:title,where,distance:km,country});
 
-      const azProm = fetch("/jobs?"+p)
-        .then(r=>r.json())
-        .then(d=>({ list:(d.results||[]).map(j=>({...j,_source:"Adzuna"})), count:d.count||0 }))
-        .catch(()=>({ list:[], count:0 }));
+      const azProm = remoteOnly
+        ? Promise.resolve({ list:[], count:0 })
+        : fetch("/jobs?"+p)
+            .then(r=>r.json())
+            .then(d=>({ list:(d.results||[]).map(j=>({...j,_source:"Adzuna"})), count:d.count||0 }))
+            .catch(()=>({ list:[], count:0 }));
 
-      const baProm = country==="de"
+      const baProm = (!remoteOnly && country==="de")
         ? fetch("/jobs/ba?"+new URLSearchParams({what:title,where,distance:km}))
             .then(r=>r.json())
             .then(d=>({ list:(d.stellenangebote||[]).map(j=>normBaJob(j,title)), count:d.maxErgebnisse||0 }))
@@ -208,7 +223,7 @@ async function doSearch(){
     }
 
     allMerged = merged;
-    renderMeta = {total, arr, where};
+    renderMeta = {total, arr, where: displayWhere};
     renderPage(0);
   } catch(ex){ showErr("Fehler: "+ex.message); }
 
