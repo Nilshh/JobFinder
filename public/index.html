@@ -153,6 +153,10 @@
     <div class="savtitle">👁 Karriere-Monitor</div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
       <button type="button" class="clrbtn" id="addWatchBtn" style="background:rgba(38,132,255,.12);border-color:rgba(38,132,255,.35);color:#4da3ff;">+ Unternehmen hinzufügen</button>
+      <label style="display:inline-flex;">
+        <input type="file" id="watchCsvFile" accept=".csv" style="display:none" onchange="importWatchCSV(this)">
+        <button type="button" class="clrbtn" onclick="document.getElementById('watchCsvFile').click()" style="background:rgba(38,132,255,.08);border-color:rgba(38,132,255,.25);color:#4da3ff;">📂 CSV importieren</button>
+      </label>
       <button type="button" class="clrbtn" id="markAllReadBtn">✓ Alle gelesen</button>
     </div>
   </div>

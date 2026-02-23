@@ -586,6 +586,47 @@ async function markAllWatchRead(){
   loadWatchTab();
 }
 
+async function importWatchCSV(input){
+  const file = input.files[0];
+  input.value = "";
+  if(!file) return;
+  requireAuth("Bitte anmelden, um Unternehmen zu importieren.", async () => {
+    const text = await file.text();
+    // Zeilen aufteilen, leere + Kommentare überspringen
+    const lines = text.split(/\r?\n/).map(l => l.trim()).filter(l => l && !l.startsWith("#"));
+    if(!lines.length){ alert("CSV ist leer."); return; }
+
+    // Kopfzeile erkennen: erste Zeile ist Header wenn sie keine URL enthält
+    const firstCols = lines[0].split(";");
+    const hasHeader = !firstCols[1]?.trim().startsWith("http");
+    const rows = hasHeader ? lines.slice(1) : lines;
+    if(!rows.length){ alert("Keine Datenzeilen gefunden."); return; }
+
+    // Format: Name;URL;Keywords;Intervall(optional)
+    let ok = 0, skip = 0, errors = [];
+    for(const line of rows){
+      const [name, url, kwRaw, intervalRaw] = line.split(";").map(s => s.trim());
+      if(!name || !url || !url.startsWith("http")){ skip++; continue; }
+      const keywords = kwRaw ? kwRaw.split(",").map(k => k.trim()).filter(Boolean) : [];
+      const interval = parseInt(intervalRaw) || 24;
+      try {
+        const r = await fetch("/watch/companies", {
+          method:"POST", credentials:"include",
+          headers:{"Content-Type":"application/json"},
+          body: JSON.stringify({name, career_url:url, keywords, check_interval_hours:interval})
+        });
+        if(r.ok) ok++; else { const j=await r.json(); errors.push(`${name}: ${j.error}`); }
+      } catch(e){ errors.push(`${name}: ${e.message}`); }
+    }
+
+    let msg = `✅ ${ok} Unternehmen importiert.`;
+    if(skip)   msg += ` ${skip} Zeilen übersprungen (fehlende Felder).`;
+    if(errors.length) msg += `\n⚠️ Fehler:\n${errors.join("\n")}`;
+    alert(msg);
+    loadWatchTab();
+  });
+}
+
 function renderSaved(){
   refreshBadge();
   const all = Object.values(LS.saved()).sort((a,b)=>new Date(b.savedAt)-new Date(a.savedAt));
