@@ -423,13 +423,18 @@ document.getElementById("addWatchBtn").addEventListener("click", () => {
 });
 document.getElementById("markAllReadBtn").addEventListener("click", markAllWatchRead);
 document.getElementById("toggleAllWatchBtn").addEventListener("click", toggleAllWatches);
+document.getElementById("watchSelectBtn").addEventListener("click", toggleWatchSelectMode);
+document.getElementById("watchSelAllBtn").addEventListener("click", selectAllWatches);
+document.getElementById("watchDeleteSelBtn").addEventListener("click", deleteSelectedWatches);
 document.getElementById("csvImportBtn").addEventListener("click", () => {
   document.getElementById("watchCsvFile").click();
 });
 
 // ── Karriere-Monitor ──────────────────────────────────────────────
 
-let _watchEditId = null;
+let _watchEditId    = null;
+let _watchSelectMode = false;
+const _watchSelected = new Set();
 
 function openWatchModal(prefill){
   _watchEditId = prefill?.id || null;
@@ -513,6 +518,10 @@ function renderWatchCompanies(list){
     const allActive = list.every(c => c.active);
     toggleBtn.textContent = allActive ? "⏸ Alle pausieren" : "▶ Alle aktivieren";
   }
+  // Select-Mode: Klasse + Auswahl zurücksetzen (nach Re-Render sind Checkboxen weg)
+  box.classList.toggle("select-active", _watchSelectMode);
+  _watchSelected.clear();
+  _updateDeleteSelBtn();
   if(!list.length){ box.innerHTML = ""; return; }
   box.innerHTML = list.map(c => {
     const kw = JSON.parse(c.keywords||"[]");
@@ -527,6 +536,7 @@ function renderWatchCompanies(list){
     const kwHtml = kw.map(k=>`<span class="watch-kw">${k}</span>`).join("");
     return `<div class="watch-company-card" id="wc${c.id}">
       <div class="wc-header">
+        <input type="checkbox" class="wc-check" onchange="toggleWatchSelect(${c.id},this)">
         <div class="wc-title">${statusDot}${c.name}
           ${!c.active ? '<span class="watch-paused">pausiert</span>' : ''}
         </div>
@@ -641,6 +651,70 @@ async function toggleAllWatches(){
       body: JSON.stringify({active: newVal})
     })
   ));
+  loadWatchTab();
+}
+
+function toggleWatchSelectMode(){
+  _watchSelectMode = !_watchSelectMode;
+  _watchSelected.clear();
+  const btn    = document.getElementById("watchSelectBtn");
+  const selAll = document.getElementById("watchSelAllBtn");
+  const delBtn = document.getElementById("watchDeleteSelBtn");
+  if(_watchSelectMode){
+    btn.textContent = "✕ Abbrechen";
+    btn.style.color = "#ff4d6d";
+    selAll.style.display = "";
+    delBtn.style.display = "";
+  } else {
+    btn.textContent = "☑ Auswählen";
+    btn.style.color = "";
+    selAll.style.display = "none";
+    delBtn.style.display = "none";
+  }
+  document.getElementById("watchCompanyList").classList.toggle("select-active", _watchSelectMode);
+  _updateDeleteSelBtn();
+}
+
+function toggleWatchSelect(id, cb){
+  if(cb.checked) _watchSelected.add(id);
+  else _watchSelected.delete(id);
+  document.getElementById(`wc${id}`).classList.toggle("wc-selected", cb.checked);
+  _updateDeleteSelBtn();
+}
+
+function selectAllWatches(){
+  document.querySelectorAll(".watch-company-card").forEach(card => {
+    const cb = card.querySelector(".wc-check");
+    if(!cb) return;
+    cb.checked = true;
+    const id = parseInt(card.id.replace("wc",""));
+    _watchSelected.add(id);
+    card.classList.add("wc-selected");
+  });
+  _updateDeleteSelBtn();
+}
+
+function _updateDeleteSelBtn(){
+  const btn = document.getElementById("watchDeleteSelBtn");
+  const n   = _watchSelected.size;
+  btn.textContent = `🗑 Löschen (${n})`;
+  btn.disabled    = n === 0;
+}
+
+async function deleteSelectedWatches(){
+  if(!_watchSelected.size) return;
+  const n = _watchSelected.size;
+  if(!confirm(`${n} Unternehmen löschen? Diese Aktion kann nicht rückgängig gemacht werden.`)) return;
+  await Promise.all([..._watchSelected].map(id =>
+    fetch(`/watch/companies/${id}`, {method:"DELETE", credentials:"include"})
+  ));
+  // Select-Mode beenden
+  _watchSelectMode = false;
+  _watchSelected.clear();
+  document.getElementById("watchSelectBtn").textContent = "☑ Auswählen";
+  document.getElementById("watchSelectBtn").style.color = "";
+  document.getElementById("watchSelAllBtn").style.display  = "none";
+  document.getElementById("watchDeleteSelBtn").style.display = "none";
   loadWatchTab();
 }
 
