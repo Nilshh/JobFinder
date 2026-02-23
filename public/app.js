@@ -957,6 +957,7 @@ function updateUserBar(){
 function openAdminPanel(){
   document.getElementById("adminModal").style.display = "flex";
   loadAdminUsers();
+  loadBackupList();
 }
 
 function closeAdminPanel(){
@@ -1048,6 +1049,91 @@ async function adminDeleteUser(uid, username){
   const r = await fetch(`/admin/users/${uid}`, { method:"DELETE", credentials:"include" });
   if(r.ok){ loadAdminUsers(); }
   else { const j=await r.json(); document.getElementById("adminStatus").innerHTML=`<span class="errbx">${j.error}</span>`; }
+}
+
+async function doBackup(){
+  const status = document.getElementById("backupStatus");
+  status.textContent = "Wird erstellt…";
+  try {
+    const r = await fetch("/admin/backup", { credentials:"include" });
+    if(!r.ok){ const j=await r.json(); status.textContent="⚠️ "+j.error; return; }
+    const data = await r.json();
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type:"application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    const ts = new Date().toISOString().slice(0,16).replace("T","_").replace(/:/g,"-");
+    a.href = url;
+    a.download = `jobpipeline-backup-${ts}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    status.textContent = `✅ ${data.users.length} Benutzer gesichert`;
+  } catch(e) {
+    status.textContent = "⚠️ Fehler: "+e.message;
+  }
+}
+
+async function doRestore(input){
+  const file = input.files[0];
+  input.value = "";
+  if(!file) return;
+  const status = document.getElementById("backupStatus");
+  if(!confirm(`Backup „${file.name}" einspielen? Alle aktuellen Daten werden überschrieben und du wirst abgemeldet.`)) return;
+  status.textContent = "Wird eingespielt…";
+  try {
+    const text = await file.text();
+    const data = JSON.parse(text);
+    const r = await fetch("/admin/restore", {
+      method:"POST", credentials:"include",
+      headers:{"Content-Type":"application/json"},
+      body: JSON.stringify(data)
+    });
+    const j = await r.json();
+    if(!r.ok){ status.textContent="⚠️ "+j.error; return; }
+    status.textContent = `✅ ${j.users} Benutzer wiederhergestellt – bitte neu anmelden`;
+    setTimeout(()=>{ AUTH.user=null; updateUserBar(); closeAdminPanel(); }, 2000);
+  } catch(e) {
+    status.textContent = "⚠️ Fehler: "+e.message;
+  }
+}
+
+async function doManualBackup(){
+  const status = document.getElementById("backupStatus");
+  status.textContent = "Backup wird erstellt…";
+  try {
+    const r = await fetch("/admin/backups/trigger", { method:"POST", credentials:"include" });
+    const j = await r.json();
+    if(!r.ok){ status.textContent="⚠️ "+j.error; return; }
+    status.textContent = `✅ ${j.file} erstellt`;
+    loadBackupList();
+  } catch(e) {
+    status.textContent = "⚠️ Fehler: "+e.message;
+  }
+}
+
+async function loadBackupList(){
+  const box = document.getElementById("backupList");
+  box.textContent = "Lade…";
+  try {
+    const r = await fetch("/admin/backups", { credentials:"include" });
+    if(!r.ok){ box.textContent = "Keine Backups gefunden."; return; }
+    const files = await r.json();
+    if(!files.length){ box.innerHTML = '<span style="color:#444">Noch keine automatischen Backups vorhanden.</span>'; return; }
+    const fmt = iso => iso.replace("T"," ").slice(0,16)+" UTC";
+    const fmtSize = b => b < 1024 ? b+"B" : b < 1048576 ? (b/1024).toFixed(1)+"KB" : (b/1048576).toFixed(1)+"MB";
+    box.innerHTML = '<table style="width:100%;border-collapse:collapse;">'
+      + files.map(f=>`<tr style="border-top:1px solid #1e1e30;">
+          <td style="padding:6px 4px;">${f.name}</td>
+          <td style="padding:6px 4px;color:#888;white-space:nowrap;">${fmt(f.mtime)}</td>
+          <td style="padding:6px 4px;color:#888;text-align:right;white-space:nowrap;">${fmtSize(f.size)}</td>
+          <td style="padding:6px 4px;text-align:right;white-space:nowrap;">
+            <a href="/admin/backups/${encodeURIComponent(f.name)}" download="${f.name}"
+               style="color:#ffd166;text-decoration:none;font-size:11px;">⬇ herunterladen</a>
+          </td>
+        </tr>`).join("")
+      + '</table>';
+  } catch(e) {
+    box.textContent = "⚠️ Fehler: "+e.message;
+  }
 }
 
 async function loadUserData(){

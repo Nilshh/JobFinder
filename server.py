@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify, session
+from flask import Flask, request, jsonify, session, send_file
 from werkzeug.security import generate_password_hash, check_password_hash
 import requests
 import os
@@ -6,6 +6,10 @@ import json
 import sqlite3
 import secrets
 import smtplib
+import threading
+import time
+import glob
+import re
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from datetime import datetime, timedelta, timezone
@@ -25,9 +29,59 @@ SMTP_PASS = os.environ.get("SMTP_PASSWORD", "")
 SMTP_FROM = os.environ.get("SMTP_FROM", os.environ.get("SMTP_USER", ""))
 APP_URL   = os.environ.get("APP_URL", "http://localhost:8080")
 
-_dir     = os.path.dirname(os.path.abspath(__file__))
-DATA_DIR = os.environ.get("DATA_DIR", os.path.join(_dir, "data"))
-DB_PATH  = os.path.join(DATA_DIR, "jobfinder.db")
+_dir       = os.path.dirname(os.path.abspath(__file__))
+DATA_DIR   = os.environ.get("DATA_DIR", os.path.join(_dir, "data"))
+DB_PATH    = os.path.join(DATA_DIR, "jobfinder.db")
+BACKUP_DIR = os.path.join(DATA_DIR, "backups")
+BACKUP_KEEP = int(os.environ.get("BACKUP_KEEP", "7"))   # Aufbewahrungsdauer in Tagen
+BACKUP_HOUR = int(os.environ.get("BACKUP_HOUR", "2"))   # UTC-Stunde für tägliches Backup
+
+
+# ── Automatisches Backup ──────────────────────────────────────────
+
+def _make_backup():
+    """Erstellt eine JSON-Sicherung aller Nutzerdaten und gibt den Dateipfad zurück."""
+    os.makedirs(BACKUP_DIR, exist_ok=True)
+    with get_db() as db:
+        users = [dict(r) for r in db.execute(
+            "SELECT id, username, password_hash, email, is_admin, is_locked, created_at FROM users"
+        ).fetchall()]
+        user_data = [dict(r) for r in db.execute(
+            "SELECT user_id, saved, ignored, jira_config FROM user_data"
+        ).fetchall()]
+    payload = {
+        "version": "1.0",
+        "app": "JobPipeline",
+        "created": datetime.utcnow().isoformat(),
+        "users": users,
+        "user_data": user_data,
+    }
+    ts   = datetime.utcnow().strftime("%Y-%m-%d_%H-%M")
+    path = os.path.join(BACKUP_DIR, f"backup_{ts}.json")
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(payload, f, ensure_ascii=False, indent=2)
+    # Alte Backups bereinigen
+    files = sorted(glob.glob(os.path.join(BACKUP_DIR, "backup_*.json")))
+    for old in files[:-BACKUP_KEEP]:
+        os.remove(old)
+    return path
+
+
+def _schedule_backup():
+    """Startet einen Hintergrund-Thread, der täglich um BACKUP_HOUR UTC eine Sicherung erstellt."""
+    def _loop():
+        while True:
+            now    = datetime.utcnow()
+            target = now.replace(hour=BACKUP_HOUR, minute=0, second=0, microsecond=0)
+            if target <= now:
+                target += timedelta(days=1)
+            time.sleep((target - now).total_seconds())
+            try:
+                path = _make_backup()
+                print(f"[Backup] Automatisches Backup erstellt: {path}", flush=True)
+            except Exception as e:
+                print(f"[Backup] Fehler: {e}", flush=True)
+    threading.Thread(target=_loop, daemon=True, name="daily-backup").start()
 
 
 # ── Database ──────────────────────────────────────────────────────
@@ -587,6 +641,106 @@ def admin_delete_user(uid):
         db.execute("DELETE FROM users WHERE id = ?", [uid])
     return jsonify({"ok": True})
 
+
+# ── Backup / Restore ──────────────────────────────────────────────
+
+@app.route("/admin/backup", methods=["GET", "OPTIONS"])
+@admin_required
+def admin_backup():
+    if request.method == "OPTIONS":
+        return "", 204
+    with get_db() as db:
+        users = [dict(r) for r in db.execute(
+            "SELECT id, username, password_hash, email, is_admin, is_locked, created_at FROM users"
+        ).fetchall()]
+        user_data = [dict(r) for r in db.execute(
+            "SELECT user_id, saved, ignored, jira_config FROM user_data"
+        ).fetchall()]
+    backup = {
+        "version": "1.0",
+        "app": "JobPipeline",
+        "created": datetime.utcnow().isoformat(),
+        "users": users,
+        "user_data": user_data
+    }
+    return jsonify(backup)
+
+
+@app.route("/admin/restore", methods=["POST", "OPTIONS"])
+@admin_required
+def admin_restore():
+    if request.method == "OPTIONS":
+        return "", 204
+    data = request.get_json(force=True)
+    if not isinstance(data, dict) or "users" not in data or data.get("app") != "JobPipeline":
+        return jsonify({"error": "Ungültiges oder inkompatibles Backup-Format"}), 400
+    users     = data.get("users", [])
+    user_data = data.get("user_data", [])
+    try:
+        with get_db() as db:
+            db.execute("DELETE FROM password_reset_tokens")
+            db.execute("DELETE FROM user_data")
+            db.execute("DELETE FROM users")
+            for u in users:
+                db.execute(
+                    "INSERT INTO users (id, username, password_hash, email, is_admin, is_locked, created_at) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                    [u["id"], u["username"], u["password_hash"],
+                     u.get("email"), int(u.get("is_admin", 0)),
+                     int(u.get("is_locked", 0)), u.get("created_at")]
+                )
+            for ud in user_data:
+                db.execute(
+                    "INSERT INTO user_data (user_id, saved, ignored, jira_config) VALUES (?, ?, ?, ?)",
+                    [ud["user_id"], ud.get("saved", "{}"),
+                     ud.get("ignored", "[]"), ud.get("jira_config", "{}")]
+                )
+        session.clear()
+        return jsonify({"ok": True, "users": len(users)})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/admin/backups", methods=["GET"])
+@admin_required
+def list_backups():
+    os.makedirs(BACKUP_DIR, exist_ok=True)
+    files = sorted(glob.glob(os.path.join(BACKUP_DIR, "backup_*.json")), reverse=True)
+    result = []
+    for f in files:
+        stat = os.stat(f)
+        result.append({
+            "name": os.path.basename(f),
+            "size": stat.st_size,
+            "mtime": datetime.utcfromtimestamp(stat.st_mtime).isoformat(),
+        })
+    return jsonify(result)
+
+
+@app.route("/admin/backups/<filename>", methods=["GET"])
+@admin_required
+def download_backup(filename):
+    if not re.match(r'^backup_[\d_-]+\.json$', filename):
+        return jsonify({"error": "Ungültiger Dateiname"}), 400
+    path = os.path.join(BACKUP_DIR, filename)
+    if not os.path.isfile(path):
+        return jsonify({"error": "Datei nicht gefunden"}), 404
+    return send_file(path, as_attachment=True, download_name=filename, mimetype="application/json")
+
+
+@app.route("/admin/backups/trigger", methods=["POST"])
+@admin_required
+def trigger_backup():
+    try:
+        path = _make_backup()
+        return jsonify({"ok": True, "file": os.path.basename(path)})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+# ── Startup ───────────────────────────────────────────────────────
+
+_schedule_backup()
 
 if __name__ == "__main__":
     print("✅ JobPipeline Server läuft auf http://localhost:5500")
