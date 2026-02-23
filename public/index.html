@@ -149,26 +149,41 @@
 
 <!-- WATCH TAB -->
 <div id="tabWatch" style="display:none">
-  <div class="saved-hdr">
-    <div class="savtitle">👁 Karriere-Monitor</div>
-    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
-      <button type="button" class="clrbtn" id="addWatchBtn" style="background:rgba(38,132,255,.12);border-color:rgba(38,132,255,.35);color:#4da3ff;">+ Unternehmen hinzufügen</button>
+  <div class="watch-subtabbar">
+    <!-- Sub-Tab-Navigation -->
+    <div class="watch-stabs">
+      <button class="wstab wstab-active" id="wst1" onclick="switchWatchSubTab('companies')">🏢 Unternehmen</button>
+      <button class="wstab" id="wst2" onclick="switchWatchSubTab('jobs')">🔍 Gefundene Stellen<span id="watchJobsTabCount" style="color:#555570;font-weight:400;margin-left:3px;"></span></button>
+    </div>
+    <!-- Aktionsleiste: Unternehmen -->
+    <div id="watchCompanyActions" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+      <button type="button" class="clrbtn" id="addWatchBtn" style="background:rgba(38,132,255,.12);border-color:rgba(38,132,255,.35);color:#4da3ff;">+ Hinzufügen</button>
       <input type="file" id="watchCsvFile" accept=".csv" style="display:none" onchange="importWatchCSV(this)">
-      <button type="button" class="clrbtn" id="csvImportBtn" style="background:rgba(38,132,255,.08);border-color:rgba(38,132,255,.25);color:#4da3ff;">📂 CSV importieren</button>
+      <button type="button" class="clrbtn" id="csvImportBtn" style="background:rgba(38,132,255,.08);border-color:rgba(38,132,255,.25);color:#4da3ff;">📂 CSV</button>
       <button type="button" class="clrbtn" onclick="downloadWatchTemplate()" title="Beispiel-CSV herunterladen" style="color:#6b6b80;">📋 Vorlage</button>
+      <button type="button" class="clrbtn" id="checkAllWatchBtn" title="Alle aktiven Unternehmen jetzt prüfen">🔍 Alle prüfen</button>
       <button type="button" class="clrbtn" id="toggleAllWatchBtn">⏸ Alle pausieren</button>
-      <button type="button" class="clrbtn" id="markAllReadBtn">✓ Alle gelesen</button>
       <button type="button" class="clrbtn" id="watchSelectBtn">☑ Auswählen</button>
       <button type="button" class="clrbtn" id="watchSelAllBtn" style="display:none;color:#8080a0;" title="Alle markieren">Alle</button>
       <button type="button" class="clrbtn" id="watchDeleteSelBtn" style="display:none;color:#ff4d6d;border-color:rgba(255,77,109,.3);" disabled>🗑 Löschen (0)</button>
     </div>
+    <!-- Aktionsleiste: Gefundene Stellen -->
+    <div id="watchJobActions" style="display:none;gap:8px;flex-wrap:wrap;align-items:center;">
+      <button type="button" class="clrbtn" id="markAllReadBtn">✓ Alle gelesen</button>
+    </div>
   </div>
-  <div id="watchEmpty" class="savempty" style="display:none">
-    Noch keine Unternehmen beobachtet.<br>
-    <span style="font-size:13px;">Füge Karriereseiten und Suchbegriffe hinzu, um automatisch benachrichtigt zu werden.</span>
+  <!-- Pane: Unternehmen -->
+  <div id="watchPaneCompanies">
+    <div id="watchEmpty" class="savempty" style="display:none">
+      Noch keine Unternehmen beobachtet.<br>
+      <span style="font-size:13px;">Füge Karriereseiten und Suchbegriffe hinzu, um automatisch benachrichtigt zu werden.</span>
+    </div>
+    <div id="watchCompanyList"></div>
   </div>
-  <div id="watchCompanyList"></div>
-  <div id="watchJobFeed"></div>
+  <!-- Pane: Gefundene Stellen -->
+  <div id="watchPaneJobs" style="display:none">
+    <div id="watchJobFeed"></div>
+  </div>
 </div>
 
 </div><!-- /wrap -->

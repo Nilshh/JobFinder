@@ -423,6 +423,7 @@ document.getElementById("addWatchBtn").addEventListener("click", () => {
 });
 document.getElementById("markAllReadBtn").addEventListener("click", markAllWatchRead);
 document.getElementById("toggleAllWatchBtn").addEventListener("click", toggleAllWatches);
+document.getElementById("checkAllWatchBtn").addEventListener("click", checkAllWatches);
 document.getElementById("watchSelectBtn").addEventListener("click", toggleWatchSelectMode);
 document.getElementById("watchSelAllBtn").addEventListener("click", selectAllWatches);
 document.getElementById("watchDeleteSelBtn").addEventListener("click", deleteSelectedWatches);
@@ -434,6 +435,7 @@ document.getElementById("csvImportBtn").addEventListener("click", () => {
 
 let _watchEditId    = null;
 let _watchSelectMode = false;
+let _watchSubTab     = "companies";
 const _watchSelected = new Set();
 
 function openWatchModal(prefill){
@@ -507,6 +509,19 @@ function updateWatchBadge(jobs){
   const bdg = document.getElementById("watchBadge");
   bdg.textContent = n;
   bdg.style.display = n ? "block" : "none";
+  // Sub-Tab-Label mit Gesamtanzahl
+  const tc = document.getElementById("watchJobsTabCount");
+  if(tc) tc.textContent = jobs.length ? ` (${jobs.length})` : "";
+}
+
+function switchWatchSubTab(tab){
+  _watchSubTab = tab;
+  document.getElementById("watchPaneCompanies").style.display  = tab === "companies" ? "" : "none";
+  document.getElementById("watchPaneJobs").style.display       = tab === "jobs"      ? "" : "none";
+  document.getElementById("watchCompanyActions").style.display = tab === "companies" ? "flex" : "none";
+  document.getElementById("watchJobActions").style.display     = tab === "jobs"      ? "flex" : "none";
+  document.getElementById("wst1").classList.toggle("wstab-active", tab === "companies");
+  document.getElementById("wst2").classList.toggle("wstab-active", tab === "jobs");
 }
 
 function renderWatchCompanies(list){
@@ -631,6 +646,25 @@ async function dismissWatchJob(id){
 
 async function markAllWatchRead(){
   await fetch("/watch/jobs/read-all", {method:"POST", credentials:"include"});
+  loadWatchTab();
+}
+
+async function checkAllWatches(){
+  const btn = document.getElementById("checkAllWatchBtn");
+  btn.textContent = "⏳";
+  btn.disabled = true;
+  try {
+    const r = await fetch("/watch/companies", {credentials:"include"});
+    if(r.ok){
+      const list = await r.json();
+      const active = list.filter(c => c.active);
+      await Promise.all(active.map(c =>
+        fetch(`/watch/companies/${c.id}/check`, {method:"POST", credentials:"include"})
+      ));
+    }
+  } catch(e){ /* ignore */ }
+  btn.textContent = "🔍 Alle prüfen";
+  btn.disabled = false;
   loadWatchTab();
 }
 

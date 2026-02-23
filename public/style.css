@@ -201,6 +201,13 @@ body{font-family:-apple-system,'Segoe UI',system-ui,sans-serif;background:#0c0c1
 .pgbtn:disabled{opacity:.25;cursor:default;}
 .pginfo{font-size:13px;color:#555570;white-space:nowrap;}
 
+/* ── Karriere-Monitor Sub-Tabs ── */
+.watch-subtabbar{display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:12px;}
+.watch-stabs{display:flex;gap:3px;background:#0a0a16;border:1px solid #1a1a2a;border-radius:10px;padding:4px;}
+.wstab{background:none;border:none;border-radius:7px;color:#555570;cursor:pointer;font-size:13px;font-weight:600;padding:7px 16px;font-family:inherit;transition:background .15s,color .15s;white-space:nowrap;}
+.wstab:hover{color:#9090b0;}
+.wstab.wstab-active{background:#1a1a2e;color:#e4e4f0;}
+
 /* ── Karriere-Monitor ── */
 .watch-company-card{background:#111120;border:1px solid #1e1e30;border-radius:14px;padding:16px 18px;margin-bottom:12px;transition:border-color .2s;}
 .watch-company-card:hover{border-color:#2e2e48;}
