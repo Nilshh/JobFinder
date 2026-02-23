@@ -236,6 +236,15 @@ body{font-family:-apple-system,'Segoe UI',system-ui,sans-serif;background:#0c0c1
 .wjob-title:hover{color:#ff4d6d;}
 .wjob-meta{font-size:12px;color:#555570;margin-top:3px;}
 .badge-new{background:#ff4d6d;color:#fff;font-size:10px;font-weight:700;border-radius:20px;padding:1px 7px;vertical-align:middle;}
+/* Alle-prüfen Statusleiste */
+#watchCheckStatus{margin-bottom:14px;}
+.wcs-wrap{display:flex;flex-direction:column;gap:6px;background:#111120;border:1px solid #1e1e30;border-radius:10px;padding:12px 16px;}
+.wcs-bar-track{height:4px;background:#1a1a2a;border-radius:4px;overflow:hidden;}
+.wcs-bar{height:100%;background:linear-gradient(90deg,#2684ff,#0052cc);border-radius:4px;transition:width .4s ease;}
+.wcs-label{font-size:13px;color:#8080a0;}
+.wcs-ok{color:#22c55e;}
+.wcs-warn{color:#f59e0b;}
+.wcs-info{font-size:13px;color:#555570;}
 /* Select-Mode */
 .wc-check{display:none;width:16px;height:16px;cursor:pointer;accent-color:#2684ff;flex-shrink:0;margin-right:2px;}
 .select-active .wc-check{display:block;}

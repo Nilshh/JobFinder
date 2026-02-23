@@ -650,19 +650,49 @@ async function markAllWatchRead(){
 }
 
 async function checkAllWatches(){
-  const btn = document.getElementById("checkAllWatchBtn");
-  btn.textContent = "⏳";
+  const btn  = document.getElementById("checkAllWatchBtn");
+  const stat = document.getElementById("watchCheckStatus");
   btn.disabled = true;
+
+  const setStatus = html => { stat.innerHTML = html; stat.style.display = ""; };
+
   try {
     const r = await fetch("/watch/companies", {credentials:"include"});
-    if(r.ok){
-      const list = await r.json();
-      const active = list.filter(c => c.active);
-      await Promise.all(active.map(c =>
-        fetch(`/watch/companies/${c.id}/check`, {method:"POST", credentials:"include"})
-      ));
+    if(!r.ok){ btn.disabled = false; return; }
+    const list   = await r.json();
+    const active = list.filter(c => c.active);
+    if(!active.length){
+      setStatus('<span class="wcs-info">Keine aktiven Unternehmen vorhanden.</span>');
+      btn.disabled = false;
+      setTimeout(() => { stat.style.display = "none"; }, 2500);
+      return;
     }
-  } catch(e){ /* ignore */ }
+
+    let errors = 0;
+    for(let i = 0; i < active.length; i++){
+      const c   = active[i];
+      const pct = Math.round((i / active.length) * 100);
+      btn.textContent = `⏳ ${i+1}/${active.length}`;
+      setStatus(`<div class="wcs-wrap">
+        <div class="wcs-bar-track"><div class="wcs-bar" style="width:${pct}%"></div></div>
+        <div class="wcs-label">Prüfe <strong>${c.name}</strong> … (${i+1} von ${active.length})</div>
+      </div>`);
+      try {
+        await fetch(`/watch/companies/${c.id}/check`, {method:"POST", credentials:"include"});
+      } catch(e){ errors++; }
+    }
+
+    const done = `<div class="wcs-wrap">
+      <div class="wcs-bar-track"><div class="wcs-bar" style="width:100%"></div></div>
+      <div class="wcs-label ${errors ? "wcs-warn" : "wcs-ok"}">
+        ${errors ? `⚠️ ${active.length} geprüft, ${errors} mit Fehler.` : `✓ Alle ${active.length} Unternehmen erfolgreich geprüft.`}
+      </div></div>`;
+    setStatus(done);
+    setTimeout(() => { stat.style.display = "none"; }, 4000);
+  } catch(e){
+    setStatus(`<span class="wcs-warn">⚠️ Fehler: ${e.message}</span>`);
+  }
+
   btn.textContent = "🔍 Alle prüfen";
   btn.disabled = false;
   loadWatchTab();
