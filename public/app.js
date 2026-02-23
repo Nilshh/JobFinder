@@ -436,6 +436,7 @@ document.getElementById("csvImportBtn").addEventListener("click", () => {
 let _watchEditId    = null;
 let _watchSelectMode = false;
 let _watchSubTab     = "companies";
+let _watchJobsMap    = {};   // id → job-Objekt für saveWatchJob
 const _watchSelected = new Set();
 
 function openWatchModal(prefill){
@@ -575,16 +576,20 @@ function renderWatchCompanies(list){
 
 function renderWatchJobs(jobs, companies){
   const box = document.getElementById("watchJobFeed");
-  if(!jobs.length){ box.innerHTML = ""; return; }
-  const byCompany = {};
-  companies.forEach(c => byCompany[c.id] = c);
-  box.innerHTML = `<div style="font-size:12px;font-weight:600;color:#6b6b80;text-transform:uppercase;letter-spacing:.06em;margin:20px 0 10px;">
-      Gefundene Stellen <span style="color:#444">(${jobs.length})</span>
+  _watchJobsMap = {};
+  if(!jobs.length){ box.innerHTML = '<div class="savempty" style="padding:50px 0">Noch keine Stellen gefunden.<br><span style="font-size:13px;">Prüfe Unternehmen manuell oder warte auf die automatische Prüfung.</span></div>'; return; }
+  companies.forEach(c => { /* byCompany nicht mehr nötig, company_name steckt im Job */ });
+  jobs.forEach(j => _watchJobsMap[j.id] = j);
+  const saved = LS.saved();
+  box.innerHTML = `<div style="font-size:12px;font-weight:600;color:#6b6b80;text-transform:uppercase;letter-spacing:.06em;margin:0 0 12px;">
+      Gefundene Stellen <span style="color:#444;font-weight:400">(${jobs.length})</span>
     </div>`
     + jobs.map(j => {
     const age = j.found_at
       ? new Date(j.found_at+"Z").toLocaleString("de-DE",{dateStyle:"short",timeStyle:"short"})
       : "";
+    const jk = (j.url || (j.title+"|"+j.company_name)).slice(0,180);
+    const isSaved = !!saved[jk];
     return `<div class="watch-job-card" id="wj${j.id}">
       <div style="display:flex;align-items:flex-start;gap:10px;">
         <div style="flex:1;min-width:0;">
@@ -592,10 +597,42 @@ function renderWatchJobs(jobs, companies){
           <a class="wjob-title" href="${j.url}" target="_blank" rel="noopener">${j.title}</a>
           <div class="wjob-meta">${j.company_name} · ${age}</div>
         </div>
+        <button class="wc-btn wjob-save-btn${isSaved?" wjob-saved":""}" onclick="saveWatchJob(${j.id})" title="${isSaved?"Bereits im Merkzettel":"Auf Merkzettel speichern"}"${isSaved?" disabled":""}>
+          ${isSaved?"✓":"💾"}
+        </button>
         <button class="wc-btn wc-del" onclick="dismissWatchJob(${j.id})" title="Entfernen">×</button>
       </div>
     </div>`;
   }).join("");
+}
+
+function saveWatchJob(id){
+  requireAuth("Bitte anmelden, um Stellen zu speichern.", () => {
+    const j = _watchJobsMap[id];
+    if(!j) return;
+    const k = (j.url || (j.title+"|"+j.company_name)).slice(0,180);
+    const saved = LS.saved();
+    if(!saved[k]){
+      saved[k] = {
+        key: k,
+        title: j.title,
+        company: j.company_name || "",
+        location: "",
+        url: j.url || "",
+        salary_min: undefined, salary_max: undefined,
+        contract_type: undefined,
+        created: j.found_at || new Date().toISOString(),
+        searchedAs: "Karriere-Monitor",
+        savedAt: new Date().toISOString(),
+        status: "neu",
+        note: ""
+      };
+      LS.setSaved(saved);
+    }
+    // Button-Feedback
+    const btn = document.querySelector(`#wj${id} .wjob-save-btn`);
+    if(btn){ btn.textContent="✓"; btn.classList.add("wjob-saved"); btn.disabled=true; btn.title="Bereits im Merkzettel"; }
+  });
 }
 
 async function doCheckNow(id){
