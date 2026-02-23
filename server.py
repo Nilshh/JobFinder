@@ -38,6 +38,7 @@ BACKUP_DIR = os.path.join(DATA_DIR, "backups")
 BACKUP_KEEP = int(os.environ.get("BACKUP_KEEP", "7"))   # Aufbewahrungsdauer in Tagen
 BACKUP_HOUR = int(os.environ.get("BACKUP_HOUR", "2"))   # UTC-Stunde für tägliches Backup
 WATCH_INTERVAL_MINUTES = int(os.environ.get("WATCH_INTERVAL_MINUTES", "60"))  # Prüfintervall
+WATCH_SCRAPE_DELAY     = int(os.environ.get("WATCH_SCRAPE_DELAY", "5"))       # Sekunden zwischen zwei Scrapes
 
 
 # ── Automatisches Backup ──────────────────────────────────────────
@@ -95,8 +96,16 @@ def _scrape_career_page(url, keywords):
     kw_lower = [k.strip().lower() for k in keywords if k.strip()]
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True, args=["--no-sandbox", "--disable-dev-shm-usage"])
-        page = browser.new_page()
+        ctx = browser.new_context(
+            user_agent=(
+                "Mozilla/5.0 (compatible; JobPipeline-CareerMonitor/1.0; "
+                "+https://github.com/Nilshh/JobFinder; automated career-page monitor)"
+            ),
+            extra_http_headers={"Accept-Language": "de-DE,de;q=0.9,en;q=0.8"},
+        )
+        page = ctx.new_page()
         page.goto(url, wait_until="networkidle", timeout=30000)
+        page.wait_for_timeout(1500)   # kurze Pause – kein Rapid-Fire nach dem Load
         content = page.content()
         browser.close()
     soup = BeautifulSoup(content, "html.parser")
@@ -124,7 +133,9 @@ def _run_watch_checks():
             AND (last_checked_at IS NULL
               OR datetime(last_checked_at, '+' || check_interval_hours || ' hours') <= datetime('now'))
         """).fetchall()
-    for w in [dict(r) for r in due]:
+    for idx, w in enumerate([dict(r) for r in due]):
+        if idx > 0:
+            time.sleep(WATCH_SCRAPE_DELAY)   # Pause zwischen Unternehmen
         now = datetime.utcnow().isoformat()
         try:
             jobs = _scrape_career_page(w["career_url"], json.loads(w["keywords"]))

@@ -126,6 +126,7 @@ cp .env.example .env
 | `BACKUP_KEEP` | Anzahl aufzubewahrender automatischer Backups (Standard: `7`) | optional |
 | `BACKUP_HOUR` | UTC-Stunde für das tägliche Backup (Standard: `2`, also 02:00 UTC) | optional |
 | `WATCH_INTERVAL_MINUTES` | Wie oft der Scheduler fällige Watches prüft, in Minuten (Standard: `60`) | optional |
+| `WATCH_SCRAPE_DELAY` | Wartezeit in Sekunden zwischen zwei aufeinanderfolgenden Scrapes (Standard: `5`) | optional |
 
 Sicheren `SECRET_KEY` generieren:
 ```bash
