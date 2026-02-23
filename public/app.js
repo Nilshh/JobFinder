@@ -617,6 +617,28 @@ async function markAllWatchRead(){
   loadWatchTab();
 }
 
+function downloadWatchTemplate(){
+  const content = [
+    "# Vorlage für den Karriere-Monitor Import",
+    "# Format: Name;URL;Keywords(kommagetrennt);Intervall_Stunden",
+    "# - Name und URL sind Pflichtfelder",
+    "# - Keywords: kommagetrennte Suchbegriffe (nach denen auf der Karriereseite gesucht wird)",
+    "# - Intervall: Prüfhäufigkeit in Stunden (Standard: 24, Maximum: 168 = 1 Woche)",
+    "# Zeilen die mit # beginnen werden ignoriert",
+    "#",
+    "Name;URL;Keywords;Intervall",
+    "SAP SE;https://jobs.sap.com/search;CTO,Head of IT,Director;24",
+    "BMW Group;https://www.bmwgroup.com/de/karriere.html;CTO,VP Engineering,Leiter IT;48",
+    "Deutsche Bank;https://careers.db.com/professionals/search-roles/;CDO,CTO,Head of Technology;24",
+  ].join("\r\n");
+  const blob = new Blob(["\uFEFF"+content], {type:"text/csv;charset=utf-8"});
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "karriere-monitor-vorlage.csv";
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
 async function importWatchCSV(input){
   const file = input.files[0];
   input.value = "";
