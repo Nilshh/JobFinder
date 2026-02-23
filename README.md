@@ -33,9 +33,13 @@ Automatische Überwachung von Unternehmens-Karriereseiten auf neue passende Stel
 - **Seiten-Scraping** — Headless Chromium (Playwright) rendert auch JavaScript-lastige Karriereseiten
 - **Keyword-Matching** — Konfigurierbare Suchbegriffe je Unternehmen (z. B. CTO, Head of IT)
 - **Automatische Prüfung** — Einstellbares Prüfintervall pro Unternehmen (Standard: 24h)
+- **Alle prüfen** — Manuell alle aktiven Watches sequenziell anstoßen mit Fortschrittsbalken
+- **Sub-Tab-Ansicht** — „🏢 Unternehmen" (Verwaltung) und „🔍 Gefundene Stellen" (Job-Feed) getrennt
 - **Neu-Badge** — Neufunde werden im Tab-Badge und in der Job-Liste hervorgehoben
 - **CSV-Import** — Unternehmenslisten als `;`-getrennte CSV importieren (Vorlage downloadbar)
 - **CRUD** — Einträge hinzufügen, bearbeiten, pausieren, alle aktivieren/deaktivieren, löschen
+- **Mehrfachauswahl** — Mehrere oder alle Einträge gleichzeitig markieren und löschen
+- **Rate-Limiting** — Konfigurierbare Pause zwischen Scrapes (`WATCH_SCRAPE_DELAY`), korrekter Bot-User-Agent
 - **Pro-Nutzer** — Jeder Benutzer verwaltet seine eigene Watchlist
 
 ### Datensicherung
