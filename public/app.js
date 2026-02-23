@@ -422,6 +422,7 @@ document.getElementById("addWatchBtn").addEventListener("click", () => {
   requireAuth("Bitte anmelden, um Unternehmen zu beobachten.", openWatchModal);
 });
 document.getElementById("markAllReadBtn").addEventListener("click", markAllWatchRead);
+document.getElementById("toggleAllWatchBtn").addEventListener("click", toggleAllWatches);
 document.getElementById("csvImportBtn").addEventListener("click", () => {
   document.getElementById("watchCsvFile").click();
 });
@@ -506,6 +507,12 @@ function updateWatchBadge(jobs){
 function renderWatchCompanies(list){
   const box = document.getElementById("watchCompanyList");
   document.getElementById("watchEmpty").style.display = list.length ? "none" : "block";
+  // Schaltfläche "Alle pausieren / Alle aktivieren" anpassen
+  const toggleBtn = document.getElementById("toggleAllWatchBtn");
+  if(list.length){
+    const allActive = list.every(c => c.active);
+    toggleBtn.textContent = allActive ? "⏸ Alle pausieren" : "▶ Alle aktivieren";
+  }
   if(!list.length){ box.innerHTML = ""; return; }
   box.innerHTML = list.map(c => {
     const kw = JSON.parse(c.keywords||"[]");
@@ -614,6 +621,26 @@ async function dismissWatchJob(id){
 
 async function markAllWatchRead(){
   await fetch("/watch/jobs/read-all", {method:"POST", credentials:"include"});
+  loadWatchTab();
+}
+
+async function toggleAllWatches(){
+  const r = await fetch("/watch/companies", {credentials:"include"});
+  if(!r.ok) return;
+  const list = await r.json();
+  if(!list.length) return;
+  // Alle aktiv → alle pausieren; sonst alle aktivieren
+  const allActive = list.every(c => c.active);
+  const newVal = allActive ? 0 : 1;
+  const btn = document.getElementById("toggleAllWatchBtn");
+  btn.textContent = "⏳";
+  await Promise.all(list.map(c =>
+    fetch(`/watch/companies/${c.id}`, {
+      method:"PATCH", credentials:"include",
+      headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({active: newVal})
+    })
+  ));
   loadWatchTab();
 }
 

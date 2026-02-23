@@ -1,8 +1,8 @@
 # JobPipeline
 
-> Intelligente Jobsuche mit Bewerbungs-Tracking, Jira-Integration und Mehrbenutzer-Unterstützung
+> Intelligente Jobsuche mit Bewerbungs-Tracking, Karriere-Monitor, Jira-Integration und Mehrbenutzer-Unterstützung
 
-JobPipeline ist eine schlanke Single-Page-App für die strukturierte Jobsuche. Sie durchsucht die **Adzuna-API** und die **Bundesagentur für Arbeit** parallel nach mehreren Jobtiteln, filtert bereits gespeicherte oder ignorierte Stellen automatisch heraus und verlinkt direkt auf **45+ Jobportale**. Gespeicherte Stellen lassen sich mit Status und Notizen tracken und per Knopfdruck als Jira-Ticket exportieren.
+JobPipeline ist eine schlanke Single-Page-App für die strukturierte Jobsuche. Sie durchsucht die **Adzuna-API**, die **Bundesagentur für Arbeit** und **Jobicy** parallel nach mehreren Jobtiteln, filtert bereits gespeicherte oder ignorierte Stellen automatisch heraus und verlinkt direkt auf **45+ Jobportale**. Gespeicherte Stellen lassen sich mit Status und Notizen tracken und per Knopfdruck als Jira-Ticket exportieren. Der integrierte **Karriere-Monitor** überwacht Unternehmens-Karriereseiten automatisch und meldet neue passende Stellen.
 
 ---
 
@@ -10,9 +10,11 @@ JobPipeline ist eine schlanke Single-Page-App für die strukturierte Jobsuche. S
 
 ### Jobsuche
 - **Mehrfach-Titelsuche** — Vordefinierte Chips (CTO, CIO, CDO, Head of IT, Leiter IT u. a.) + eigene Titel
-- **Parallele Suche** — Alle gewählten Jobtitel werden gleichzeitig abgefragt
-- **Standort-Filter** — Ort, PLZ und Umkreis (10 / 25 / 50 / 100 / 150 km)
+- **Parallele Suche** — Alle gewählten Jobtitel werden gleichzeitig abgefragt (Adzuna + BA + Jobicy)
+- **Remote-Filter** — Nur Remote-Jobs anzeigen (Jobicy + Adzuna mit Remote-Keyword)
+- **Standort-Filter** — Ort, PLZ und Umkreis (10 / 25 / 50 / 100 / 150 km); optional bei Remote
 - **Zeitfilter** — Letzte Woche / 2 Wochen / Monat / alle
+- **Seitennavigation** — Ergebnisse seitenweise blättern (20 je Seite)
 - **DACH-Support** — Automatische Länder-Erkennung (DE / AT / CH)
 - **Deduplication** — Bereits gespeicherte oder ignorierte Stellen werden ausgeblendet
 - **Ignorier-Funktion** — Stellen einmalig wegklicken, tauchen bei nächster Suche nicht mehr auf
@@ -20,10 +22,27 @@ JobPipeline ist eine schlanke Single-Page-App für die strukturierte Jobsuche. S
 
 ### Merkzettel & Tracking
 - **Speichern mit einem Klick** — Job landet sofort auf dem Merkzettel
+- **Manueller Eintrag** — Eigene Stellenlinks ohne Suche direkt hinzufügen
 - **Status-Tracking** — Neu · Interessant · Beworben · Abgelehnt · Angebot
 - **Notizen** — Freies Textfeld je Stelle (Ansprechpartner, Gehaltsvorstellung, Gesprächsnotizen)
 - **Status-Filter** — Merkzettel nach Bewerbungsstatus filtern
 - **Serverseitige Persistenz** — Daten werden pro Benutzer in SQLite gespeichert
+
+### Karriere-Monitor
+Automatische Überwachung von Unternehmens-Karriereseiten auf neue passende Stellen:
+- **Seiten-Scraping** — Headless Chromium (Playwright) rendert auch JavaScript-lastige Karriereseiten
+- **Keyword-Matching** — Konfigurierbare Suchbegriffe je Unternehmen (z. B. CTO, Head of IT)
+- **Automatische Prüfung** — Einstellbares Prüfintervall pro Unternehmen (Standard: 24h)
+- **Neu-Badge** — Neufunde werden im Tab-Badge und in der Job-Liste hervorgehoben
+- **CSV-Import** — Unternehmenslisten als `;`-getrennte CSV importieren (Vorlage downloadbar)
+- **CRUD** — Einträge hinzufügen, bearbeiten, pausieren, alle aktivieren/deaktivieren, löschen
+- **Pro-Nutzer** — Jeder Benutzer verwaltet seine eigene Watchlist
+
+### Datensicherung
+- **Manueller Backup** — Kompletten Datenstand als JSON herunterladen
+- **Automatisches tägliches Backup** — Serverseitig um 02:00 UTC (konfigurierbar), 7 Dateien Rotation
+- **Backup-Liste** — Alle serverseitigen Backups im Admin-Panel anzeigen und herunterladen
+- **Wiederherstellung** — Backup-Datei hochladen und vollständig einspielen
 
 ### Benutzerverwaltung
 - **Registrierung & Login** — Eigenständige Konten mit Benutzername und Passwort
@@ -104,6 +123,9 @@ cp .env.example .env
 | `SMTP_PASSWORD` | SMTP-Passwort / App-Passwort | für Passwort-Reset |
 | `SMTP_FROM` | Absender-Name und -Adresse | für Passwort-Reset |
 | `APP_URL` | Öffentliche URL der App (z. B. `https://job.raddes.de`) | für Passwort-Reset |
+| `BACKUP_KEEP` | Anzahl aufzubewahrender automatischer Backups (Standard: `7`) | optional |
+| `BACKUP_HOUR` | UTC-Stunde für das tägliche Backup (Standard: `2`, also 02:00 UTC) | optional |
+| `WATCH_INTERVAL_MINUTES` | Wie oft der Scheduler fällige Watches prüft, in Minuten (Standard: `60`) | optional |
 
 Sicheren `SECRET_KEY` generieren:
 ```bash
@@ -144,17 +166,19 @@ Internet
   │
   └─► Caddy (HTTPS, Let's Encrypt)        job.raddes.de:443
         │
-        ├─► /jobs* /jira/* /auth/* /user/* /admin/*  →  Flask API (intern :5500)
+        ├─► /jobs* /jira/* /auth/* /user/* /admin/* /watch/*  →  Flask API (intern :5500)
         │     │
         │     ├─► /jobs          Adzuna-Proxy (API Key bleibt serverseitig)
         │     ├─► /jobs/ba       Bundesagentur-Proxy (öffentliche API, nur DE)
         │     ├─► /jobs/jobicy   Jobicy-Proxy (Remote Jobs, öffentliche API)
         │     ├─► /auth/*        Registrierung, Login, Logout, Passwort-Reset
         │     ├─► /user/data     Gespeicherte Jobs & Jira-Config (pro User)
-        │     ├─► /admin/users   Benutzerverwaltung (nur Admins)
+        │     ├─► /admin/*       Benutzerverwaltung + Backup-Verwaltung (nur Admins)
         │     ├─► /jira/test     Verbindungstest → Jira REST API
         │     ├─► /jira/issue    Ticket erstellen → Jira REST API
-        │     └─► /jira/fields   Feldliste → Jira REST API
+        │     ├─► /jira/fields   Feldliste → Jira REST API
+        │     ├─► /watch/companies   Karriere-Monitor: Unternehmen verwalten (pro User)
+        │     └─► /watch/jobs        Karriere-Monitor: gefundene Stellen (pro User)
         │
         └─► /* (alle anderen Pfade)  →  public/ (statische SPA: index.html, style.css, app.js)
 ```
@@ -183,6 +207,8 @@ Benutzerdaten werden serverseitig in einer **SQLite-Datenbank** gespeichert (per
 | `users` | Benutzerkonten (Benutzername, Passwort-Hash, E-Mail, is_admin, is_locked) |
 | `user_data` | Gespeicherte Jobs & Jira-Konfiguration pro Benutzer |
 | `password_reset_tokens` | Temporäre Reset-Tokens (1 Stunde gültig) |
+| `company_watches` | Karriere-Monitor: überwachte Unternehmen pro Benutzer (URL, Keywords, Intervall, Status) |
+| `watch_jobs` | Karriere-Monitor: gefundene Stellenanzeigen (Titel, URL, Neu-Flag, Zeitstempel) |
 
 ---
 
@@ -318,7 +344,8 @@ Im Tab **📌 Merkzettel** → **🗑 Ignorierliste leeren** klicken.
 
 ```bash
 # Abhängigkeiten installieren
-pip install flask requests
+pip install flask requests beautifulsoup4 playwright
+playwright install chromium
 
 # .env mit Minimalwerten anlegen
 echo "ADZUNA_APP_ID=deine_id" > .env
@@ -348,3 +375,4 @@ open http://localhost:5500
 | Jobdaten | [Adzuna Jobs API](https://developer.adzuna.com/) · [Bundesagentur für Arbeit](https://jobsuche.api.bund.dev/) · [Jobicy](https://jobicy.com/jobs-rss-feed) |
 | Container | Docker Compose |
 | Jira | Atlassian REST API v3 · ADF |
+| Karriere-Monitor | Playwright (headless Chromium) · BeautifulSoup4 |
