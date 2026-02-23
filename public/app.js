@@ -428,14 +428,24 @@ document.getElementById("csvImportBtn").addEventListener("click", () => {
 
 // ── Karriere-Monitor ──────────────────────────────────────────────
 
+let _watchEditId = null;
+
 function openWatchModal(prefill){
-  ["waName","waUrl","waKeywords"].forEach(id => document.getElementById(id).value = prefill?.[id]||"");
-  document.getElementById("waInterval").value = prefill?.interval || 24;
+  _watchEditId = prefill?.id || null;
+  document.getElementById("waName").value     = prefill?.name        || "";
+  document.getElementById("waUrl").value      = prefill?.career_url  || "";
+  document.getElementById("waKeywords").value = prefill?.keywords    || "";
+  document.getElementById("waInterval").value = prefill?.interval    || 24;
   document.getElementById("waStatus").textContent = "";
+  document.querySelector("#watchAddModal .modal-title").textContent =
+    _watchEditId ? "✏️ Unternehmen bearbeiten" : "👁 Unternehmen beobachten";
+  document.querySelector("#watchAddModal .msavebtn").textContent =
+    _watchEditId ? "💾 Speichern" : "👁 Beobachten";
   document.getElementById("watchAddModal").style.display = "flex";
   setTimeout(() => document.getElementById("waName").focus(), 50);
 }
 function closeWatchModal(){
+  _watchEditId = null;
   document.getElementById("watchAddModal").style.display = "none";
 }
 
@@ -450,8 +460,10 @@ async function submitWatch(){
   const keywords = kwRaw ? kwRaw.split(",").map(s=>s.trim()).filter(Boolean) : [];
   status.style.color="#6b6b80"; status.textContent="Wird gespeichert…";
   try {
-    const r = await fetch("/watch/companies", {
-      method:"POST", credentials:"include",
+    const isEdit = !!_watchEditId;
+    const r = await fetch(isEdit ? `/watch/companies/${_watchEditId}` : "/watch/companies", {
+      method: isEdit ? "PATCH" : "POST",
+      credentials:"include",
       headers:{"Content-Type":"application/json"},
       body: JSON.stringify({name, career_url:url, keywords, check_interval_hours:interval})
     });
@@ -513,6 +525,7 @@ function renderWatchCompanies(list){
         </div>
         <div class="wc-actions">
           <button class="wc-btn" onclick="doCheckNow(${c.id})" title="Jetzt prüfen">🔍</button>
+          <button class="wc-btn" onclick="editWatch(${c.id})" title="Bearbeiten">✏️</button>
           <button class="wc-btn" onclick="toggleWatchActive(${c.id},${c.active?0:1})" title="${c.active?'Pausieren':'Aktivieren'}">${c.active?"⏸":"▶"}</button>
           <button class="wc-btn wc-del" onclick="deleteWatch(${c.id},'${c.name.replace(/'/g,"\\'")}')">🗑</button>
         </div>
@@ -577,6 +590,21 @@ async function deleteWatch(id, name){
   if(!confirm(`Beobachtung von „${name}" und alle gefundenen Stellen löschen?`)) return;
   await fetch(`/watch/companies/${id}`, {method:"DELETE", credentials:"include"});
   loadWatchTab();
+}
+
+async function editWatch(id){
+  const r = await fetch("/watch/companies", {credentials:"include"});
+  if(!r.ok) return;
+  const list = await r.json();
+  const c = list.find(x => x.id === id);
+  if(!c) return;
+  openWatchModal({
+    id:       c.id,
+    name:     c.name,
+    career_url: c.career_url,
+    keywords: JSON.parse(c.keywords||"[]").join(", "),
+    interval: c.check_interval_hours
+  });
 }
 
 async function dismissWatchJob(id){
