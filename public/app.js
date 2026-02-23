@@ -422,6 +422,9 @@ document.getElementById("addWatchBtn").addEventListener("click", () => {
   requireAuth("Bitte anmelden, um Unternehmen zu beobachten.", openWatchModal);
 });
 document.getElementById("markAllReadBtn").addEventListener("click", markAllWatchRead);
+document.getElementById("csvImportBtn").addEventListener("click", () => {
+  document.getElementById("watchCsvFile").click();
+});
 
 // ── Karriere-Monitor ──────────────────────────────────────────────
 
