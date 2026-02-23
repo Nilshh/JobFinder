@@ -35,11 +35,14 @@ function showTab(t){
   document.getElementById("tabSearch").style.display  = t==="search"  ?"block":"none";
   document.getElementById("tabSaved").style.display   = t==="saved"   ?"block":"none";
   document.getElementById("tabPortals").style.display = t==="portals" ?"block":"none";
+  document.getElementById("tabWatch").style.display   = t==="watch"   ?"block":"none";
   document.getElementById("nb1").classList.toggle("on", t==="search");
   document.getElementById("nb2").classList.toggle("on", t==="saved");
   document.getElementById("nb3").classList.toggle("on", t==="portals");
+  document.getElementById("nb4").classList.toggle("on", t==="watch");
   if(t==="saved")   renderSaved();
   if(t==="portals") renderPortalsTab();
+  if(t==="watch")   loadWatchTab();
 }
 
 // ── Chips ──
@@ -414,6 +417,174 @@ document.getElementById("sfrow").addEventListener("click", e => {
 document.getElementById("clrIgnBtn").addEventListener("click", () => {
   if(confirm("Ignorierliste leeren? Diese Stellen erscheinen dann wieder.")) LS.setIgnored([]);
 });
+
+document.getElementById("addWatchBtn").addEventListener("click", () => {
+  requireAuth("Bitte anmelden, um Unternehmen zu beobachten.", openWatchModal);
+});
+document.getElementById("markAllReadBtn").addEventListener("click", markAllWatchRead);
+
+// ── Karriere-Monitor ──────────────────────────────────────────────
+
+function openWatchModal(prefill){
+  ["waName","waUrl","waKeywords"].forEach(id => document.getElementById(id).value = prefill?.[id]||"");
+  document.getElementById("waInterval").value = prefill?.interval || 24;
+  document.getElementById("waStatus").textContent = "";
+  document.getElementById("watchAddModal").style.display = "flex";
+  setTimeout(() => document.getElementById("waName").focus(), 50);
+}
+function closeWatchModal(){
+  document.getElementById("watchAddModal").style.display = "none";
+}
+
+async function submitWatch(){
+  const name     = document.getElementById("waName").value.trim();
+  const url      = document.getElementById("waUrl").value.trim();
+  const kwRaw    = document.getElementById("waKeywords").value.trim();
+  const interval = parseInt(document.getElementById("waInterval").value) || 24;
+  const status   = document.getElementById("waStatus");
+  if(!name){ status.style.color="#ff4d6d"; status.textContent="⚠️ Name ist Pflicht."; return; }
+  if(!url) { status.style.color="#ff4d6d"; status.textContent="⚠️ URL ist Pflicht."; return; }
+  const keywords = kwRaw ? kwRaw.split(",").map(s=>s.trim()).filter(Boolean) : [];
+  status.style.color="#6b6b80"; status.textContent="Wird gespeichert…";
+  try {
+    const r = await fetch("/watch/companies", {
+      method:"POST", credentials:"include",
+      headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({name, career_url:url, keywords, check_interval_hours:interval})
+    });
+    const j = await r.json();
+    if(!r.ok){ status.style.color="#ff4d6d"; status.textContent="⚠️ "+j.error; return; }
+    closeWatchModal();
+    loadWatchTab();
+  } catch(e){ status.style.color="#ff4d6d"; status.textContent="⚠️ "+e.message; }
+}
+
+async function loadWatchTab(){
+  if(!AUTH.user){
+    document.getElementById("watchCompanyList").innerHTML = '<div class="savempty">Bitte anmelden, um den Karriere-Monitor zu nutzen.</div>';
+    document.getElementById("watchJobFeed").innerHTML = "";
+    document.getElementById("watchEmpty").style.display = "none";
+    return;
+  }
+  try {
+    const [cRes, jRes] = await Promise.all([
+      fetch("/watch/companies", {credentials:"include"}),
+      fetch("/watch/jobs",      {credentials:"include"})
+    ]);
+    const companies = cRes.ok ? await cRes.json() : [];
+    const jobs      = jRes.ok ? await jRes.json() : [];
+    renderWatchCompanies(companies);
+    renderWatchJobs(jobs, companies);
+    updateWatchBadge(jobs);
+  } catch(e) {
+    document.getElementById("watchCompanyList").innerHTML = `<div class="savempty">⚠️ Fehler: ${e.message}</div>`;
+  }
+}
+
+function updateWatchBadge(jobs){
+  const n   = (jobs||[]).filter(j=>j.is_new).length;
+  const bdg = document.getElementById("watchBadge");
+  bdg.textContent = n;
+  bdg.style.display = n ? "block" : "none";
+}
+
+function renderWatchCompanies(list){
+  const box = document.getElementById("watchCompanyList");
+  document.getElementById("watchEmpty").style.display = list.length ? "none" : "block";
+  if(!list.length){ box.innerHTML = ""; return; }
+  box.innerHTML = list.map(c => {
+    const kw = JSON.parse(c.keywords||"[]");
+    const statusDot = c.last_check_status === "ok"
+      ? '<span class="sdot sdot-ok" title="Zuletzt erfolgreich geprüft"></span>'
+      : c.last_check_status?.startsWith("error")
+        ? `<span class="sdot sdot-err" title="${c.last_check_status}"></span>`
+        : '<span class="sdot sdot-idle" title="Noch nicht geprüft"></span>';
+    const lastCheck = c.last_checked_at
+      ? new Date(c.last_checked_at+"Z").toLocaleString("de-DE",{dateStyle:"short",timeStyle:"short"})
+      : "–";
+    const kwHtml = kw.map(k=>`<span class="watch-kw">${k}</span>`).join("");
+    return `<div class="watch-company-card" id="wc${c.id}">
+      <div class="wc-header">
+        <div class="wc-title">${statusDot}${c.name}
+          ${!c.active ? '<span class="watch-paused">pausiert</span>' : ''}
+        </div>
+        <div class="wc-actions">
+          <button class="wc-btn" onclick="doCheckNow(${c.id})" title="Jetzt prüfen">🔍</button>
+          <button class="wc-btn" onclick="toggleWatchActive(${c.id},${c.active?0:1})" title="${c.active?'Pausieren':'Aktivieren'}">${c.active?"⏸":"▶"}</button>
+          <button class="wc-btn wc-del" onclick="deleteWatch(${c.id},'${c.name.replace(/'/g,"\\'")}')">🗑</button>
+        </div>
+      </div>
+      <div class="wc-url"><a href="${c.career_url}" target="_blank" rel="noopener">${c.career_url}</a></div>
+      <div class="wc-meta">
+        <span>Zuletzt geprüft: ${lastCheck}</span>
+        <span>· alle ${c.check_interval_hours}h</span>
+        <span>· ${c.total_jobs||0} Treffer (${c.new_jobs||0} neu)</span>
+      </div>
+      ${kwHtml ? `<div class="wc-kws">${kwHtml}</div>` : ""}
+    </div>`;
+  }).join("");
+}
+
+function renderWatchJobs(jobs, companies){
+  const box = document.getElementById("watchJobFeed");
+  if(!jobs.length){ box.innerHTML = ""; return; }
+  const byCompany = {};
+  companies.forEach(c => byCompany[c.id] = c);
+  box.innerHTML = `<div style="font-size:12px;font-weight:600;color:#6b6b80;text-transform:uppercase;letter-spacing:.06em;margin:20px 0 10px;">
+      Gefundene Stellen <span style="color:#444">(${jobs.length})</span>
+    </div>`
+    + jobs.map(j => {
+    const age = j.found_at
+      ? new Date(j.found_at+"Z").toLocaleString("de-DE",{dateStyle:"short",timeStyle:"short"})
+      : "";
+    return `<div class="watch-job-card" id="wj${j.id}">
+      <div style="display:flex;align-items:flex-start;gap:10px;">
+        <div style="flex:1;min-width:0;">
+          ${j.is_new ? '<span class="badge-new">Neu</span> ' : ""}
+          <a class="wjob-title" href="${j.url}" target="_blank" rel="noopener">${j.title}</a>
+          <div class="wjob-meta">${j.company_name} · ${age}</div>
+        </div>
+        <button class="wc-btn wc-del" onclick="dismissWatchJob(${j.id})" title="Entfernen">×</button>
+      </div>
+    </div>`;
+  }).join("");
+}
+
+async function doCheckNow(id){
+  const btn = document.querySelector(`#wc${id} .wc-btn`);
+  if(btn) btn.textContent = "⏳";
+  try {
+    const r = await fetch(`/watch/companies/${id}/check`, {method:"POST", credentials:"include"});
+    const j = await r.json();
+    if(!r.ok){ alert("Fehler: "+j.error); }
+  } catch(e){ alert("Fehler: "+e.message); }
+  loadWatchTab();
+}
+
+async function toggleWatchActive(id, val){
+  await fetch(`/watch/companies/${id}`, {
+    method:"PATCH", credentials:"include",
+    headers:{"Content-Type":"application/json"},
+    body: JSON.stringify({active: val})
+  });
+  loadWatchTab();
+}
+
+async function deleteWatch(id, name){
+  if(!confirm(`Beobachtung von „${name}" und alle gefundenen Stellen löschen?`)) return;
+  await fetch(`/watch/companies/${id}`, {method:"DELETE", credentials:"include"});
+  loadWatchTab();
+}
+
+async function dismissWatchJob(id){
+  await fetch(`/watch/jobs/${id}`, {method:"DELETE", credentials:"include"});
+  document.getElementById("wj"+id)?.remove();
+}
+
+async function markAllWatchRead(){
+  await fetch("/watch/jobs/read-all", {method:"POST", credentials:"include"});
+  loadWatchTab();
+}
 
 function renderSaved(){
   refreshBadge();

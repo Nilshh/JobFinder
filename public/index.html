@@ -41,6 +41,7 @@
       📌 Merkzettel<span class="badge" id="badge">0</span>
     </button>
     <button type="button" class="nbtn" id="nb3" onclick="showTab('portals')">🌐 Portale</button>
+    <button type="button" class="nbtn" id="nb4" onclick="showTab('watch')">👁 Beobachten<span class="badge" id="watchBadge" style="display:none">0</span></button>
     <button type="button" class="cfgbtn" id="jiraCfgBtn" onclick="openJiraSettings()" title="Jira Einstellungen">⚡ Jira</button>
     <div id="userBar" style="display:none;align-items:center;gap:6px;">
       <span class="uname" id="uname"></span>
@@ -146,7 +147,52 @@
   <div id="portalTabBox" style="margin-top:8px;"></div>
 </div>
 
+<!-- WATCH TAB -->
+<div id="tabWatch" style="display:none">
+  <div class="saved-hdr">
+    <div class="savtitle">👁 Karriere-Monitor</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+      <button type="button" class="clrbtn" id="addWatchBtn" style="background:rgba(38,132,255,.12);border-color:rgba(38,132,255,.35);color:#4da3ff;">+ Unternehmen hinzufügen</button>
+      <button type="button" class="clrbtn" id="markAllReadBtn">✓ Alle gelesen</button>
+    </div>
+  </div>
+  <div id="watchEmpty" class="savempty" style="display:none">
+    Noch keine Unternehmen beobachtet.<br>
+    <span style="font-size:13px;">Füge Karriereseiten und Suchbegriffe hinzu, um automatisch benachrichtigt zu werden.</span>
+  </div>
+  <div id="watchCompanyList"></div>
+  <div id="watchJobFeed"></div>
+</div>
+
 </div><!-- /wrap -->
+
+<!-- Watch Add Modal -->
+<div id="watchAddModal" class="modal-bg" style="display:none" onclick="if(event.target===this)closeWatchModal()">
+  <div class="modal">
+    <div class="modal-title">👁 Unternehmen beobachten</div>
+    <div class="mfield">
+      <label class="lbl">🏢 Unternehmensname <span style="color:#ff4d6d">*</span></label>
+      <input type="text" class="inp" id="waName" placeholder="z.B. SAP, BMW Group…">
+    </div>
+    <div class="mfield">
+      <label class="lbl">🔗 Karriereseite URL <span style="color:#ff4d6d">*</span></label>
+      <input type="url" class="inp" id="waUrl" placeholder="https://karriere.unternehmen.de/jobs">
+    </div>
+    <div class="mfield">
+      <label class="lbl">🎯 Suchbegriffe <span style="font-weight:400;color:#6b6b80;">(kommagetrennt)</span></label>
+      <input type="text" class="inp" id="waKeywords" placeholder="CTO, Head of IT, Leiter IT, Director…">
+    </div>
+    <div class="mfield">
+      <label class="lbl">⏱ Prüfintervall <span style="font-weight:400;color:#6b6b80;">(Stunden)</span></label>
+      <input type="number" class="inp" id="waInterval" value="24" min="1" max="168">
+    </div>
+    <div id="waStatus" class="mstatus"></div>
+    <div class="mactions">
+      <button type="button" class="mcancelbtn" onclick="closeWatchModal()">Abbrechen</button>
+      <button type="button" class="msavebtn" onclick="submitWatch()">👁 Beobachten</button>
+    </div>
+  </div>
+</div>
 
 <!-- Manual Add Modal -->
 <div id="manualAddModal" class="modal-bg" style="display:none" onclick="if(event.target===this)closeManualAdd()">

@@ -1,5 +1,7 @@
 from flask import Flask, request, jsonify, session, send_file
 from werkzeug.security import generate_password_hash, check_password_hash
+from bs4 import BeautifulSoup
+from urllib.parse import urljoin
 import requests
 import os
 import json
@@ -35,6 +37,7 @@ DB_PATH    = os.path.join(DATA_DIR, "jobfinder.db")
 BACKUP_DIR = os.path.join(DATA_DIR, "backups")
 BACKUP_KEEP = int(os.environ.get("BACKUP_KEEP", "7"))   # Aufbewahrungsdauer in Tagen
 BACKUP_HOUR = int(os.environ.get("BACKUP_HOUR", "2"))   # UTC-Stunde für tägliches Backup
+WATCH_INTERVAL_MINUTES = int(os.environ.get("WATCH_INTERVAL_MINUTES", "60"))  # Prüfintervall
 
 
 # ── Automatisches Backup ──────────────────────────────────────────
@@ -82,6 +85,88 @@ def _schedule_backup():
             except Exception as e:
                 print(f"[Backup] Fehler: {e}", flush=True)
     threading.Thread(target=_loop, daemon=True, name="daily-backup").start()
+
+
+# ── Karriere-Monitor: Scraping & Scheduler ────────────────────────
+
+def _scrape_career_page(url, keywords):
+    """Rendert eine Karriereseite mit Playwright und extrahiert passende Stellenanzeigen."""
+    from playwright.sync_api import sync_playwright
+    kw_lower = [k.strip().lower() for k in keywords if k.strip()]
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True, args=["--no-sandbox", "--disable-dev-shm-usage"])
+        page = browser.new_page()
+        page.goto(url, wait_until="networkidle", timeout=30000)
+        content = page.content()
+        browser.close()
+    soup = BeautifulSoup(content, "html.parser")
+    found, seen = [], set()
+    for tag in soup.find_all(["a", "h1", "h2", "h3", "h4", "li", "span"]):
+        text = tag.get_text(strip=True)
+        if len(text) < 4 or len(text) > 250:
+            continue
+        if any(kw in text.lower() for kw in kw_lower):
+            href = tag.get("href", "") if tag.name == "a" else ""
+            if href and not href.startswith("http"):
+                href = urljoin(url, href)
+            key = href or text
+            if key not in seen:
+                seen.add(key)
+                found.append({"title": text, "url": href or url})
+    return found
+
+
+def _run_watch_checks():
+    """Prüft alle fälligen aktiven Watches und speichert neue Treffer."""
+    with get_db() as db:
+        due = db.execute("""
+            SELECT * FROM company_watches WHERE active = 1
+            AND (last_checked_at IS NULL
+              OR datetime(last_checked_at, '+' || check_interval_hours || ' hours') <= datetime('now'))
+        """).fetchall()
+    for w in [dict(r) for r in due]:
+        now = datetime.utcnow().isoformat()
+        try:
+            jobs = _scrape_career_page(w["career_url"], json.loads(w["keywords"]))
+            with get_db() as db:
+                existing = {r["url"] for r in db.execute(
+                    "SELECT url FROM watch_jobs WHERE company_id = ?", [w["id"]]
+                ).fetchall()}
+                for j in jobs:
+                    if j["url"] not in existing:
+                        db.execute(
+                            "INSERT INTO watch_jobs (company_id, title, url) VALUES (?, ?, ?)",
+                            [w["id"], j["title"], j["url"]]
+                        )
+                    else:
+                        db.execute(
+                            "UPDATE watch_jobs SET last_seen_at = ? WHERE company_id = ? AND url = ?",
+                            [now, w["id"], j["url"]]
+                        )
+                db.execute(
+                    "UPDATE company_watches SET last_checked_at = ?, last_check_status = 'ok' WHERE id = ?",
+                    [now, w["id"]]
+                )
+            print(f"[Watch] '{w['name']}' geprüft – {len(jobs)} Treffer", flush=True)
+        except Exception as e:
+            with get_db() as db:
+                db.execute(
+                    "UPDATE company_watches SET last_checked_at = ?, last_check_status = ? WHERE id = ?",
+                    [now, f"error: {str(e)[:200]}", w["id"]]
+                )
+            print(f"[Watch] Fehler bei '{w['name']}': {e}", flush=True)
+
+
+def _schedule_watch_checks():
+    """Startet einen Daemon-Thread, der alle WATCH_INTERVAL_MINUTES fällige Watches prüft."""
+    def _loop():
+        while True:
+            time.sleep(WATCH_INTERVAL_MINUTES * 60)
+            try:
+                _run_watch_checks()
+            except Exception as e:
+                print(f"[Watch] Scheduler-Fehler: {e}", flush=True)
+    threading.Thread(target=_loop, daemon=True, name="watch-checker").start()
 
 
 # ── Database ──────────────────────────────────────────────────────
@@ -136,10 +221,39 @@ def init_db():
                 db.execute(f"ALTER TABLE users ADD COLUMN {col} {definition}")
             except Exception:
                 pass
+        db.execute("""
+            CREATE TABLE IF NOT EXISTS company_watches (
+                id                   INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id              INTEGER NOT NULL,
+                name                 TEXT NOT NULL,
+                career_url           TEXT NOT NULL,
+                keywords             TEXT NOT NULL DEFAULT '[]',
+                active               INTEGER NOT NULL DEFAULT 1,
+                check_interval_hours INTEGER NOT NULL DEFAULT 24,
+                last_checked_at      TEXT,
+                last_check_status    TEXT,
+                created_at           TEXT DEFAULT (datetime('now')),
+                FOREIGN KEY (user_id) REFERENCES users(id)
+            )
+        """)
+        db.execute("""
+            CREATE TABLE IF NOT EXISTS watch_jobs (
+                id           INTEGER PRIMARY KEY AUTOINCREMENT,
+                company_id   INTEGER NOT NULL,
+                title        TEXT NOT NULL,
+                url          TEXT,
+                found_at     TEXT DEFAULT (datetime('now')),
+                last_seen_at TEXT DEFAULT (datetime('now')),
+                is_new       INTEGER NOT NULL DEFAULT 1,
+                FOREIGN KEY (company_id) REFERENCES company_watches(id)
+            )
+        """)
         # Indexes
         db.execute("CREATE INDEX IF NOT EXISTS idx_users_email ON users(email)")
         db.execute("CREATE INDEX IF NOT EXISTS idx_reset_tokens_user ON password_reset_tokens(user_id)")
         db.execute("CREATE INDEX IF NOT EXISTS idx_reset_tokens_expires ON password_reset_tokens(expires_at)")
+        db.execute("CREATE INDEX IF NOT EXISTS idx_watches_user ON company_watches(user_id)")
+        db.execute("CREATE INDEX IF NOT EXISTS idx_watch_jobs_company ON watch_jobs(company_id)")
 
     # Bootstrap: promote ADMIN_USER from env if set
     if ADMIN_USER:
@@ -738,9 +852,175 @@ def trigger_backup():
         return jsonify({"error": str(e)}), 500
 
 
+# ── Karriere-Monitor: Routen ──────────────────────────────────────
+
+@app.route("/watch/companies", methods=["GET", "OPTIONS"])
+@login_required
+def watch_list():
+    uid = session["user_id"]
+    with get_db() as db:
+        rows = db.execute("""
+            SELECT w.*, COUNT(j.id) AS total_jobs,
+                   SUM(j.is_new) AS new_jobs
+            FROM company_watches w
+            LEFT JOIN watch_jobs j ON j.company_id = w.id
+            WHERE w.user_id = ?
+            GROUP BY w.id
+            ORDER BY w.created_at DESC
+        """, [uid]).fetchall()
+    return jsonify([dict(r) for r in rows])
+
+
+@app.route("/watch/companies", methods=["POST"])
+@login_required
+def watch_create():
+    uid  = session["user_id"]
+    data = request.get_json(force=True) or {}
+    name = (data.get("name") or "").strip()
+    url  = (data.get("career_url") or "").strip()
+    if not name or not url:
+        return jsonify({"error": "Name und URL sind Pflichtfelder"}), 400
+    keywords = json.dumps([k.strip() for k in data.get("keywords", []) if str(k).strip()])
+    interval = int(data.get("check_interval_hours", 24))
+    with get_db() as db:
+        cur = db.execute(
+            "INSERT INTO company_watches (user_id, name, career_url, keywords, check_interval_hours) "
+            "VALUES (?, ?, ?, ?, ?)",
+            [uid, name, url, keywords, interval]
+        )
+        row = db.execute("SELECT * FROM company_watches WHERE id = ?", [cur.lastrowid]).fetchone()
+    return jsonify(dict(row)), 201
+
+
+@app.route("/watch/companies/<int:wid>", methods=["PATCH", "OPTIONS"])
+@login_required
+def watch_update(wid):
+    uid  = session["user_id"]
+    data = request.get_json(force=True) or {}
+    with get_db() as db:
+        row = db.execute("SELECT id FROM company_watches WHERE id = ? AND user_id = ?", [wid, uid]).fetchone()
+        if not row:
+            return jsonify({"error": "Nicht gefunden"}), 404
+        allowed = {"name", "career_url", "keywords", "active", "check_interval_hours"}
+        for field, val in data.items():
+            if field not in allowed:
+                continue
+            if field == "keywords":
+                val = json.dumps([k.strip() for k in val if str(k).strip()])
+            db.execute(f"UPDATE company_watches SET {field} = ? WHERE id = ?", [val, wid])
+    return jsonify({"ok": True})
+
+
+@app.route("/watch/companies/<int:wid>", methods=["DELETE", "OPTIONS"])
+@login_required
+def watch_delete(wid):
+    uid = session["user_id"]
+    with get_db() as db:
+        row = db.execute("SELECT id FROM company_watches WHERE id = ? AND user_id = ?", [wid, uid]).fetchone()
+        if not row:
+            return jsonify({"error": "Nicht gefunden"}), 404
+        db.execute("DELETE FROM watch_jobs WHERE company_id = ?", [wid])
+        db.execute("DELETE FROM company_watches WHERE id = ?", [wid])
+    return jsonify({"ok": True})
+
+
+@app.route("/watch/companies/<int:wid>/check", methods=["POST", "OPTIONS"])
+@login_required
+def watch_check_now(wid):
+    uid = session["user_id"]
+    with get_db() as db:
+        row = db.execute(
+            "SELECT * FROM company_watches WHERE id = ? AND user_id = ?", [wid, uid]
+        ).fetchone()
+        if not row:
+            return jsonify({"error": "Nicht gefunden"}), 404
+        w = dict(row)
+    now = datetime.utcnow().isoformat()
+    try:
+        jobs = _scrape_career_page(w["career_url"], json.loads(w["keywords"]))
+        with get_db() as db:
+            existing = {r["url"] for r in db.execute(
+                "SELECT url FROM watch_jobs WHERE company_id = ?", [wid]
+            ).fetchall()}
+            new_count = 0
+            for j in jobs:
+                if j["url"] not in existing:
+                    db.execute(
+                        "INSERT INTO watch_jobs (company_id, title, url) VALUES (?, ?, ?)",
+                        [wid, j["title"], j["url"]]
+                    )
+                    new_count += 1
+                else:
+                    db.execute(
+                        "UPDATE watch_jobs SET last_seen_at = ? WHERE company_id = ? AND url = ?",
+                        [now, wid, j["url"]]
+                    )
+            db.execute(
+                "UPDATE company_watches SET last_checked_at = ?, last_check_status = 'ok' WHERE id = ?",
+                [now, wid]
+            )
+        return jsonify({"ok": True, "total": len(jobs), "new": new_count})
+    except Exception as e:
+        with get_db() as db:
+            db.execute(
+                "UPDATE company_watches SET last_checked_at = ?, last_check_status = ? WHERE id = ?",
+                [now, f"error: {str(e)[:200]}", wid]
+            )
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/watch/jobs", methods=["GET", "OPTIONS"])
+@login_required
+def watch_jobs_list():
+    uid     = session["user_id"]
+    new_only = request.args.get("new") == "1"
+    query = """
+        SELECT j.*, w.name AS company_name, w.career_url
+        FROM watch_jobs j
+        JOIN company_watches w ON w.id = j.company_id
+        WHERE w.user_id = ?
+    """
+    params = [uid]
+    if new_only:
+        query += " AND j.is_new = 1"
+    query += " ORDER BY j.found_at DESC LIMIT 200"
+    with get_db() as db:
+        rows = db.execute(query, params).fetchall()
+    return jsonify([dict(r) for r in rows])
+
+
+@app.route("/watch/jobs/<int:jid>", methods=["DELETE", "OPTIONS"])
+@login_required
+def watch_job_delete(jid):
+    uid = session["user_id"]
+    with get_db() as db:
+        row = db.execute(
+            "SELECT j.id FROM watch_jobs j "
+            "JOIN company_watches w ON w.id = j.company_id "
+            "WHERE j.id = ? AND w.user_id = ?", [jid, uid]
+        ).fetchone()
+        if not row:
+            return jsonify({"error": "Nicht gefunden"}), 404
+        db.execute("DELETE FROM watch_jobs WHERE id = ?", [jid])
+    return jsonify({"ok": True})
+
+
+@app.route("/watch/jobs/read-all", methods=["POST", "OPTIONS"])
+@login_required
+def watch_jobs_read_all():
+    uid = session["user_id"]
+    with get_db() as db:
+        db.execute("""
+            UPDATE watch_jobs SET is_new = 0
+            WHERE company_id IN (SELECT id FROM company_watches WHERE user_id = ?)
+        """, [uid])
+    return jsonify({"ok": True})
+
+
 # ── Startup ───────────────────────────────────────────────────────
 
 _schedule_backup()
+_schedule_watch_checks()
 
 if __name__ == "__main__":
     print("✅ JobPipeline Server läuft auf http://localhost:5500")
