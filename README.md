@@ -39,6 +39,9 @@ Automatische Überwachung von Unternehmens-Karriereseiten auf neue passende Stel
 - **CSV-Import** — Unternehmenslisten als `;`-getrennte CSV importieren (Vorlage downloadbar)
 - **CRUD** — Einträge hinzufügen, bearbeiten, pausieren, alle aktivieren/deaktivieren, löschen
 - **Mehrfachauswahl** — Mehrere oder alle Einträge gleichzeitig markieren und löschen
+- **Globale Suchbegriffe** — Nutzerweite Keywords gelten für alle Unternehmen gleichzeitig; unternehmensspezifische Keywords kommen zusätzlich hinzu
+- **Pagination** — Folgt automatisch Weiter-Links über mehrere Ergebnisseiten (max. `WATCH_MAX_PAGES`, Standard: 10)
+- **Auf Merkzettel** — Gefundene Stellen per 💾-Button direkt ins Merkzettel übernehmen
 - **Rate-Limiting** — Konfigurierbare Pause zwischen Scrapes (`WATCH_SCRAPE_DELAY`), korrekter Bot-User-Agent
 - **Pro-Nutzer** — Jeder Benutzer verwaltet seine eigene Watchlist
 
@@ -184,7 +187,8 @@ Internet
         │     ├─► /jira/issue    Ticket erstellen → Jira REST API
         │     ├─► /jira/fields   Feldliste → Jira REST API
         │     ├─► /watch/companies   Karriere-Monitor: Unternehmen verwalten (pro User)
-        │     └─► /watch/jobs        Karriere-Monitor: gefundene Stellen (pro User)
+        │     ├─► /watch/jobs        Karriere-Monitor: gefundene Stellen (pro User)
+        │     └─► /watch/keywords    Karriere-Monitor: globale Suchbegriffe (pro User)
         │
         └─► /* (alle anderen Pfade)  →  public/ (statische SPA: index.html, style.css, app.js)
 ```
@@ -210,7 +214,7 @@ Benutzerdaten werden serverseitig in einer **SQLite-Datenbank** gespeichert (per
 
 | Tabelle | Inhalt |
 |---|---|
-| `users` | Benutzerkonten (Benutzername, Passwort-Hash, E-Mail, is_admin, is_locked) |
+| `users` | Benutzerkonten (Benutzername, Passwort-Hash, E-Mail, is_admin, is_locked, globale Karriere-Monitor-Keywords) |
 | `user_data` | Gespeicherte Jobs & Jira-Konfiguration pro Benutzer |
 | `password_reset_tokens` | Temporäre Reset-Tokens (1 Stunde gültig) |
 | `company_watches` | Karriere-Monitor: überwachte Unternehmen pro Benutzer (URL, Keywords, Intervall, Status) |
