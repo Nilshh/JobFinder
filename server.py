@@ -39,6 +39,7 @@ BACKUP_KEEP = int(os.environ.get("BACKUP_KEEP", "7"))   # Aufbewahrungsdauer in 
 BACKUP_HOUR = int(os.environ.get("BACKUP_HOUR", "2"))   # UTC-Stunde für tägliches Backup
 WATCH_INTERVAL_MINUTES = int(os.environ.get("WATCH_INTERVAL_MINUTES", "60"))  # Prüfintervall
 WATCH_SCRAPE_DELAY     = int(os.environ.get("WATCH_SCRAPE_DELAY", "5"))       # Sekunden zwischen zwei Scrapes
+WATCH_MAX_PAGES        = int(os.environ.get("WATCH_MAX_PAGES",    "10"))      # Max. Seiten pro Karriereseite
 
 
 # ── Automatisches Backup ──────────────────────────────────────────
@@ -101,10 +102,74 @@ def _merge_kw(global_kw, company_kw):
     """Vereint globale und unternehmensspezifische Keywords, dedupliziert, behält Reihenfolge."""
     return list(dict.fromkeys(global_kw + company_kw))
 
+def _extract_jobs_from_html(html, base_url, kw_lower, found, seen):
+    """Extrahiert keyword-passende Treffer aus HTML und fügt sie in found/seen ein."""
+    soup = BeautifulSoup(html, "html.parser")
+    for tag in soup.find_all(["a", "h1", "h2", "h3", "h4", "li", "span"]):
+        text = tag.get_text(strip=True)
+        if len(text) < 4 or len(text) > 250:
+            continue
+        if any(kw in text.lower() for kw in kw_lower):
+            href = tag.get("href", "") if tag.name == "a" else ""
+            if href and not href.startswith("http"):
+                href = urljoin(base_url, href)
+            key = href or text
+            if key not in seen:
+                seen.add(key)
+                found.append({"title": text, "url": href or base_url})
+
+
+def _find_next_page(pw_page, base_url):
+    """Sucht die URL der nächsten Seite (rel=next, aria-label, Text). Gibt URL oder None zurück."""
+    # 1. <link rel="next"> oder <a rel="next">
+    for sel in ['link[rel="next"]', 'a[rel="next"]']:
+        el = pw_page.query_selector(sel)
+        if el:
+            href = el.get_attribute("href")
+            if href:
+                return urljoin(base_url, href)
+
+    # 2. Aria-Label-basierte Selektoren
+    for sel in [
+        'a[aria-label*="next" i]', 'a[aria-label*="weiter" i]', 'a[aria-label*="nächste" i]',
+        'button[aria-label*="next" i]', 'button[aria-label*="weiter" i]',
+        '.pagination .next a', '.pagination__next a', '.pager__next a',
+        '[class*="pagination"] [class*="next"]:not([disabled])',
+        '[class*="pagination"] [class*="Next"]:not([disabled])',
+    ]:
+        try:
+            el = pw_page.query_selector(sel)
+            if el and el.is_visible() and el.is_enabled():
+                href = el.get_attribute("href")
+                if href and href not in ("#", "javascript:void(0)", "javascript:", ""):
+                    return urljoin(base_url, href)
+        except Exception:
+            pass
+
+    # 3. Text-basierte Suche: "›", "»", "Weiter", "Next", ">"
+    for text_candidate in ["›", "»", "→", "Weiter", "Next"]:
+        try:
+            links = pw_page.query_selector_all("a, button")
+            for el in links:
+                if not el.is_visible():
+                    continue
+                label = (el.inner_text() or "").strip()
+                if label == text_candidate or label.endswith(text_candidate):
+                    href = el.get_attribute("href") or ""
+                    if href and href not in ("#", "javascript:void(0)", "javascript:", ""):
+                        return urljoin(base_url, href)
+        except Exception:
+            pass
+
+    return None
+
+
 def _scrape_career_page(url, keywords):
-    """Rendert eine Karriereseite mit Playwright und extrahiert passende Stellenanzeigen."""
+    """Rendert Karriereseiten mit Playwright inkl. Pagination und extrahiert Treffer."""
     from playwright.sync_api import sync_playwright
     kw_lower = [k.strip().lower() for k in keywords if k.strip()]
+    found, seen = [], set()
+
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True, args=["--no-sandbox", "--disable-dev-shm-usage"])
         ctx = browser.new_context(
@@ -116,23 +181,29 @@ def _scrape_career_page(url, keywords):
         )
         page = ctx.new_page()
         page.goto(url, wait_until="networkidle", timeout=30000)
-        page.wait_for_timeout(1500)   # kurze Pause – kein Rapid-Fire nach dem Load
-        content = page.content()
+        page.wait_for_timeout(1500)
+
+        for page_num in range(WATCH_MAX_PAGES):
+            _extract_jobs_from_html(page.content(), url, kw_lower, found, seen)
+            print(f"[Watch] Seite {page_num + 1}: {len(found)} Treffer gesamt", flush=True)
+
+            if page_num + 1 >= WATCH_MAX_PAGES:
+                break
+
+            next_url = _find_next_page(page, url)
+            if not next_url:
+                break
+
+            time.sleep(max(1, WATCH_SCRAPE_DELAY // 2))   # kurze Pause zwischen Seiten
+            try:
+                page.goto(next_url, wait_until="networkidle", timeout=30000)
+                page.wait_for_timeout(1200)
+            except Exception as e:
+                print(f"[Watch] Pagination-Fehler auf Seite {page_num + 2}: {e}", flush=True)
+                break
+
         browser.close()
-    soup = BeautifulSoup(content, "html.parser")
-    found, seen = [], set()
-    for tag in soup.find_all(["a", "h1", "h2", "h3", "h4", "li", "span"]):
-        text = tag.get_text(strip=True)
-        if len(text) < 4 or len(text) > 250:
-            continue
-        if any(kw in text.lower() for kw in kw_lower):
-            href = tag.get("href", "") if tag.name == "a" else ""
-            if href and not href.startswith("http"):
-                href = urljoin(url, href)
-            key = href or text
-            if key not in seen:
-                seen.add(key)
-                found.append({"title": text, "url": href or url})
+
     return found
 
 
