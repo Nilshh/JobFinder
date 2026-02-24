@@ -32,11 +32,19 @@ function refreshBadge(){
 
 // ── Tabs ──
 function showTab(t){
+  const GATED = ["saved", "portals", "watch"];
+  if(GATED.includes(t) && !AUTH.user){
+    _pendingAction = () => showTab(t);
+    const hints = { saved:"den Merkzettel", portals:"die Portale", watch:"den Karriere-Monitor" };
+    openAuthModal("Für " + hints[t] + " ist ein Account erforderlich.");
+    return;
+  }
   document.getElementById("tabSearch").style.display  = t==="search"  ?"block":"none";
   document.getElementById("tabSaved").style.display   = t==="saved"   ?"block":"none";
   document.getElementById("tabPortals").style.display = t==="portals" ?"block":"none";
   document.getElementById("tabWatch").style.display   = t==="watch"   ?"block":"none";
   document.getElementById("tabAdmin").style.display   = t==="admin"   ?"block":"none";
+  document.getElementById("tabProfile").style.display = t==="profile" ?"block":"none";
   document.getElementById("nb1").classList.toggle("on", t==="search");
   document.getElementById("nb2").classList.toggle("on", t==="saved");
   document.getElementById("nb3").classList.toggle("on", t==="portals");
@@ -47,6 +55,7 @@ function showTab(t){
   if(t==="portals") renderPortalsTab();
   if(t==="watch")   loadWatchTab();
   if(t==="admin")   { loadAdminUsers(); loadBackupList(); }
+  if(t==="profile") loadProfileTab();
 }
 
 function hideWelcomeHero(){
@@ -1153,30 +1162,14 @@ const JIRA = {
 
 function jiraConfigured(){ const c=JIRA.get(); return !!(c.domain&&c.email&&c.token&&c.project); }
 
-function updateJiraCfgBtn(){
-  const btn = document.getElementById("jiraCfgBtn");
-  if(btn) btn.classList.toggle("active", jiraConfigured());
-}
+function updateJiraCfgBtn(){ /* Jira-Button wurde in Profil-Tab integriert */ }
 
 function openJiraSettings(){
-  if(!AUTH.user){ openAuthModal("Zum Einrichten von Jira bitte anmelden."); return; }
-  const c = JIRA.get();
-  document.getElementById("jDomain").value    = c.domain    || "";
-  document.getElementById("jEmail").value     = c.email     || "";
-  document.getElementById("jToken").value     = c.token     || "";
-  document.getElementById("jProject").value   = c.project   || "";
-  document.getElementById("jIssueType").value   = c.issueType   || "Task";
-  document.getElementById("jUrlField").value     = c.urlField     || "";
-  document.getElementById("jCompanyField").value = c.companyField || "";
-  document.getElementById("jUseProxy").checked   = c.useProxy !== false;
-  document.getElementById("jiraFieldsBox").style.display = "none";
-  document.getElementById("jiraModalStatus").innerHTML = "";
-  document.getElementById("jiraModal").style.display = "flex";
+  if(!AUTH.user){ openAuthModal("Für die Jira-Einstellungen ist ein Account erforderlich."); return; }
+  showTab("profile");
 }
 
-function closeJiraSettings(){
-  document.getElementById("jiraModal").style.display = "none";
-}
+function closeJiraSettings(){ /* noop – Jira-Einstellungen sind jetzt im Profil-Tab */ }
 
 function saveJiraSettings(){
   const domain    = document.getElementById("jDomain").value.trim().replace(/^https?:\/\//,"").replace(/\/+$/,"");
@@ -1484,7 +1477,7 @@ function updateUserBar(){
   const nm       = document.getElementById("uname");
   const adminBtn = document.getElementById("adminBtn");
   if(AUTH.user){
-    nm.textContent = "👤 "+AUTH.user.username;
+    nm.textContent = AUTH.user.username;
     bar.style.display = "flex";
     btn.style.display = "none";
     adminBtn.style.display = AUTH.user.is_admin ? "" : "none";
@@ -1492,6 +1485,77 @@ function updateUserBar(){
     bar.style.display = "none";
     btn.style.display = "";
     adminBtn.style.display = "none";
+  }
+}
+
+// ── Profil ───────────────────────────────────────────────────────
+function loadProfileTab(){
+  if(!AUTH.user) return;
+  document.getElementById("profileUser").value  = AUTH.user.username;
+  document.getElementById("profileEmail").value = AUTH.user.email || "";
+  document.getElementById("pwCurrent").value = "";
+  document.getElementById("pwNew").value     = "";
+  document.getElementById("pwConfirm").value = "";
+  document.getElementById("profileStatus").innerHTML = "";
+  document.getElementById("pwStatus").innerHTML      = "";
+  document.getElementById("jiraModalStatus").innerHTML = "";
+  const c = JIRA.get();
+  document.getElementById("jDomain").value       = c.domain      || "";
+  document.getElementById("jEmail").value        = c.email       || "";
+  document.getElementById("jToken").value        = c.token       || "";
+  document.getElementById("jProject").value      = c.project     || "";
+  document.getElementById("jIssueType").value    = c.issueType   || "Task";
+  document.getElementById("jUrlField").value     = c.urlField    || "";
+  document.getElementById("jCompanyField").value = c.companyField|| "";
+  document.getElementById("jUseProxy").checked   = c.useProxy !== false;
+  const fb = document.getElementById("jiraFieldsBox");
+  if(fb) fb.style.display = "none";
+}
+
+async function saveProfile(){
+  const email  = document.getElementById("profileEmail").value.trim();
+  const status = document.getElementById("profileStatus");
+  status.innerHTML = '<span style="color:#6b6b80">Wird gespeichert…</span>';
+  const r = await fetch("/user/profile", {
+    method:"PATCH", credentials:"include",
+    headers:{"Content-Type":"application/json"},
+    body: JSON.stringify({email})
+  }).catch(()=>null);
+  if(!r){ status.innerHTML = '<span style="color:#ff4d6d">Verbindungsfehler.</span>'; return; }
+  const d = await r.json();
+  if(d.ok){
+    AUTH.user.email = d.email;
+    status.innerHTML = '<span style="color:#22c55e">✓ Gespeichert.</span>';
+    setTimeout(()=>{ status.innerHTML=""; }, 2500);
+  } else {
+    status.innerHTML = '<span style="color:#ff4d6d">'+esc(d.error||"Fehler")+'</span>';
+  }
+}
+
+async function savePassword(){
+  const current = document.getElementById("pwCurrent").value;
+  const newPw   = document.getElementById("pwNew").value;
+  const confirm = document.getElementById("pwConfirm").value;
+  const status  = document.getElementById("pwStatus");
+  if(!current){ status.innerHTML='<span style="color:#ff4d6d">Bitte aktuelles Passwort eingeben.</span>'; return; }
+  if(newPw.length < 8){ status.innerHTML='<span style="color:#ff4d6d">Neues Passwort muss mindestens 8 Zeichen haben.</span>'; return; }
+  if(newPw !== confirm){ status.innerHTML='<span style="color:#ff4d6d">Passwörter stimmen nicht überein.</span>'; return; }
+  status.innerHTML = '<span style="color:#6b6b80">Wird gespeichert…</span>';
+  const r = await fetch("/user/password", {
+    method:"POST", credentials:"include",
+    headers:{"Content-Type":"application/json"},
+    body: JSON.stringify({current, "new": newPw})
+  }).catch(()=>null);
+  if(!r){ status.innerHTML = '<span style="color:#ff4d6d">Verbindungsfehler.</span>'; return; }
+  const d = await r.json();
+  if(d.ok){
+    document.getElementById("pwCurrent").value = "";
+    document.getElementById("pwNew").value     = "";
+    document.getElementById("pwConfirm").value = "";
+    status.innerHTML = '<span style="color:#22c55e">✓ Passwort geändert.</span>';
+    setTimeout(()=>{ status.innerHTML=""; }, 2500);
+  } else {
+    status.innerHTML = '<span style="color:#ff4d6d">'+esc(d.error||"Fehler")+'</span>';
   }
 }
 
@@ -1799,7 +1863,7 @@ async function doAuth(){
     if(!r){ st.innerHTML='<span style="color:#ff4d6d">Verbindungsfehler.</span>'; btn.disabled=false; return; }
     const d = await r.json();
     if(!r.ok){ st.innerHTML='<span style="color:#ff4d6d">'+esc(d.error||"Fehler")+'</span>'; btn.disabled=false; return; }
-    AUTH.user = { username: d.username, is_admin: d.is_admin || false };
+    AUTH.user = { username: d.username, is_admin: d.is_admin || false, email: d.email || "" };
   } else {
     const r = await fetch("/auth/login", {
       method:"POST", credentials:"include",
@@ -1809,7 +1873,7 @@ async function doAuth(){
     if(!r){ st.innerHTML='<span style="color:#ff4d6d">Verbindungsfehler.</span>'; btn.disabled=false; return; }
     const d = await r.json();
     if(!r.ok){ st.innerHTML='<span style="color:#ff4d6d">'+esc(d.error||"Fehler")+'</span>'; btn.disabled=false; return; }
-    AUTH.user = { username: d.username, is_admin: d.is_admin || false };
+    AUTH.user = { username: d.username, is_admin: d.is_admin || false, email: d.email || "" };
     await loadUserData();
   }
   updateUserBar();
@@ -1868,8 +1932,7 @@ async function doLogout(){
   localStorage.removeItem("jf2_ign");
   localStorage.removeItem("jf2_jira");
   refreshBadge();
-  updateJiraCfgBtn();
-  if(document.getElementById("tabSaved").style.display !== "none") renderSaved();
+  showTab("search");
 }
 
 // ── Init ──────────────────────────────────────────────────────────

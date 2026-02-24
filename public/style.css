@@ -10,6 +10,7 @@ body{font-family:-apple-system,'Segoe UI',system-ui,sans-serif;background:#0c0c1
 .nbtn:hover{border-color:#383858;color:#9090b0;}
 .nbtn.on{background:rgba(255,209,102,0.09);border-color:rgba(255,209,102,0.45);color:#ffd166;}
 .badge{position:absolute;top:-7px;right:-7px;background:#ff4d6d;color:#fff;font-size:10px;font-weight:700;border-radius:20px;padding:2px 6px;display:none;}
+#profileBtn{max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 
 /* ── Hero ── */
 .hero{background:linear-gradient(135deg,#12102a 0%,#1a0f20 50%,#0f1625 100%);border:1px solid #2a2040;border-radius:18px;padding:48px 40px 40px;margin-bottom:22px;position:relative;overflow:hidden;}

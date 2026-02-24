@@ -537,7 +537,7 @@ def auth_register():
         session["user_id"]  = user["id"]
         session["username"] = username
         session["is_admin"] = False
-        return jsonify({"ok": True, "username": username, "is_admin": False})
+        return jsonify({"ok": True, "username": username, "is_admin": False, "email": email})
     except sqlite3.IntegrityError:
         return jsonify({"error": "Benutzername bereits vergeben"}), 409
 
@@ -561,7 +561,7 @@ def auth_login():
     session["user_id"]  = user["id"]
     session["username"] = user["username"]
     session["is_admin"] = bool(user["is_admin"])
-    return jsonify({"ok": True, "username": user["username"], "is_admin": bool(user["is_admin"])})
+    return jsonify({"ok": True, "username": user["username"], "is_admin": bool(user["is_admin"]), "email": user["email"] or ""})
 
 
 @app.route("/auth/logout", methods=["POST", "OPTIONS"])
@@ -578,7 +578,7 @@ def auth_me():
         return jsonify({"user": None})
     with get_db() as db:
         user = db.execute(
-            "SELECT is_admin, is_locked FROM users WHERE id = ?", [session["user_id"]]
+            "SELECT is_admin, is_locked, email FROM users WHERE id = ?", [session["user_id"]]
         ).fetchone()
     if not user or user["is_locked"]:
         session.clear()
@@ -588,6 +588,7 @@ def auth_me():
         "id":       session["user_id"],
         "username": session["username"],
         "is_admin": bool(user["is_admin"]),
+        "email":    user["email"] or "",
     }})
 
 
@@ -699,6 +700,36 @@ def save_user_data():
             json.dumps(data.get("ignored", [])),
             json.dumps(data.get("jira",    {}))
         ])
+    return jsonify({"ok": True})
+
+
+@app.route("/user/profile", methods=["PATCH"])
+@login_required
+def update_profile():
+    data  = request.get_json(force=True)
+    email = (data.get("email") or "").strip()
+    with get_db() as db:
+        db.execute("UPDATE users SET email=? WHERE id=?", [email, session["user_id"]])
+    return jsonify({"ok": True, "email": email})
+
+
+@app.route("/user/password", methods=["POST"])
+@login_required
+def change_password():
+    data       = request.get_json(force=True)
+    current_pw = data.get("current", "")
+    new_pw     = data.get("new", "")
+    if len(new_pw) < 8:
+        return jsonify({"ok": False, "error": "Passwort muss mindestens 8 Zeichen haben"}), 400
+    with get_db() as db:
+        row = db.execute(
+            "SELECT password_hash FROM users WHERE id=?", [session["user_id"]]
+        ).fetchone()
+    if not bcrypt.checkpw(current_pw.encode(), row["password_hash"].encode()):
+        return jsonify({"ok": False, "error": "Aktuelles Passwort ist falsch"}), 400
+    new_hash = bcrypt.hashpw(new_pw.encode(), bcrypt.gensalt()).decode()
+    with get_db() as db:
+        db.execute("UPDATE users SET password_hash=? WHERE id=?", [new_hash, session["user_id"]])
     return jsonify({"ok": True})
 
 
