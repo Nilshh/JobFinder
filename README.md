@@ -101,11 +101,11 @@ cp .env.example .env
 docker compose up -d
 
 # App öffnen (nach DNS-Propagation und Zertifikatsausstellung)
-open https://job.raddes.de
+open https://ihre-domain.example.com
 ```
 
 Nach dem Start läuft:
-- **`https://job.raddes.de`** — JobPipeline (Caddy: Frontend + HTTPS-Proxy)
+- **`https://ihre-domain.example.com`** — JobPipeline (Caddy: Frontend + HTTPS-Proxy)
 - **`http://api:5500`** (intern) — API-Backend (Flask, nur intern erreichbar)
 
 ---
@@ -123,13 +123,14 @@ cp .env.example .env
 | `ADZUNA_APP_ID` | Adzuna App ID ([developer.adzuna.com](https://developer.adzuna.com/)) | ✅ |
 | `ADZUNA_APP_KEY` | Adzuna API Key | ✅ |
 | `SECRET_KEY` | Flask Session Secret (zufälliger String, mind. 32 Zeichen) | ✅ |
+| `APP_DOMAIN` | Öffentliche Domain (z. B. `jobs.example.com`) — Caddy holt darüber automatisch das HTTPS-Zertifikat (Let's Encrypt) | ✅ |
 | `ADMIN_USER` | Benutzername, der beim Start zum Admin befördert wird | Ersteinrichtung |
 | `SMTP_HOST` | SMTP-Server (z. B. `smtp.gmail.com`) | für Passwort-Reset |
 | `SMTP_PORT` | SMTP-Port (Standard: `587`) | für Passwort-Reset |
 | `SMTP_USER` | SMTP-Benutzername / Absender-Adresse | für Passwort-Reset |
 | `SMTP_PASSWORD` | SMTP-Passwort / App-Passwort | für Passwort-Reset |
 | `SMTP_FROM` | Absender-Name und -Adresse | für Passwort-Reset |
-| `APP_URL` | Öffentliche URL der App (z. B. `https://job.raddes.de`) | für Passwort-Reset |
+| `APP_URL` | Öffentliche URL der App (z. B. `https://jobs.example.com`) | für Passwort-Reset |
 | `BACKUP_KEEP` | Anzahl aufzubewahrender automatischer Backups (Standard: `7`) | optional |
 | `BACKUP_HOUR` | UTC-Stunde für das tägliche Backup (Standard: `2`, also 02:00 UTC) | optional |
 | `WATCH_INTERVAL_MINUTES` | Wie oft der Scheduler fällige Watches prüft, in Minuten (Standard: `60`) | optional |

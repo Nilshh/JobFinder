@@ -1,4 +1,4 @@
-job.raddes.de {
+{env.APP_DOMAIN} {
     @api path /jobs /jobs/* /jira/* /auth/* /user/* /admin/* /watch/*
     handle @api {
         reverse_proxy api:5500
