@@ -531,7 +531,10 @@ function switchWatchSubTab(tab){
 
 // ── Globale Keywords ──────────────────────────────────────────────
 
+let _watchGlobalKwCache = [];   // cache vermeidet Quote-Problem in onclick-Attributen
+
 function renderWatchGlobalKw(kws){
+  _watchGlobalKwCache = kws;
   const box = document.getElementById("watchGlobalKw");
   const kwHtml = kws.length
     ? kws.map(k => `<span class="watch-kw wgkw">${k}</span>`).join("")
@@ -542,26 +545,31 @@ function renderWatchGlobalKw(kws){
         <div class="wgkw-title">🌐 Globale Suchbegriffe</div>
         <div class="wgkw-sub">Gelten zusätzlich für jedes Unternehmen im Monitor</div>
       </div>
-      <button class="wc-btn" onclick="editWatchGlobalKw(${JSON.stringify(kws)})" title="Bearbeiten">✏️</button>
+      <button class="wc-btn" id="gkwEditBtn" title="Bearbeiten">✏️</button>
     </div>
     <div class="wc-kws" style="margin-top:10px;">${kwHtml}</div>
   </div>`;
+  document.getElementById("gkwEditBtn").addEventListener("click", editWatchGlobalKw);
 }
 
-function editWatchGlobalKw(current){
+function editWatchGlobalKw(){
   const box = document.getElementById("watchGlobalKw");
   box.innerHTML = `<div class="watch-gkw-card watch-gkw-edit">
     <div class="wgkw-title">🌐 Globale Suchbegriffe</div>
     <div class="wgkw-sub" style="margin-bottom:10px;">Kommagetrennte Begriffe (z. B. CTO, Head of IT, Leiter IT) – gelten für alle Unternehmen</div>
     <div style="display:flex;gap:8px;">
-      <input type="text" class="inp" id="gkwInput" value="${current.join(", ").replace(/"/g,'&quot;')}"
-             placeholder="CTO, Head of IT, Leiter IT, …" style="flex:1;"
-             onkeydown="if(event.key==='Enter')saveWatchGlobalKw()">
-      <button class="msavebtn" style="width:auto;padding:8px 18px;" onclick="saveWatchGlobalKw()">Speichern</button>
-      <button class="mcancelbtn" style="padding:8px 12px;" onclick="loadWatchTab()">✕</button>
+      <input type="text" class="inp" id="gkwInput"
+             placeholder="CTO, Head of IT, Leiter IT, …" style="flex:1;">
+      <button class="msavebtn" style="width:auto;padding:8px 18px;" id="gkwSaveBtn">Speichern</button>
+      <button class="mcancelbtn" style="padding:8px 12px;" id="gkwCancelBtn">✕</button>
     </div>
   </div>`;
-  document.getElementById("gkwInput").focus();
+  const inp = document.getElementById("gkwInput");
+  inp.value = _watchGlobalKwCache.join(", ");
+  inp.focus();
+  inp.addEventListener("keydown", e => { if(e.key === "Enter") saveWatchGlobalKw(); });
+  document.getElementById("gkwSaveBtn").addEventListener("click", saveWatchGlobalKw);
+  document.getElementById("gkwCancelBtn").addEventListener("click", () => renderWatchGlobalKw(_watchGlobalKwCache));
 }
 
 async function saveWatchGlobalKw(){
