@@ -95,12 +95,17 @@ cd JobFinder
 
 # Konfigurationsdatei anlegen
 cp .env.example .env
-# .env mit echten Werten befüllen (siehe Abschnitt "Konfiguration")
+
+# Mindestens diese Werte in .env eintragen:
+#   ADZUNA_APP_ID=...
+#   ADZUNA_APP_KEY=...
+#   SECRET_KEY=...           # openssl rand -hex 32
+#   APP_DOMAIN=ihre-domain.example.com   # Domain für HTTPS-Zertifikat (Let's Encrypt)
 
 # Container starten
 docker compose up -d
 
-# App öffnen (nach DNS-Propagation und Zertifikatsausstellung)
+# App öffnen (nach DNS-Propagation und Zertifikatsausstellung, ~1-2 Min.)
 open https://ihre-domain.example.com
 ```
 
