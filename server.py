@@ -90,6 +90,17 @@ def _schedule_backup():
 
 # ── Karriere-Monitor: Scraping & Scheduler ────────────────────────
 
+def _get_global_kw(uid):
+    """Gibt die globalen Suchbegriffe eines Nutzers zurück."""
+    with get_db() as db:
+        row = db.execute("SELECT watch_global_kw FROM users WHERE id = ?", [uid]).fetchone()
+    return json.loads(row["watch_global_kw"] or "[]") if row else []
+
+
+def _merge_kw(global_kw, company_kw):
+    """Vereint globale und unternehmensspezifische Keywords, dedupliziert, behält Reihenfolge."""
+    return list(dict.fromkeys(global_kw + company_kw))
+
 def _scrape_career_page(url, keywords):
     """Rendert eine Karriereseite mit Playwright und extrahiert passende Stellenanzeigen."""
     from playwright.sync_api import sync_playwright
@@ -133,12 +144,17 @@ def _run_watch_checks():
             AND (last_checked_at IS NULL
               OR datetime(last_checked_at, '+' || check_interval_hours || ' hours') <= datetime('now'))
         """).fetchall()
+    user_kw_cache = {}   # uid → globale Keywords (vermeidet mehrfache DB-Abfragen)
     for idx, w in enumerate([dict(r) for r in due]):
         if idx > 0:
             time.sleep(WATCH_SCRAPE_DELAY)   # Pause zwischen Unternehmen
         now = datetime.utcnow().isoformat()
+        uid = w["user_id"]
+        if uid not in user_kw_cache:
+            user_kw_cache[uid] = _get_global_kw(uid)
+        merged_kw = _merge_kw(user_kw_cache[uid], json.loads(w["keywords"]))
         try:
-            jobs = _scrape_career_page(w["career_url"], json.loads(w["keywords"]))
+            jobs = _scrape_career_page(w["career_url"], merged_kw)
             with get_db() as db:
                 existing = {r["url"] for r in db.execute(
                     "SELECT url FROM watch_jobs WHERE company_id = ?", [w["id"]]
@@ -225,8 +241,9 @@ def init_db():
         """)
         # Migrations: new columns for existing installations
         for col, definition in [
-            ("is_admin",  "INTEGER NOT NULL DEFAULT 0"),
-            ("is_locked", "INTEGER NOT NULL DEFAULT 0"),
+            ("is_admin",         "INTEGER NOT NULL DEFAULT 0"),
+            ("is_locked",        "INTEGER NOT NULL DEFAULT 0"),
+            ("watch_global_kw",  "TEXT DEFAULT '[]'"),
         ]:
             try:
                 db.execute(f"ALTER TABLE users ADD COLUMN {col} {definition}")
@@ -946,9 +963,10 @@ def watch_check_now(wid):
         if not row:
             return jsonify({"error": "Nicht gefunden"}), 404
         w = dict(row)
+    merged_kw = _merge_kw(_get_global_kw(uid), json.loads(w["keywords"]))
     now = datetime.utcnow().isoformat()
     try:
-        jobs = _scrape_career_page(w["career_url"], json.loads(w["keywords"]))
+        jobs = _scrape_career_page(w["career_url"], merged_kw)
         with get_db() as db:
             existing = {r["url"] for r in db.execute(
                 "SELECT url FROM watch_jobs WHERE company_id = ?", [wid]
@@ -1025,6 +1043,24 @@ def watch_jobs_read_all():
             UPDATE watch_jobs SET is_new = 0
             WHERE company_id IN (SELECT id FROM company_watches WHERE user_id = ?)
         """, [uid])
+    return jsonify({"ok": True})
+
+
+@app.route("/watch/keywords", methods=["GET", "OPTIONS"])
+@login_required
+def watch_keywords_get():
+    uid = session["user_id"]
+    return jsonify({"keywords": _get_global_kw(uid)})
+
+
+@app.route("/watch/keywords", methods=["PATCH", "OPTIONS"])
+@login_required
+def watch_keywords_update():
+    uid  = session["user_id"]
+    data = request.get_json(force=True) or {}
+    kw   = json.dumps([k.strip() for k in data.get("keywords", []) if str(k).strip()])
+    with get_db() as db:
+        db.execute("UPDATE users SET watch_global_kw = ? WHERE id = ?", [kw, uid])
     return jsonify({"ok": True})
 
 

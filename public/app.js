@@ -487,18 +487,22 @@ async function loadWatchTab(){
   if(!AUTH.user){
     document.getElementById("watchCompanyList").innerHTML = '<div class="savempty">Bitte anmelden, um den Karriere-Monitor zu nutzen.</div>';
     document.getElementById("watchJobFeed").innerHTML = "";
+    document.getElementById("watchGlobalKw").innerHTML = "";
     document.getElementById("watchEmpty").style.display = "none";
     return;
   }
   try {
-    const [cRes, jRes] = await Promise.all([
+    const [cRes, jRes, kwRes] = await Promise.all([
       fetch("/watch/companies", {credentials:"include"}),
-      fetch("/watch/jobs",      {credentials:"include"})
+      fetch("/watch/jobs",      {credentials:"include"}),
+      fetch("/watch/keywords",  {credentials:"include"})
     ]);
-    const companies = cRes.ok ? await cRes.json() : [];
-    const jobs      = jRes.ok ? await jRes.json() : [];
+    const companies = cRes.ok  ? await cRes.json()  : [];
+    const jobs      = jRes.ok  ? await jRes.json()  : [];
+    const kwData    = kwRes.ok ? await kwRes.json() : {keywords: []};
     renderWatchCompanies(companies);
     renderWatchJobs(jobs, companies);
+    renderWatchGlobalKw(kwData.keywords || []);
     updateWatchBadge(jobs);
   } catch(e) {
     document.getElementById("watchCompanyList").innerHTML = `<div class="savempty">⚠️ Fehler: ${e.message}</div>`;
@@ -523,6 +527,55 @@ function switchWatchSubTab(tab){
   document.getElementById("watchJobActions").style.display     = tab === "jobs"      ? "flex" : "none";
   document.getElementById("wst1").classList.toggle("wstab-active", tab === "companies");
   document.getElementById("wst2").classList.toggle("wstab-active", tab === "jobs");
+}
+
+// ── Globale Keywords ──────────────────────────────────────────────
+
+function renderWatchGlobalKw(kws){
+  const box = document.getElementById("watchGlobalKw");
+  const kwHtml = kws.length
+    ? kws.map(k => `<span class="watch-kw wgkw">${k}</span>`).join("")
+    : '<span class="wgkw-empty">Keine globalen Suchbegriffe gesetzt</span>';
+  box.innerHTML = `<div class="watch-gkw-card">
+    <div class="wgkw-header">
+      <div>
+        <div class="wgkw-title">🌐 Globale Suchbegriffe</div>
+        <div class="wgkw-sub">Gelten zusätzlich für jedes Unternehmen im Monitor</div>
+      </div>
+      <button class="wc-btn" onclick="editWatchGlobalKw(${JSON.stringify(kws)})" title="Bearbeiten">✏️</button>
+    </div>
+    <div class="wc-kws" style="margin-top:10px;">${kwHtml}</div>
+  </div>`;
+}
+
+function editWatchGlobalKw(current){
+  const box = document.getElementById("watchGlobalKw");
+  box.innerHTML = `<div class="watch-gkw-card watch-gkw-edit">
+    <div class="wgkw-title">🌐 Globale Suchbegriffe</div>
+    <div class="wgkw-sub" style="margin-bottom:10px;">Kommagetrennte Begriffe (z. B. CTO, Head of IT, Leiter IT) – gelten für alle Unternehmen</div>
+    <div style="display:flex;gap:8px;">
+      <input type="text" class="inp" id="gkwInput" value="${current.join(", ").replace(/"/g,'&quot;')}"
+             placeholder="CTO, Head of IT, Leiter IT, …" style="flex:1;"
+             onkeydown="if(event.key==='Enter')saveWatchGlobalKw()">
+      <button class="msavebtn" style="width:auto;padding:8px 18px;" onclick="saveWatchGlobalKw()">Speichern</button>
+      <button class="mcancelbtn" style="padding:8px 12px;" onclick="loadWatchTab()">✕</button>
+    </div>
+  </div>`;
+  document.getElementById("gkwInput").focus();
+}
+
+async function saveWatchGlobalKw(){
+  const input = document.getElementById("gkwInput");
+  if(!input) return;
+  const kws = input.value.split(",").map(k => k.trim()).filter(Boolean);
+  try {
+    const r = await fetch("/watch/keywords", {
+      method:"PATCH", credentials:"include",
+      headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({keywords: kws})
+    });
+    if(r.ok) renderWatchGlobalKw(kws);
+  } catch(e){ /* ignore */ }
 }
 
 function renderWatchCompanies(list){

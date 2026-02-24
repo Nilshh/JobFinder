@@ -208,6 +208,15 @@ body{font-family:-apple-system,'Segoe UI',system-ui,sans-serif;background:#0c0c1
 .wstab:hover{color:#9090b0;}
 .wstab.wstab-active{background:#1a1a2e;color:#e4e4f0;}
 
+/* ── Globale Keywords ── */
+.watch-gkw-card{background:#0d0d1c;border:1px solid #252535;border-radius:13px;padding:14px 16px;margin-bottom:16px;}
+.watch-gkw-edit{border-color:rgba(38,132,255,.35);}
+.wgkw-header{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;}
+.wgkw-title{font-size:13px;font-weight:700;color:#7070a0;margin-bottom:2px;}
+.wgkw-sub{font-size:12px;color:#3a3a55;}
+.wgkw-empty{font-size:12px;color:#3a3a55;font-style:italic;}
+.wgkw{background:rgba(38,132,255,.1)!important;border-color:rgba(38,132,255,.3)!important;color:#4da3ff!important;}
+
 /* ── Karriere-Monitor ── */
 .watch-company-card{background:#111120;border:1px solid #1e1e30;border-radius:14px;padding:16px 18px;margin-bottom:12px;transition:border-color .2s;}
 .watch-company-card:hover{border-color:#2e2e48;}
