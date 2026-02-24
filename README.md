@@ -179,7 +179,7 @@ docker compose logs -f caddy
 ```
 Internet
   │
-  └─► Caddy (HTTPS, Let's Encrypt)        job.raddes.de:443
+  └─► Caddy (HTTPS, Let's Encrypt)        ihre-domain.example.com:443
         │
         ├─► /jobs* /jira/* /auth/* /user/* /admin/* /watch/*  →  Flask API (intern :5500)
         │     │
