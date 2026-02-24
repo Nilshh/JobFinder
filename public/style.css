@@ -28,6 +28,15 @@ body{font-family:-apple-system,'Segoe UI',system-ui,sans-serif;background:#0c0c1
 .hero-feat{background:rgba(255,255,255,0.04);border:1px solid #252535;border-radius:100px;color:#7070a0;font-size:12px;font-weight:600;padding:6px 14px;transition:border-color .18s,color .18s;}
 .hero-feat:hover{border-color:#3a3a55;color:#a0a0c0;}
 .hero.hero-hidden{display:none;}
+.hero-tiles{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:28px;}
+.hero-tile{background:rgba(255,255,255,0.03);border:1px solid #252535;border-radius:14px;color:inherit;cursor:pointer;font-family:inherit;padding:18px 14px;text-align:left;transition:border-color .18s,background .18s;}
+.hero-tile:hover{border-color:#3a3a55;background:rgba(255,255,255,0.06);}
+.hero-tile-icon{font-size:24px;margin-bottom:8px;}
+.hero-tile-title{font-size:14px;font-weight:700;color:#e4e4f0;margin-bottom:4px;}
+.hero-tile-desc{font-size:12px;color:#6b6b80;line-height:1.5;}
+.hero-close{background:none;border:1px solid #252535;border-radius:100px;color:#555570;cursor:pointer;font-family:inherit;font-size:12px;font-weight:600;padding:7px 16px;transition:border-color .18s,color .18s;}
+.hero-close:hover{border-color:#3a3a55;color:#9090b0;}
+@media(max-width:700px){.hero-tiles{grid-template-columns:repeat(2,1fr);}}
 @media(max-width:600px){.hero{padding:32px 22px 28px;}.hero-stats{width:100%;flex-wrap:wrap;}.hero-stat{flex:1;min-width:80px;padding:12px 14px;}}
 
 /* ── Cards ── */

@@ -45,7 +45,7 @@
     <button type="button" class="cfgbtn" id="jiraCfgBtn" onclick="openJiraSettings()" title="Jira Einstellungen">⚡ Jira</button>
     <div id="userBar" style="display:none;align-items:center;gap:6px;">
       <span class="uname" id="uname"></span>
-      <button type="button" class="cfgbtn" id="adminBtn" style="display:none" onclick="openAdminPanel()" title="Benutzerverwaltung">⚙️ Admin</button>
+      <button type="button" class="cfgbtn" id="adminBtn" style="display:none" onclick="showTab('admin')" title="Benutzerverwaltung">⚙️ Admin</button>
       <button type="button" class="nbtn" onclick="doLogout()">Abmelden</button>
     </div>
     <button type="button" class="nbtn" id="loginBtn" onclick="openAuthModal()">🔐 Anmelden</button>
@@ -54,6 +54,38 @@
 
 <!-- SEARCH TAB -->
 <div id="tabSearch">
+
+  <!-- Welcome Hero -->
+  <div class="hero" id="welcomeHero">
+    <div class="hero-inner">
+      <div class="hero-eyebrow">JobPipeline · Dein Job-Cockpit</div>
+      <div class="hero-headline">Finde deinen<br>nächsten Job.</div>
+      <div class="hero-sub">Mehrere Jobportale auf einen Blick. Stellen speichern, Karriereseiten beobachten und Bewerbungen nachverfolgen – alles an einem Ort.</div>
+      <div class="hero-tiles">
+        <button class="hero-tile" onclick="hideWelcomeHero()">
+          <div class="hero-tile-icon">🔍</div>
+          <div class="hero-tile-title">Suche</div>
+          <div class="hero-tile-desc">Stellen aus Adzuna, Bundesagentur und Jobicy filtern</div>
+        </button>
+        <button class="hero-tile" onclick="showTab('saved');hideWelcomeHero()">
+          <div class="hero-tile-icon">📌</div>
+          <div class="hero-tile-title">Merkzettel</div>
+          <div class="hero-tile-desc">Jobs speichern und Bewerbungsstatus nachverfolgen</div>
+        </button>
+        <button class="hero-tile" onclick="showTab('watch');hideWelcomeHero()">
+          <div class="hero-tile-icon">👁</div>
+          <div class="hero-tile-title">Beobachten</div>
+          <div class="hero-tile-desc">Karriereseiten automatisch auf neue Stellen prüfen</div>
+        </button>
+        <button class="hero-tile" onclick="showTab('portals');hideWelcomeHero()">
+          <div class="hero-tile-icon">🌐</div>
+          <div class="hero-tile-title">Portale</div>
+          <div class="hero-tile-desc">Direktlinks zu über 45 Jobportalen</div>
+        </button>
+      </div>
+      <button class="hero-close" onclick="hideWelcomeHero()">Einführung ausblenden ✕</button>
+    </div>
+  </div>
 
   <div class="card">
     <div class="card-stripe"></div>
@@ -335,12 +367,22 @@
   </div>
 </div>
 
-<!-- Admin Panel Modal -->
-<div id="adminModal" class="modal-bg" style="display:none" onclick="if(event.target===this)closeAdminPanel()">
-  <div class="modal" style="max-width:720px;width:100%;">
-    <div class="modal-title">⚙️ Benutzerverwaltung</div>
-    <div class="modal-sub">Benutzer anzeigen, sperren/entsperren, E-Mail anpassen oder Konten löschen.</div>
-    <div id="adminStatus" class="mstatus" style="margin-bottom:12px;"></div>
+<!-- ADMIN TAB -->
+<div id="tabAdmin" style="display:none">
+  <div class="saved-hdr">
+    <div class="savtitle">⚙️ Administration</div>
+    <div style="display:flex;gap:8px;">
+      <button type="button" class="clrbtn" onclick="showTab('search')">← Zurück</button>
+      <button type="button" class="clrbtn" onclick="loadAdminUsers()">🔄 Aktualisieren</button>
+    </div>
+  </div>
+  <div id="adminStatus" class="mstatus" style="margin-bottom:12px;"></div>
+
+  <!-- Benutzerverwaltung -->
+  <div class="card">
+    <div class="card-stripe"></div>
+    <div class="lbl">👥 Benutzerverwaltung</div>
+    <div style="color:#6b6b80;font-size:13px;margin-bottom:16px;">Benutzer anzeigen, sperren/entsperren, E-Mail anpassen oder Konten löschen.</div>
     <div style="overflow-x:auto;">
       <table id="adminTable" style="width:100%;border-collapse:collapse;font-size:13px;">
         <thead>
@@ -358,26 +400,29 @@
         </tbody>
       </table>
     </div>
-    <div style="border-top:1px solid #1e1e30;margin-top:20px;padding-top:16px;">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;flex-wrap:wrap;gap:8px;">
-        <div style="font-size:12px;font-weight:600;color:#6b6b80;text-transform:uppercase;letter-spacing:.06em;">Datensicherung</div>
-        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
-          <button type="button" class="mcancelbtn" style="border-color:rgba(255,209,102,.3);color:#ffd166;" onclick="doManualBackup()">🔁 Jetzt sichern</button>
-          <button type="button" class="mcancelbtn" style="border-color:rgba(255,209,102,.3);color:#ffd166;" onclick="doBackup()">💾 Aktuellen Stand herunterladen</button>
-          <label style="display:inline-flex;">
-            <input type="file" id="restoreFile" accept=".json" style="display:none" onchange="doRestore(this)">
-            <button type="button" class="mcancelbtn" style="border-color:rgba(38,132,255,.3);color:#4da3ff;cursor:pointer;" onclick="document.getElementById('restoreFile').click()">📥 Backup einspielen</button>
-          </label>
-        </div>
-      </div>
-      <span id="backupStatus" style="font-size:12px;color:#6b6b80;display:block;margin-bottom:8px;"></span>
-      <div id="backupList" style="font-size:12px;color:#6b6b80;max-height:160px;overflow-y:auto;"></div>
-    </div>
-    <div class="mactions" style="margin-top:16px;">
-      <button type="button" class="mcancelbtn" onclick="closeAdminPanel()">Schließen</button>
-      <button type="button" class="msavebtn" style="flex:0;padding:10px 20px;" onclick="loadAdminUsers()">🔄 Aktualisieren</button>
-    </div>
   </div>
+
+  <!-- Datensicherung -->
+  <div class="card">
+    <div class="card-stripe" style="background:linear-gradient(90deg,#ffd166,#ff8c42);"></div>
+    <div class="lbl">💾 Datensicherung</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:14px;">
+      <button type="button" class="mcancelbtn" style="border-color:rgba(255,209,102,.3);color:#ffd166;" onclick="doManualBackup()">🔁 Jetzt sichern</button>
+      <button type="button" class="mcancelbtn" style="border-color:rgba(255,209,102,.3);color:#ffd166;" onclick="doBackup()">💾 Aktuellen Stand herunterladen</button>
+      <label style="display:inline-flex;">
+        <input type="file" id="restoreFile" accept=".json" style="display:none" onchange="doRestore(this)">
+        <button type="button" class="mcancelbtn" style="border-color:rgba(38,132,255,.3);color:#4da3ff;cursor:pointer;" onclick="document.getElementById('restoreFile').click()">📥 Backup einspielen</button>
+      </label>
+    </div>
+    <span id="backupStatus" style="font-size:12px;color:#6b6b80;display:block;margin-bottom:8px;"></span>
+    <div id="backupList" style="font-size:12px;color:#6b6b80;"></div>
+  </div>
+</div>
+
+<div style="text-align:center;color:#252535;font-size:12px;padding:32px 0 20px;border-top:1px solid #111122;margin-top:32px;">
+  <a href="/impressum.html" style="color:#333350;text-decoration:none;margin:0 10px;" onmouseover="this.style.color='#555570'" onmouseout="this.style.color='#333350'">Impressum</a>
+  ·
+  <a href="/datenschutz.html" style="color:#333350;text-decoration:none;margin:0 10px;" onmouseover="this.style.color='#555570'" onmouseout="this.style.color='#333350'">Datenschutz</a>
 </div>
 
 <script src="app.js"></script>

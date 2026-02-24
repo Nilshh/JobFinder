@@ -36,13 +36,23 @@ function showTab(t){
   document.getElementById("tabSaved").style.display   = t==="saved"   ?"block":"none";
   document.getElementById("tabPortals").style.display = t==="portals" ?"block":"none";
   document.getElementById("tabWatch").style.display   = t==="watch"   ?"block":"none";
+  document.getElementById("tabAdmin").style.display   = t==="admin"   ?"block":"none";
   document.getElementById("nb1").classList.toggle("on", t==="search");
   document.getElementById("nb2").classList.toggle("on", t==="saved");
   document.getElementById("nb3").classList.toggle("on", t==="portals");
   document.getElementById("nb4").classList.toggle("on", t==="watch");
+  const ab = document.getElementById("adminBtn");
+  if(ab) ab.classList.toggle("active", t==="admin");
   if(t==="saved")   renderSaved();
   if(t==="portals") renderPortalsTab();
   if(t==="watch")   loadWatchTab();
+  if(t==="admin")   { loadAdminUsers(); loadBackupList(); }
+}
+
+function hideWelcomeHero(){
+  localStorage.setItem("jf2_hero_hidden", "1");
+  const h = document.getElementById("welcomeHero");
+  if(h) h.classList.add("hero-hidden");
 }
 
 // ── Chips ──
@@ -1462,6 +1472,10 @@ async function checkAuth(){
   updateUserBar();
   refreshBadge();
   updateJiraCfgBtn();
+  if(localStorage.getItem("jf2_hero_hidden")){
+    const h = document.getElementById("welcomeHero");
+    if(h) h.classList.add("hero-hidden");
+  }
 }
 
 function updateUserBar(){
@@ -1482,15 +1496,8 @@ function updateUserBar(){
 }
 
 // ── Admin Panel ──────────────────────────────────────────────────
-function openAdminPanel(){
-  document.getElementById("adminModal").style.display = "flex";
-  loadAdminUsers();
-  loadBackupList();
-}
-
-function closeAdminPanel(){
-  document.getElementById("adminModal").style.display = "none";
-}
+function openAdminPanel(){ showTab("admin"); }
+function closeAdminPanel(){ showTab("search"); }
 
 async function loadAdminUsers(){
   const tbody = document.getElementById("adminTbody");
