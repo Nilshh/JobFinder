@@ -10,7 +10,9 @@
 body{font-family:-apple-system,'Segoe UI',system-ui,sans-serif;background:#0c0c18;color:#e4e4f0;min-height:100vh;padding:0 16px 64px;line-height:1.7;}
 .wrap{max-width:720px;margin:0 auto;}
 .topbar{display:flex;align-items:center;justify-content:space-between;padding:20px 0 18px;margin-bottom:40px;border-bottom:1px solid #1a1a2c;}
-.logo{font-family:Georgia,serif;font-size:22px;font-weight:900;background:linear-gradient(135deg,#ff4d6d,#ff8c42,#ffd166);-webkit-background-clip:text;-webkit-text-fill-color:transparent;text-decoration:none;}
+.logo{font-family:Georgia,serif;font-size:22px;font-weight:900;text-decoration:none;}
+.logo-job{background:linear-gradient(135deg,#00c8d7,#0097a7,#4fc660);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;}
+.logo-pipe{color:#e4e4f0;}
 .back{background:transparent;border:1px solid #1e1e2e;border-radius:10px;color:#555570;cursor:pointer;font-size:13px;font-weight:600;padding:9px 16px;font-family:inherit;text-decoration:none;transition:border-color .18s,color .18s;}
 .back:hover{border-color:#383858;color:#9090b0;}
 h1{font-size:28px;font-weight:900;letter-spacing:-.5px;margin-bottom:8px;}
@@ -20,67 +22,48 @@ h2{font-size:13px;font-weight:700;letter-spacing:2px;text-transform:uppercase;co
 p{color:#c0c0d8;font-size:15px;margin-bottom:8px;}
 a{color:#ff4d6d;text-decoration:none;}
 a:hover{text-decoration:underline;}
-.placeholder{color:#ffd166;background:rgba(255,209,102,.08);border:1px solid rgba(255,209,102,.2);border-radius:6px;padding:1px 8px;font-size:14px;font-style:normal;}
-.notice{background:rgba(255,209,102,.05);border:1px solid rgba(255,209,102,.15);border-radius:10px;padding:14px 18px;color:#a09060;font-size:13px;margin-bottom:32px;line-height:1.6;}
+.missing{color:#ffd166;font-style:italic;}
+.notice{background:rgba(255,209,102,.05);border:1px solid rgba(255,209,102,.15);border-radius:10px;padding:14px 18px;color:#a09060;font-size:13px;margin-bottom:32px;line-height:1.6;display:none;}
 </style>
 </head>
 <body>
 <div class="wrap">
   <div class="topbar">
-    <a class="logo" href="/">JobPipeline</a>
+    <a class="logo" href="/"><span class="logo-job">Job</span><span class="logo-pipe">Pipeline</span></a>
     <a class="back" href="/">← Zurück</a>
   </div>
 
   <h1>Impressum</h1>
   <p class="sub">Angaben gemäß § 5 TMG</p>
 
-  <div class="notice">
-    ⚠️ <strong>Vorlage – Platzhalter ausfüllen.</strong> Alle mit <em class="placeholder">gelb</em> markierten Felder müssen durch echte Angaben ersetzt werden, bevor die Seite veröffentlicht wird.
+  <div class="notice" id="fillNotice">
+    ⚠️ <strong>Betreiberdaten fehlen.</strong> Bitte die Felder <code>OPERATOR_NAME</code>, <code>OPERATOR_EMAIL</code> etc. in der <code>.env</code>-Datei ausfüllen und den Server neu starten.
   </div>
 
   <div class="section">
     <h2>Betreiber</h2>
     <p>
-      <em class="placeholder">Vorname Nachname</em><br>
-      <em class="placeholder">Straße Hausnummer</em><br>
-      <em class="placeholder">PLZ Ort</em><br>
-      <em class="placeholder">Land</em>
+      <span data-f="name" class="missing">–</span><br>
+      <span data-f="street" class="missing">–</span><br>
+      <span data-f="city" class="missing">–</span><br>
+      <span data-f="country">Deutschland</span>
     </p>
   </div>
 
   <div class="section">
     <h2>Kontakt</h2>
     <p>
-      E-Mail: <a href="mailto:[E-MAIL]"><em class="placeholder">name@beispiel.de</em></a><br>
-      <!-- Telefon optional, aber empfohlen: -->
-      <!-- Telefon: <em class="placeholder">+49 000 000000</em> -->
+      E-Mail: <a data-f="email-link" href="#"><span class="missing">–</span></a><br>
+      <span id="phoneRow" style="display:none">Telefon: <span data-f="phone"></span></span>
     </p>
   </div>
-
-  <!-- Nur ausfüllen falls gewerblich tätig oder UG/GmbH/AG etc. -->
-  <!--
-  <div class="section">
-    <h2>Handelsregister</h2>
-    <p>
-      Registergericht: <em class="placeholder">Amtsgericht XY</em><br>
-      Registernummer: <em class="placeholder">HRB 00000</em>
-    </p>
-  </div>
-
-  <div class="section">
-    <h2>Umsatzsteuer-ID</h2>
-    <p>
-      USt-IdNr. gemäß § 27a UStG: <em class="placeholder">DE000000000</em>
-    </p>
-  </div>
-  -->
 
   <div class="section">
     <h2>Verantwortlich für den Inhalt</h2>
     <p>
       Gemäß § 55 Abs. 2 RStV:<br>
-      <em class="placeholder">Vorname Nachname</em><br>
-      <em class="placeholder">Straße Hausnummer, PLZ Ort</em>
+      <span data-f="name" class="missing">–</span><br>
+      <span data-f="street" class="missing">–</span>, <span data-f="city" class="missing">–</span>
     </p>
   </div>
 
@@ -94,8 +77,36 @@ a:hover{text-decoration:underline;}
     <h2>Urheberrecht</h2>
     <p>Die durch den Betreiber erstellten Inhalte und Werke auf dieser Website unterliegen dem deutschen Urheberrecht. Die Vervielfältigung, Bearbeitung, Verbreitung und jede Art der Verwertung außerhalb der Grenzen des Urheberrechts bedürfen der schriftlichen Zustimmung des Autors.</p>
   </div>
-
-  <p style="color:#333350;font-size:12px;margin-top:48px;">Zuletzt aktualisiert: <em class="placeholder">Monat Jahr</em></p>
 </div>
+
+<script>
+fetch('/meta/legal').then(r => r.json()).then(d => {
+  const missing = !d.operator_name || !d.operator_email;
+  if(missing) document.getElementById('fillNotice').style.display = 'block';
+
+  document.querySelectorAll('[data-f]').forEach(el => {
+    const f = el.dataset.f;
+    if(f === 'email-link'){
+      el.href = d.operator_email ? 'mailto:' + d.operator_email : '#';
+      el.innerHTML = d.operator_email
+        ? d.operator_email
+        : '<span class="missing">–</span>';
+    } else {
+      const val = {
+        name: d.operator_name, street: d.operator_street,
+        city: d.operator_city, country: d.operator_country,
+        phone: d.operator_phone
+      }[f];
+      if(val){ el.textContent = val; el.classList.remove('missing'); }
+    }
+  });
+
+  if(d.operator_phone){
+    document.getElementById('phoneRow').style.display = '';
+  }
+}).catch(() => {
+  document.getElementById('fillNotice').style.display = 'block';
+});
+</script>
 </body>
 </html>

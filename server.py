@@ -1210,6 +1210,21 @@ def watch_keywords_update():
     return jsonify({"ok": True})
 
 
+# ── Legal Meta ────────────────────────────────────────────────────
+
+@app.route("/meta/legal")
+def meta_legal():
+    return jsonify({
+        "operator_name":    os.environ.get("OPERATOR_NAME", ""),
+        "operator_street":  os.environ.get("OPERATOR_STREET", ""),
+        "operator_city":    os.environ.get("OPERATOR_CITY", ""),
+        "operator_country": os.environ.get("OPERATOR_COUNTRY", ""),
+        "operator_email":   os.environ.get("OPERATOR_EMAIL", ""),
+        "operator_phone":   os.environ.get("OPERATOR_PHONE", ""),
+        "log_retention":    os.environ.get("LOG_RETENTION_DAYS", "30"),
+        "backup_retention": os.environ.get("BACKUP_RETENTION_DAYS", "30"),
+    })
+
 # ── Startup ───────────────────────────────────────────────────────
 
 _schedule_backup()
