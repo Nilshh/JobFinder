@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- dark rounded square background -->
+  <rect width="32" height="32" rx="7" fill="#0d1b2e"/>
+  <!-- pipe connector -->
+  <rect x="3" y="14" width="26" height="4" rx="2" fill="#00b4c8" opacity="0.18"/>
+  <!-- node 1 – teal -->
+  <circle cx="8" cy="16" r="4.8" fill="#00c8d7"/>
+  <!-- node 2 – teal mid -->
+  <circle cx="16" cy="16" r="4.8" fill="#0097a7"/>
+  <!-- node 3 – green -->
+  <circle cx="24" cy="16" r="4.8" fill="#4fc660"/>
+  <!-- inner connector dots (white centres) -->
+  <circle cx="8"  cy="16" r="1.8" fill="rgba(255,255,255,0.80)"/>
+  <circle cx="16" cy="16" r="1.8" fill="rgba(255,255,255,0.80)"/>
+  <circle cx="24" cy="16" r="1.8" fill="rgba(255,255,255,0.80)"/>
+</svg>

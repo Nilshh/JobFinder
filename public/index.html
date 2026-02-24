@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>JobPipeline</title>
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -14,17 +15,17 @@
     <svg viewBox="0 0 60 30" height="36" width="60" fill="none" style="flex-shrink:0" xmlns="http://www.w3.org/2000/svg">
       <defs>
         <linearGradient id="plg" x1="0" y1="0" x2="60" y2="0" gradientUnits="userSpaceOnUse">
-          <stop stop-color="#ff4d6d"/>
-          <stop offset="0.5" stop-color="#ff8c42"/>
-          <stop offset="1" stop-color="#ffd166"/>
+          <stop stop-color="#00c8d7"/>
+          <stop offset="0.5" stop-color="#0097a7"/>
+          <stop offset="1" stop-color="#4fc660"/>
         </linearGradient>
       </defs>
       <!-- connecting pipe -->
-      <rect x="8" y="12" width="44" height="6" rx="3" fill="url(#plg)" opacity="0.28"/>
+      <rect x="8" y="12" width="44" height="6" rx="3" fill="url(#plg)" opacity="0.22"/>
       <!-- stage nodes -->
-      <circle cx="8" cy="15" r="8" fill="#ff4d6d"/>
+      <circle cx="8"  cy="15" r="8" fill="#00c8d7"/>
       <circle cx="30" cy="15" r="8" fill="url(#plg)"/>
-      <circle cx="52" cy="15" r="8" fill="#ffd166"/>
+      <circle cx="52" cy="15" r="8" fill="#4fc660"/>
       <!-- icons inside nodes: briefcase, gear, checkmark -->
       <rect x="5" y="13" width="6" height="4" rx="1" fill="rgba(255,255,255,0.85)"/>
       <path d="M6.5 13v-1a1 1 0 011-1h1a1 1 0 011 1v1" stroke="rgba(255,255,255,0.85)" stroke-width="0.9" fill="none" stroke-linecap="round"/>
@@ -33,7 +34,7 @@
       <path d="M27.5 12.5l1.2 1.2M32.5 17.5l-1.2-1.2M27.5 17.5l1.2-1.2M32.5 12.5l-1.2 1.2" stroke="rgba(255,255,255,0.75)" stroke-width="1" stroke-linecap="round"/>
       <path d="M49 15.2l2 2 4-4" stroke="rgba(255,255,255,0.9)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
     </svg>
-    JobPipeline
+    <span style="-webkit-text-fill-color:transparent;background:linear-gradient(135deg,#00c8d7,#0097a7,#4fc660);-webkit-background-clip:text;background-clip:text;">Job</span><span style="color:#e4e4f0;-webkit-text-fill-color:#e4e4f0;">Pipeline</span>
   </div>
   <div class="nav">
     <button type="button" class="nbtn on" id="nb1" onclick="showTab('search')">🔍 Suche</button>

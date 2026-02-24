@@ -4,7 +4,7 @@ body{font-family:-apple-system,'Segoe UI',system-ui,sans-serif;background:#0c0c1
 
 /* ── Nav ── */
 .topbar{display:flex;align-items:center;justify-content:space-between;padding:20px 0 18px;margin-bottom:28px;gap:12px;flex-wrap:wrap;border-bottom:1px solid #1a1a2c;}
-.logo{display:flex;align-items:center;gap:10px;font-family:Georgia,serif;font-size:clamp(20px,3.5vw,32px);font-weight:900;background:linear-gradient(135deg,#ff4d6d,#ff8c42,#ffd166);-webkit-background-clip:text;-webkit-text-fill-color:transparent;letter-spacing:-0.5px;}
+.logo{display:flex;align-items:center;gap:10px;font-family:Georgia,serif;font-size:clamp(20px,3.5vw,32px);font-weight:900;letter-spacing:-0.5px;}
 .nav{display:flex;gap:6px;flex-wrap:wrap;}
 .nbtn{background:transparent;border:1px solid #1e1e2e;border-radius:10px;color:#555570;cursor:pointer;font-size:13px;font-weight:600;padding:9px 16px;font-family:inherit;position:relative;transition:border-color .18s,color .18s,background .18s;}
 .nbtn:hover{border-color:#383858;color:#9090b0;}
