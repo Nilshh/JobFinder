@@ -164,8 +164,53 @@ def _find_next_page(pw_page, base_url):
     return None
 
 
+def _find_load_more_btn(pw_page):
+    """Sucht einen 'Mehr anzeigen'-Button, der Inhalte ohne Seitenwechsel nachlädt."""
+    # 1. CSS-Klassen-Selektoren (typische Load-More-Patterns)
+    for sel in [
+        'button[class*="load-more"]', 'a[class*="load-more"]', '[class*="load-more"] button',
+        'button[class*="loadMore"]',  'a[class*="loadMore"]',
+        'button[class*="show-more"]', 'a[class*="show-more"]', '[class*="show-more"] button',
+        '[class*="moreResults"]',     '[class*="more-results"]',
+        '[data-load-more]',           '[data-action*="loadMore"]', '[data-action*="load-more"]',
+    ]:
+        try:
+            el = pw_page.query_selector(sel)
+            if el and el.is_visible() and el.is_enabled():
+                href = el.get_attribute("href") or ""
+                # Echte Navigations-URLs überspringen (werden von _find_next_page behandelt)
+                if href and href not in ("#", "javascript:void(0)", "javascript:", "") \
+                        and not href.startswith("javascript:"):
+                    continue
+                return el
+        except Exception:
+            pass
+
+    # 2. Text-basierte Suche (Deutsch + Englisch)
+    load_more_texts = [
+        "mehr anzeigen", "mehr laden", "mehr jobs", "weitere stellen",
+        "weitere jobs", "weitere ergebnisse", "mehr ergebnisse",
+        "alle stellen", "mehr stellenanzeigen", "load more", "show more", "more jobs",
+    ]
+    try:
+        for el in pw_page.query_selector_all("button, [role='button'], a[onclick], a[href='#']"):
+            if not el.is_visible() or not el.is_enabled():
+                continue
+            label = (el.inner_text() or "").strip().lower()
+            if any(t in label for t in load_more_texts):
+                href = el.get_attribute("href") or ""
+                if href and href not in ("#", "javascript:void(0)", "javascript:", "") \
+                        and not href.startswith("javascript:"):
+                    continue
+                return el
+    except Exception:
+        pass
+
+    return None
+
+
 def _scrape_career_page(url, keywords):
-    """Rendert Karriereseiten mit Playwright inkl. Pagination und extrahiert Treffer."""
+    """Rendert Karriereseiten mit Playwright inkl. Pagination + Load-More und extrahiert Treffer."""
     from playwright.sync_api import sync_playwright
     kw_lower = [k.strip().lower() for k in keywords if k.strip()]
     found, seen = [], set()
@@ -183,24 +228,54 @@ def _scrape_career_page(url, keywords):
         page.goto(url, wait_until="networkidle", timeout=30000)
         page.wait_for_timeout(1500)
 
+        used_load_more = False
         for page_num in range(WATCH_MAX_PAGES):
+            prev_count = len(found)
             _extract_jobs_from_html(page.content(), url, kw_lower, found, seen)
-            print(f"[Watch] Seite {page_num + 1}: {len(found)} Treffer gesamt", flush=True)
+            new_this_round = len(found) - prev_count
+            print(f"[Watch] Runde {page_num + 1}: {new_this_round} neue Treffer ({len(found)} gesamt)", flush=True)
+
+            # Nach "Mehr anzeigen"-Klick ohne neue Keyword-Treffer → stoppen
+            if used_load_more and new_this_round == 0:
+                print("[Watch] 'Mehr anzeigen' ohne neue Treffer – stoppe.", flush=True)
+                break
 
             if page_num + 1 >= WATCH_MAX_PAGES:
                 break
 
+            # Strategie 1: klassische Pagination (neue URL)
             next_url = _find_next_page(page, url)
-            if not next_url:
-                break
+            if next_url:
+                used_load_more = False
+                time.sleep(max(1, WATCH_SCRAPE_DELAY // 2))
+                try:
+                    page.goto(next_url, wait_until="networkidle", timeout=30000)
+                    page.wait_for_timeout(1200)
+                except Exception as e:
+                    print(f"[Watch] Pagination-Fehler: {e}", flush=True)
+                    break
+                continue
 
-            time.sleep(max(1, WATCH_SCRAPE_DELAY // 2))   # kurze Pause zwischen Seiten
-            try:
-                page.goto(next_url, wait_until="networkidle", timeout=30000)
-                page.wait_for_timeout(1200)
-            except Exception as e:
-                print(f"[Watch] Pagination-Fehler auf Seite {page_num + 2}: {e}", flush=True)
-                break
+            # Strategie 2: "Mehr anzeigen"-Button (gleiche Seite, JS lädt mehr Inhalt)
+            btn = _find_load_more_btn(page)
+            if btn:
+                used_load_more = True
+                try:
+                    btn.scroll_into_view_if_needed()
+                    btn.click()
+                    try:
+                        page.wait_for_load_state("networkidle", timeout=10000)
+                    except Exception:
+                        page.wait_for_timeout(2000)
+                    page.wait_for_timeout(800)
+                except Exception as e:
+                    print(f"[Watch] 'Mehr anzeigen'-Fehler: {e}", flush=True)
+                    break
+                continue
+
+            # Weder Pagination noch Load-More → fertig
+            print(f"[Watch] Keine weiteren Inhalte. Gesamt: {len(found)} Treffer.", flush=True)
+            break
 
         browser.close()
 
