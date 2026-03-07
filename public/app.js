@@ -225,7 +225,7 @@ async function doSearch(){
       return { title, list, count:az.count+ba.count+jobicy.count };
     }));
 
-    const saved = LS.saved(), ign = LS.ignored();
+    const saved = LS.saved(), ignSet = new Set(LS.ignored());
     const seen = new Set(), merged = [];
     let total=0, skipSaved=0, skipIgn=0;
     const cutoff = days>0 ? Date.now()-days*86400000 : 0;
@@ -235,8 +235,8 @@ async function doSearch(){
       list.forEach(j => {
         if(cutoff>0 && j.created && new Date(j.created)<cutoff) return;
         const k = jobKey(j);
-        if(ign.includes(k)){ skipIgn++; return; }
-        if(saved[k])        { skipSaved++; return; }
+        if(ignSet.has(k)){ skipIgn++; return; }
+        if(saved[k])     { skipSaved++; return; }
         if(!seen.has(k))    { seen.add(k); merged.push({...j, _t:title}); }
       });
     });
@@ -556,7 +556,7 @@ function renderWatchGlobalKw(kws){
   _watchGlobalKwCache = kws;
   const box = document.getElementById("watchGlobalKw");
   const kwHtml = kws.length
-    ? kws.map(k => `<span class="watch-kw wgkw">${k}</span>`).join("")
+    ? kws.map(k => `<span class="watch-kw wgkw">${esc(k)}</span>`).join("")
     : '<span class="wgkw-empty">Keine globalen Suchbegriffe gesetzt</span>';
   box.innerHTML = `<div class="watch-gkw-card">
     <div class="wgkw-header">
@@ -624,26 +624,26 @@ function renderWatchCompanies(list){
     const statusDot = c.last_check_status === "ok"
       ? '<span class="sdot sdot-ok" title="Zuletzt erfolgreich geprüft"></span>'
       : c.last_check_status?.startsWith("error")
-        ? `<span class="sdot sdot-err" title="${c.last_check_status}"></span>`
+        ? `<span class="sdot sdot-err" title="${esc(c.last_check_status)}"></span>`
         : '<span class="sdot sdot-idle" title="Noch nicht geprüft"></span>';
     const lastCheck = c.last_checked_at
       ? new Date(c.last_checked_at+"Z").toLocaleString("de-DE",{dateStyle:"short",timeStyle:"short"})
       : "–";
-    const kwHtml = kw.map(k=>`<span class="watch-kw">${k}</span>`).join("");
+    const kwHtml = kw.map(k=>`<span class="watch-kw">${esc(k)}</span>`).join("");
     return `<div class="watch-company-card" id="wc${c.id}">
       <div class="wc-header">
         <input type="checkbox" class="wc-check" onchange="toggleWatchSelect(${c.id},this)">
-        <div class="wc-title">${statusDot}${c.name}
+        <div class="wc-title">${statusDot}${esc(c.name)}
           ${!c.active ? '<span class="watch-paused">pausiert</span>' : ''}
         </div>
         <div class="wc-actions">
           <button class="wc-btn" onclick="doCheckNow(${c.id})" title="Jetzt prüfen">🔍</button>
           <button class="wc-btn" onclick="editWatch(${c.id})" title="Bearbeiten">✏️</button>
           <button class="wc-btn" onclick="toggleWatchActive(${c.id},${c.active?0:1})" title="${c.active?'Pausieren':'Aktivieren'}">${c.active?"⏸":"▶"}</button>
-          <button class="wc-btn wc-del" onclick="deleteWatch(${c.id},'${c.name.replace(/'/g,"\\'")}')">🗑</button>
+          <button class="wc-btn wc-del" onclick="deleteWatch(${c.id},'${esc(c.name).replace(/'/g,"\\'")}')">🗑</button>
         </div>
       </div>
-      <div class="wc-url"><a href="${c.career_url}" target="_blank" rel="noopener">${c.career_url}</a></div>
+      <div class="wc-url"><a href="${esc(c.career_url)}" target="_blank" rel="noopener">${esc(c.career_url)}</a></div>
       <div class="wc-meta">
         <span>Zuletzt geprüft: ${lastCheck}</span>
         <span>· alle ${c.check_interval_hours}h</span>
@@ -674,8 +674,8 @@ function renderWatchJobs(jobs, companies){
       <div style="display:flex;align-items:flex-start;gap:10px;">
         <div style="flex:1;min-width:0;">
           ${j.is_new ? '<span class="badge-new">Neu</span> ' : ""}
-          <a class="wjob-title" href="${j.url}" target="_blank" rel="noopener">${j.title}</a>
-          <div class="wjob-meta">${j.company_name} · ${age}</div>
+          <a class="wjob-title" href="${esc(j.url)}" target="_blank" rel="noopener">${esc(j.title)}</a>
+          <div class="wjob-meta">${esc(j.company_name)} · ${age}</div>
         </div>
         <button class="wc-btn wjob-save-btn${isSaved?" wjob-saved":""}" onclick="saveWatchJob(${j.id})" title="${isSaved?"Bereits im Merkzettel":"Auf Merkzettel speichern"}"${isSaved?" disabled":""}>
           ${isSaved?"✓":"💾"}
@@ -1588,15 +1588,15 @@ async function loadAdminUsers(){
       const lockLabel  = u.is_locked ? "Entsperren" : "Sperren";
       const lockClass  = u.is_locked ? "admin-action ok" : "admin-action";
       return `<tr data-uid="${u.id}">
-        <td style="font-weight:600">${_esc(u.username)}${isSelf ? ' <span style="color:#6b6b80;font-size:11px;">(du)</span>' : ''}</td>
-        <td><input class="admin-ipt" data-field="email" value="${_esc(u.email||'')}" placeholder="–" onkeydown="if(event.key==='Enter')_adminSaveField(${u.id},this)"></td>
+        <td style="font-weight:600">${esc(u.username)}${isSelf ? ' <span style="color:#6b6b80;font-size:11px;">(du)</span>' : ''}</td>
+        <td><input class="admin-ipt" data-field="email" value="${esc(u.email||'')}" placeholder="–" onkeydown="if(event.key==='Enter')_adminSaveField(${u.id},this)"></td>
         <td style="color:#6b6b80">${date}</td>
         <td style="text-align:center">${adminBadge}</td>
         <td style="text-align:center">${statusBadge}</td>
         <td style="text-align:right;white-space:nowrap;display:flex;gap:6px;justify-content:flex-end;">
           <button class="admin-action ok" onclick="_adminSaveField(${u.id},this.closest('tr').querySelector('[data-field=email]'))">💾</button>
           ${!isSelf ? `<button class="${lockClass}" onclick="adminToggleLock(${u.id},${u.is_locked?0:1})">${lockLabel}</button>` : ''}
-          ${!isSelf ? `<button class="admin-action" style="border-color:rgba(255,77,109,.3);color:#ff4d6d;" onclick="adminDeleteUser(${u.id},'${_esc(u.username)}')">Löschen</button>` : ''}
+          ${!isSelf ? `<button class="admin-action" style="border-color:rgba(255,77,109,.3);color:#ff4d6d;" onclick="adminDeleteUser(${u.id},'${esc(u.username)}')">Löschen</button>` : ''}
           ${!isSelf ? `<button class="admin-action" onclick="adminToggleAdmin(${u.id},${u.is_admin?0:1})">${u.is_admin ? 'Admin entziehen' : 'Zum Admin'}</button>` : ''}
         </td>
       </tr>`;
@@ -1605,8 +1605,6 @@ async function loadAdminUsers(){
     status.innerHTML = `<span class="errbx">Netzwerkfehler: ${e.message}</span>`;
   }
 }
-
-function _esc(s){ const d=document.createElement("div"); d.textContent=String(s||""); return d.innerHTML; }
 
 async function _adminPatch(uid, payload){
   const r = await fetch(`/admin/users/${uid}`, {
@@ -1746,15 +1744,19 @@ async function loadUserData(){
   } catch(e) {}
 }
 
-async function syncUserData(){
+let _syncTimer = null;
+function syncUserData(){
   if(!AUTH.user) return;
-  try {
-    await fetch("/user/data", {
-      method:"POST", credentials:"include",
-      headers:{"Content-Type":"application/json"},
-      body: JSON.stringify({ saved:LS.saved(), ignored:LS.ignored(), jira:JIRA.get() })
-    });
-  } catch(e) {}
+  clearTimeout(_syncTimer);
+  _syncTimer = setTimeout(async () => {
+    try {
+      await fetch("/user/data", {
+        method:"POST", credentials:"include",
+        headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({ saved:LS.saved(), ignored:LS.ignored(), jira:JIRA.get() })
+      });
+    } catch(e) {}
+  }, 1000);
 }
 
 function requireAuth(hint, action){

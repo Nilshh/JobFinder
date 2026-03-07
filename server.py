@@ -44,9 +44,8 @@ WATCH_MAX_PAGES        = int(os.environ.get("WATCH_MAX_PAGES",    "10"))      # 
 
 # ── Automatisches Backup ──────────────────────────────────────────
 
-def _make_backup():
-    """Erstellt eine JSON-Sicherung aller Nutzerdaten und gibt den Dateipfad zurück."""
-    os.makedirs(BACKUP_DIR, exist_ok=True)
+def _build_backup_payload():
+    """Erstellt das Backup-Payload-Dict mit allen Nutzerdaten inkl. Watch-Daten."""
     with get_db() as db:
         users = [dict(r) for r in db.execute(
             "SELECT id, username, password_hash, email, is_admin, is_locked, created_at FROM users"
@@ -54,14 +53,29 @@ def _make_backup():
         user_data = [dict(r) for r in db.execute(
             "SELECT user_id, saved, ignored, jira_config FROM user_data"
         ).fetchall()]
-    payload = {
-        "version": "1.0",
+        watches = [dict(r) for r in db.execute(
+            "SELECT id, user_id, name, career_url, keywords, active, check_interval_hours, "
+            "last_checked_at, last_check_status, created_at FROM company_watches"
+        ).fetchall()]
+        watch_jobs = [dict(r) for r in db.execute(
+            "SELECT id, company_id, title, url, found_at, last_seen_at, is_new FROM watch_jobs"
+        ).fetchall()]
+    return {
+        "version": "1.1",
         "app": "JobPipeline",
-        "created": datetime.utcnow().isoformat(),
+        "created": datetime.now(timezone.utc).isoformat(),
         "users": users,
         "user_data": user_data,
+        "company_watches": watches,
+        "watch_jobs": watch_jobs,
     }
-    ts   = datetime.utcnow().strftime("%Y-%m-%d_%H-%M")
+
+
+def _make_backup():
+    """Erstellt eine JSON-Sicherung aller Nutzerdaten und gibt den Dateipfad zurück."""
+    os.makedirs(BACKUP_DIR, exist_ok=True)
+    payload = _build_backup_payload()
+    ts   = datetime.now(timezone.utc).strftime("%Y-%m-%d_%H-%M")
     path = os.path.join(BACKUP_DIR, f"backup_{ts}.json")
     with open(path, "w", encoding="utf-8") as f:
         json.dump(payload, f, ensure_ascii=False, indent=2)
@@ -76,7 +90,7 @@ def _schedule_backup():
     """Startet einen Hintergrund-Thread, der täglich um BACKUP_HOUR UTC eine Sicherung erstellt."""
     def _loop():
         while True:
-            now    = datetime.utcnow()
+            now    = datetime.now(timezone.utc)
             target = now.replace(hour=BACKUP_HOUR, minute=0, second=0, microsecond=0)
             if target <= now:
                 target += timedelta(days=1)
@@ -282,6 +296,43 @@ def _scrape_career_page(url, keywords):
     return found
 
 
+def _save_watch_results(wid, jobs):
+    """Speichert Scraping-Ergebnisse: neue Jobs einfügen, bestehende updaten. Gibt Anzahl neuer zurück."""
+    now = datetime.now(timezone.utc).isoformat()
+    with get_db() as db:
+        existing = {r["url"] for r in db.execute(
+            "SELECT url FROM watch_jobs WHERE company_id = ?", [wid]
+        ).fetchall()}
+        new_count = 0
+        for j in jobs:
+            if j["url"] not in existing:
+                db.execute(
+                    "INSERT INTO watch_jobs (company_id, title, url) VALUES (?, ?, ?)",
+                    [wid, j["title"], j["url"]]
+                )
+                new_count += 1
+            else:
+                db.execute(
+                    "UPDATE watch_jobs SET last_seen_at = ? WHERE company_id = ? AND url = ?",
+                    [now, wid, j["url"]]
+                )
+        db.execute(
+            "UPDATE company_watches SET last_checked_at = ?, last_check_status = 'ok' WHERE id = ?",
+            [now, wid]
+        )
+    return new_count
+
+
+def _mark_watch_error(wid, error):
+    """Markiert einen Watch-Check als fehlgeschlagen."""
+    now = datetime.now(timezone.utc).isoformat()
+    with get_db() as db:
+        db.execute(
+            "UPDATE company_watches SET last_checked_at = ?, last_check_status = ? WHERE id = ?",
+            [now, f"error: {str(error)[:200]}", wid]
+        )
+
+
 def _run_watch_checks():
     """Prüft alle fälligen aktiven Watches und speichert neue Treffer."""
     with get_db() as db:
@@ -294,39 +345,16 @@ def _run_watch_checks():
     for idx, w in enumerate([dict(r) for r in due]):
         if idx > 0:
             time.sleep(WATCH_SCRAPE_DELAY)   # Pause zwischen Unternehmen
-        now = datetime.utcnow().isoformat()
         uid = w["user_id"]
         if uid not in user_kw_cache:
             user_kw_cache[uid] = _get_global_kw(uid)
         merged_kw = _merge_kw(user_kw_cache[uid], json.loads(w["keywords"]))
         try:
             jobs = _scrape_career_page(w["career_url"], merged_kw)
-            with get_db() as db:
-                existing = {r["url"] for r in db.execute(
-                    "SELECT url FROM watch_jobs WHERE company_id = ?", [w["id"]]
-                ).fetchall()}
-                for j in jobs:
-                    if j["url"] not in existing:
-                        db.execute(
-                            "INSERT INTO watch_jobs (company_id, title, url) VALUES (?, ?, ?)",
-                            [w["id"], j["title"], j["url"]]
-                        )
-                    else:
-                        db.execute(
-                            "UPDATE watch_jobs SET last_seen_at = ? WHERE company_id = ? AND url = ?",
-                            [now, w["id"], j["url"]]
-                        )
-                db.execute(
-                    "UPDATE company_watches SET last_checked_at = ?, last_check_status = 'ok' WHERE id = ?",
-                    [now, w["id"]]
-                )
+            _save_watch_results(w["id"], jobs)
             print(f"[Watch] '{w['name']}' geprüft – {len(jobs)} Treffer", flush=True)
         except Exception as e:
-            with get_db() as db:
-                db.execute(
-                    "UPDATE company_watches SET last_checked_at = ?, last_check_status = ? WHERE id = ?",
-                    [now, f"error: {str(e)[:200]}", w["id"]]
-                )
+            _mark_watch_error(w["id"], e)
             print(f"[Watch] Fehler bei '{w['name']}': {e}", flush=True)
 
 
@@ -347,12 +375,12 @@ def _schedule_watch_checks():
 def get_db():
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA journal_mode=WAL")
     return conn
 
 def init_db():
     os.makedirs(DATA_DIR, exist_ok=True)
     with get_db() as db:
+        db.execute("PRAGMA journal_mode=WAL")
         db.execute("""
             CREATE TABLE IF NOT EXISTS users (
                 id            INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -500,7 +528,7 @@ def add_cors(response):
     response.headers["Access-Control-Allow-Origin"]      = origin if origin else "*"
     response.headers["Access-Control-Allow-Credentials"] = "true"
     response.headers["Access-Control-Allow-Headers"]     = "Content-Type, Authorization, X-Jira-Domain"
-    response.headers["Access-Control-Allow-Methods"]     = "GET, POST, DELETE, OPTIONS"
+    response.headers["Access-Control-Allow-Methods"]     = "GET, POST, PATCH, DELETE, OPTIONS"
     return response
 
 
@@ -725,9 +753,9 @@ def change_password():
         row = db.execute(
             "SELECT password_hash FROM users WHERE id=?", [session["user_id"]]
         ).fetchone()
-    if not bcrypt.checkpw(current_pw.encode(), row["password_hash"].encode()):
+    if not check_password_hash(row["password_hash"], current_pw):
         return jsonify({"ok": False, "error": "Aktuelles Passwort ist falsch"}), 400
-    new_hash = bcrypt.hashpw(new_pw.encode(), bcrypt.gensalt()).decode()
+    new_hash = generate_password_hash(new_pw)
     with get_db() as db:
         db.execute("UPDATE users SET password_hash=? WHERE id=?", [new_hash, session["user_id"]])
     return jsonify({"ok": True})
@@ -955,6 +983,8 @@ def admin_delete_user(uid):
     if uid == session["user_id"]:
         return jsonify({"error": "Du kannst dich nicht selbst löschen"}), 400
     with get_db() as db:
+        db.execute("DELETE FROM watch_jobs WHERE company_id IN (SELECT id FROM company_watches WHERE user_id = ?)", [uid])
+        db.execute("DELETE FROM company_watches WHERE user_id = ?", [uid])
         db.execute("DELETE FROM user_data WHERE user_id = ?", [uid])
         db.execute("DELETE FROM password_reset_tokens WHERE user_id = ?", [uid])
         db.execute("DELETE FROM users WHERE id = ?", [uid])
@@ -968,21 +998,7 @@ def admin_delete_user(uid):
 def admin_backup():
     if request.method == "OPTIONS":
         return "", 204
-    with get_db() as db:
-        users = [dict(r) for r in db.execute(
-            "SELECT id, username, password_hash, email, is_admin, is_locked, created_at FROM users"
-        ).fetchall()]
-        user_data = [dict(r) for r in db.execute(
-            "SELECT user_id, saved, ignored, jira_config FROM user_data"
-        ).fetchall()]
-    backup = {
-        "version": "1.0",
-        "app": "JobPipeline",
-        "created": datetime.utcnow().isoformat(),
-        "users": users,
-        "user_data": user_data
-    }
-    return jsonify(backup)
+    return jsonify(_build_backup_payload())
 
 
 @app.route("/admin/restore", methods=["POST", "OPTIONS"])
@@ -995,8 +1011,12 @@ def admin_restore():
         return jsonify({"error": "Ungültiges oder inkompatibles Backup-Format"}), 400
     users     = data.get("users", [])
     user_data = data.get("user_data", [])
+    watches   = data.get("company_watches", [])
+    wjobs     = data.get("watch_jobs", [])
     try:
         with get_db() as db:
+            db.execute("DELETE FROM watch_jobs")
+            db.execute("DELETE FROM company_watches")
             db.execute("DELETE FROM password_reset_tokens")
             db.execute("DELETE FROM user_data")
             db.execute("DELETE FROM users")
@@ -1013,6 +1033,22 @@ def admin_restore():
                     "INSERT INTO user_data (user_id, saved, ignored, jira_config) VALUES (?, ?, ?, ?)",
                     [ud["user_id"], ud.get("saved", "{}"),
                      ud.get("ignored", "[]"), ud.get("jira_config", "{}")]
+                )
+            for w in watches:
+                db.execute(
+                    "INSERT INTO company_watches (id, user_id, name, career_url, keywords, active, "
+                    "check_interval_hours, last_checked_at, last_check_status, created_at) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    [w["id"], w["user_id"], w["name"], w["career_url"], w.get("keywords", "[]"),
+                     int(w.get("active", 1)), int(w.get("check_interval_hours", 24)),
+                     w.get("last_checked_at"), w.get("last_check_status"), w.get("created_at")]
+                )
+            for wj in wjobs:
+                db.execute(
+                    "INSERT INTO watch_jobs (id, company_id, title, url, found_at, last_seen_at, is_new) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                    [wj["id"], wj["company_id"], wj["title"], wj.get("url"),
+                     wj.get("found_at"), wj.get("last_seen_at"), int(wj.get("is_new", 1))]
                 )
         session.clear()
         return jsonify({"ok": True, "users": len(users)})
@@ -1031,7 +1067,7 @@ def list_backups():
         result.append({
             "name": os.path.basename(f),
             "size": stat.st_size,
-            "mtime": datetime.utcfromtimestamp(stat.st_mtime).isoformat(),
+            "mtime": datetime.fromtimestamp(stat.st_mtime, tz=timezone.utc).isoformat(),
         })
     return jsonify(result)
 
@@ -1141,37 +1177,12 @@ def watch_check_now(wid):
             return jsonify({"error": "Nicht gefunden"}), 404
         w = dict(row)
     merged_kw = _merge_kw(_get_global_kw(uid), json.loads(w["keywords"]))
-    now = datetime.utcnow().isoformat()
     try:
         jobs = _scrape_career_page(w["career_url"], merged_kw)
-        with get_db() as db:
-            existing = {r["url"] for r in db.execute(
-                "SELECT url FROM watch_jobs WHERE company_id = ?", [wid]
-            ).fetchall()}
-            new_count = 0
-            for j in jobs:
-                if j["url"] not in existing:
-                    db.execute(
-                        "INSERT INTO watch_jobs (company_id, title, url) VALUES (?, ?, ?)",
-                        [wid, j["title"], j["url"]]
-                    )
-                    new_count += 1
-                else:
-                    db.execute(
-                        "UPDATE watch_jobs SET last_seen_at = ? WHERE company_id = ? AND url = ?",
-                        [now, wid, j["url"]]
-                    )
-            db.execute(
-                "UPDATE company_watches SET last_checked_at = ?, last_check_status = 'ok' WHERE id = ?",
-                [now, wid]
-            )
+        new_count = _save_watch_results(wid, jobs)
         return jsonify({"ok": True, "total": len(jobs), "new": new_count})
     except Exception as e:
-        with get_db() as db:
-            db.execute(
-                "UPDATE company_watches SET last_checked_at = ?, last_check_status = ? WHERE id = ?",
-                [now, f"error: {str(e)[:200]}", wid]
-            )
+        _mark_watch_error(wid, e)
         return jsonify({"error": str(e)}), 500
 
 
