@@ -1167,7 +1167,7 @@ function renderDashboard(){
   const topCompanies = Object.entries(compMap).sort((a,b) => b[1]-a[1]).slice(0, 5);
   const maxC = topCompanies.length ? topCompanies[0][1] : 1;
 
-  const statusColors = {neu:"#4da3ff", interessant:"#ffd166", beworben:"#22c55e", abgelehnt:"#ff4d6d", angebot:"#c084fc"};
+  const statusColors = {neu:"#00bdfd", interessant:"#ffd166", beworben:"#22c55e", abgelehnt:"#ff8b9a", angebot:"#ca98ff"};
   const statusLabels = {neu:"Neu", interessant:"Interessant", beworben:"Beworben", abgelehnt:"Abgelehnt", angebot:"Angebot"};
 
   box.innerHTML =

@@ -5,6 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>JobPipeline</title>
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -15,17 +18,17 @@
     <svg viewBox="0 0 60 30" height="36" width="60" fill="none" style="flex-shrink:0" xmlns="http://www.w3.org/2000/svg">
       <defs>
         <linearGradient id="plg" x1="0" y1="0" x2="60" y2="0" gradientUnits="userSpaceOnUse">
-          <stop stop-color="#00c8d7"/>
-          <stop offset="0.5" stop-color="#0097a7"/>
-          <stop offset="1" stop-color="#4fc660"/>
+          <stop stop-color="#ca98ff"/>
+          <stop offset="0.5" stop-color="#9c42f4"/>
+          <stop offset="1" stop-color="#00bdfd"/>
         </linearGradient>
       </defs>
       <!-- connecting pipe -->
       <rect x="8" y="12" width="44" height="6" rx="3" fill="url(#plg)" opacity="0.22"/>
       <!-- stage nodes -->
-      <circle cx="8"  cy="15" r="8" fill="#00c8d7"/>
+      <circle cx="8"  cy="15" r="8" fill="#ca98ff"/>
       <circle cx="30" cy="15" r="8" fill="url(#plg)"/>
-      <circle cx="52" cy="15" r="8" fill="#4fc660"/>
+      <circle cx="52" cy="15" r="8" fill="#00bdfd"/>
       <!-- icons inside nodes: briefcase, gear, checkmark -->
       <rect x="5" y="13" width="6" height="4" rx="1" fill="rgba(255,255,255,0.85)"/>
       <path d="M6.5 13v-1a1 1 0 011-1h1a1 1 0 011 1v1" stroke="rgba(255,255,255,0.85)" stroke-width="0.9" fill="none" stroke-linecap="round"/>
@@ -34,7 +37,7 @@
       <path d="M27.5 12.5l1.2 1.2M32.5 17.5l-1.2-1.2M27.5 17.5l1.2-1.2M32.5 12.5l-1.2 1.2" stroke="rgba(255,255,255,0.75)" stroke-width="1" stroke-linecap="round"/>
       <path d="M49 15.2l2 2 4-4" stroke="rgba(255,255,255,0.9)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
     </svg>
-    <span style="-webkit-text-fill-color:transparent;background:linear-gradient(135deg,#00c8d7,#0097a7,#4fc660);-webkit-background-clip:text;background-clip:text;">Job</span><span style="color:#e4e4f0;-webkit-text-fill-color:#e4e4f0;">Pipeline</span>
+    <span style="-webkit-text-fill-color:transparent;background:linear-gradient(135deg,#ca98ff,#00bdfd);-webkit-background-clip:text;background-clip:text;">Job</span><span style="color:#f9dcff;-webkit-text-fill-color:#f9dcff;">Pipeline</span>
   </div>
   <div class="nav">
     <button type="button" class="nbtn on" id="nb1" onclick="showTab('search')">🔍 Suche</button>
@@ -61,7 +64,7 @@
     <div class="hero-inner">
       <div class="hero-eyebrow">JobPipeline · Dein Job-Cockpit</div>
       <div class="hero-headline">Finde deinen<br>nächsten Job.</div>
-      <div class="hero-sub">Mehrere Jobportale auf einen Blick. Stellen speichern, Karriereseiten beobachten und Bewerbungen nachverfolgen – alles an einem Ort.</div>
+      <div class="hero-sub">Durchsuche mehrere Jobportale gleichzeitig. Stellen speichern, Karriereseiten beobachten und Bewerbungen nachverfolgen – alles an einem Ort.</div>
       <div class="hero-tiles">
         <button class="hero-tile" onclick="hideWelcomeHero()">
           <div class="hero-tile-icon">🔍</div>
@@ -505,10 +508,10 @@
   </div>
 </div>
 
-<div style="text-align:center;color:#252535;font-size:12px;padding:32px 0 20px;border-top:1px solid #111122;margin-top:32px;">
-  <a href="/impressum.html" style="color:#333350;text-decoration:none;margin:0 10px;" onmouseover="this.style.color='#555570'" onmouseout="this.style.color='#333350'">Impressum</a>
+<div style="text-align:center;color:rgba(89,62,99,.5);font-size:12px;padding:32px 0 20px;border-top:1px solid rgba(89,62,99,.15);margin-top:32px;">
+  <a href="/impressum.html" style="color:rgba(193,160,203,.4);text-decoration:none;margin:0 10px;transition:color .2s;" onmouseover="this.style.color='#00bdfd'" onmouseout="this.style.color='rgba(193,160,203,.4)'">Impressum</a>
   ·
-  <a href="/datenschutz.html" style="color:#333350;text-decoration:none;margin:0 10px;" onmouseover="this.style.color='#555570'" onmouseout="this.style.color='#333350'">Datenschutz</a>
+  <a href="/datenschutz.html" style="color:rgba(193,160,203,.4);text-decoration:none;margin:0 10px;transition:color .2s;" onmouseover="this.style.color='#00bdfd'" onmouseout="this.style.color='rgba(193,160,203,.4)'">Datenschutz</a>
 </div>
 
 <script src="app.js"></script>
