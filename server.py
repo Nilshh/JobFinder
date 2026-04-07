@@ -14,6 +14,7 @@ import glob
 import re
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
+import hashlib
 from datetime import datetime, timedelta, timezone
 from functools import wraps
 
@@ -351,8 +352,9 @@ def _run_watch_checks():
         merged_kw = _merge_kw(user_kw_cache[uid], json.loads(w["keywords"]))
         try:
             jobs = _scrape_career_page(w["career_url"], merged_kw)
-            _save_watch_results(w["id"], jobs)
-            print(f"[Watch] '{w['name']}' geprüft – {len(jobs)} Treffer", flush=True)
+            new_count = _save_watch_results(w["id"], jobs)
+            print(f"[Watch] '{w['name']}' geprüft – {len(jobs)} Treffer ({new_count} neu)", flush=True)
+            _notify_after_watch_check(uid, new_count)
         except Exception as e:
             _mark_watch_error(w["id"], e)
             print(f"[Watch] Fehler bei '{w['name']}': {e}", flush=True)
@@ -368,6 +370,130 @@ def _schedule_watch_checks():
             except Exception as e:
                 print(f"[Watch] Scheduler-Fehler: {e}", flush=True)
     threading.Thread(target=_loop, daemon=True, name="watch-checker").start()
+
+
+# ── Watch-Benachrichtigungen ──────────────────────────────────────
+
+_notify_last_sent = {}   # user_id → timestamp (Throttle: max 1x/Stunde bei instant)
+
+def _send_watch_notification(user_id, new_jobs):
+    """Sendet eine E-Mail mit neuen Watch-Treffern an den Nutzer."""
+    if not SMTP_HOST or not SMTP_USER:
+        return
+    with get_db() as db:
+        user = db.execute("SELECT email, username, watch_notify_enabled FROM users WHERE id = ?", [user_id]).fetchone()
+    if not user or not user["email"] or not user["watch_notify_enabled"]:
+        return
+    # Throttle: max 1x pro Stunde
+    now = time.time()
+    if user_id in _notify_last_sent and now - _notify_last_sent[user_id] < 3600:
+        return
+    _notify_last_sent[user_id] = now
+    job_rows = "".join(
+        f'<tr><td style="padding:8px 12px;border-bottom:1px solid #1e1e30;">'
+        f'<a href="{j["url"]}" style="color:#ff4d6d;text-decoration:none;font-weight:600;">{j["title"]}</a>'
+        f'<br><span style="color:#6b6b80;font-size:12px;">{j.get("company_name", "")}</span></td></tr>'
+        for j in new_jobs[:20]
+    )
+    more = f'<tr><td style="padding:8px 12px;color:#6b6b80;font-size:12px;">… und {len(new_jobs)-20} weitere</td></tr>' if len(new_jobs) > 20 else ""
+    body = f"""
+<div style="font-family:'Segoe UI',sans-serif;max-width:520px;margin:0 auto;background:#0a0a0f;color:#f0f0f5;border-radius:14px;padding:32px 28px;">
+  <div style="font-size:22px;font-weight:900;margin-bottom:4px;background:linear-gradient(135deg,#ff4d6d,#ffd166);-webkit-background-clip:text;-webkit-text-fill-color:transparent;">JobPipeline</div>
+  <h3 style="margin:0 0 16px;color:#f0f0f5;font-size:18px;">🔔 {len(new_jobs)} neue Stellen gefunden</h3>
+  <p style="color:#9090a0;line-height:1.6;margin-bottom:20px;">Der Karriere-Monitor hat neue Treffer für dich entdeckt:</p>
+  <table style="width:100%;border-collapse:collapse;background:#111120;border-radius:10px;overflow:hidden;">
+    {job_rows}{more}
+  </table>
+  <div style="text-align:center;margin:24px 0 16px;">
+    <a href="{APP_URL}" style="background:linear-gradient(135deg,#ff4d6d,#c9184a);color:#fff;padding:13px 28px;border-radius:10px;text-decoration:none;font-weight:700;font-size:15px;display:inline-block;">Alle ansehen</a>
+  </div>
+  <p style="color:#6b6b80;font-size:11px;text-align:center;">
+    <a href="{APP_URL}" style="color:#555570;">Benachrichtigungen verwalten</a>
+  </p>
+</div>"""
+    msg = MIMEMultipart("alternative")
+    msg["Subject"] = f"JobPipeline – {len(new_jobs)} neue Stellen gefunden"
+    msg["From"]    = SMTP_FROM
+    msg["To"]      = user["email"]
+    msg.attach(MIMEText(body, "html"))
+    try:
+        with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as smtp:
+            smtp.ehlo()
+            smtp.starttls()
+            smtp.login(SMTP_USER, SMTP_PASS)
+            smtp.sendmail(SMTP_FROM, user["email"], msg.as_string())
+        print(f"[Notify] E-Mail an {user['username']} gesendet ({len(new_jobs)} Jobs)", flush=True)
+    except Exception as e:
+        print(f"[Notify] E-Mail-Fehler für {user['username']}: {e}", flush=True)
+
+
+def _notify_after_watch_check(user_id, new_count):
+    """Prüft Benachrichtigungs-Einstellung und sendet ggf. sofort eine E-Mail."""
+    if new_count <= 0:
+        return
+    with get_db() as db:
+        user = db.execute(
+            "SELECT watch_notify_enabled, watch_notify_frequency FROM users WHERE id = ?", [user_id]
+        ).fetchone()
+    if not user or not user["watch_notify_enabled"]:
+        return
+    if user["watch_notify_frequency"] == "instant":
+        # Neue Jobs für diesen User laden
+        with get_db() as db:
+            jobs = [dict(r) for r in db.execute("""
+                SELECT j.title, j.url, w.name AS company_name
+                FROM watch_jobs j
+                JOIN company_watches w ON w.id = j.company_id
+                WHERE w.user_id = ? AND j.is_new = 1
+                ORDER BY j.found_at DESC LIMIT 30
+            """, [user_id]).fetchall()]
+        if jobs:
+            _send_watch_notification(user_id, jobs)
+
+
+def _run_digest():
+    """Sendet tägliche/wöchentliche Digest-E-Mails an Nutzer mit ungelesenen Watch-Jobs."""
+    now = datetime.now(timezone.utc)
+    with get_db() as db:
+        users = db.execute("""
+            SELECT u.id, u.watch_notify_frequency, u.watch_last_digest_at
+            FROM users u
+            WHERE u.watch_notify_enabled = 1
+              AND u.watch_notify_frequency IN ('daily', 'weekly')
+              AND u.email IS NOT NULL AND u.email != ''
+        """).fetchall()
+    for u in [dict(r) for r in users]:
+        freq = u["watch_notify_frequency"]
+        last = u["watch_last_digest_at"]
+        delta = timedelta(days=1) if freq == "daily" else timedelta(weeks=1)
+        if last and datetime.fromisoformat(last) + delta > now:
+            continue
+        with get_db() as db:
+            jobs = [dict(r) for r in db.execute("""
+                SELECT j.title, j.url, w.name AS company_name
+                FROM watch_jobs j
+                JOIN company_watches w ON w.id = j.company_id
+                WHERE w.user_id = ? AND j.is_new = 1
+                ORDER BY j.found_at DESC LIMIT 30
+            """, [u["id"]]).fetchall()]
+        if not jobs:
+            continue
+        _send_watch_notification(u["id"], jobs)
+        with get_db() as db:
+            db.execute("UPDATE users SET watch_last_digest_at = ? WHERE id = ?",
+                       [now.isoformat(), u["id"]])
+
+
+def _schedule_digest():
+    """Startet Daemon-Thread für tägliche/wöchentliche Digest-E-Mails (prüft stündlich)."""
+    def _loop():
+        while True:
+            time.sleep(3600)  # Stündlich prüfen
+            try:
+                _run_digest()
+            except Exception as e:
+                print(f"[Digest] Fehler: {e}", flush=True)
+    threading.Thread(target=_loop, daemon=True, name="digest-mailer").start()
 
 
 # ── Database ──────────────────────────────────────────────────────
@@ -415,9 +541,12 @@ def init_db():
         """)
         # Migrations: new columns for existing installations
         for col, definition in [
-            ("is_admin",         "INTEGER NOT NULL DEFAULT 0"),
-            ("is_locked",        "INTEGER NOT NULL DEFAULT 0"),
-            ("watch_global_kw",  "TEXT DEFAULT '[]'"),
+            ("is_admin",                "INTEGER NOT NULL DEFAULT 0"),
+            ("is_locked",               "INTEGER NOT NULL DEFAULT 0"),
+            ("watch_global_kw",         "TEXT DEFAULT '[]'"),
+            ("watch_notify_enabled",    "INTEGER NOT NULL DEFAULT 1"),
+            ("watch_notify_frequency",  "TEXT DEFAULT 'instant'"),
+            ("watch_last_digest_at",    "TEXT"),
         ]:
             try:
                 db.execute(f"ALTER TABLE users ADD COLUMN {col} {definition}")
@@ -761,6 +890,69 @@ def change_password():
     return jsonify({"ok": True})
 
 
+# ── Benachrichtigungs-Einstellungen ──────────────────────────────
+
+@app.route("/user/notifications", methods=["GET"])
+@login_required
+def get_notifications():
+    with get_db() as db:
+        row = db.execute(
+            "SELECT watch_notify_enabled, watch_notify_frequency FROM users WHERE id = ?",
+            [session["user_id"]]
+        ).fetchone()
+    return jsonify({
+        "enabled":   bool(row["watch_notify_enabled"]) if row else True,
+        "frequency": row["watch_notify_frequency"] if row else "instant",
+    })
+
+
+@app.route("/user/notifications", methods=["PATCH"])
+@login_required
+def update_notifications():
+    data = request.get_json(force=True)
+    updates = {}
+    if "enabled" in data:
+        updates["watch_notify_enabled"] = 1 if data["enabled"] else 0
+    if "frequency" in data and data["frequency"] in ("instant", "daily", "weekly"):
+        updates["watch_notify_frequency"] = data["frequency"]
+    if not updates:
+        return jsonify({"error": "Keine gültigen Felder"}), 400
+    set_clause = ", ".join(f"{k} = ?" for k in updates)
+    values = list(updates.values()) + [session["user_id"]]
+    with get_db() as db:
+        db.execute(f"UPDATE users SET {set_clause} WHERE id = ?", values)
+    return jsonify({"ok": True})
+
+
+# ── API-Cache ─────────────────────────────────────────────────────
+
+_api_cache = {}
+_API_CACHE_TTL  = int(os.environ.get("API_CACHE_TTL", "300"))   # Sekunden (5 Min)
+_API_CACHE_MAX  = 200
+
+def _cache_key(prefix, params):
+    raw = prefix + json.dumps(params, sort_keys=True)
+    return hashlib.sha256(raw.encode()).hexdigest()
+
+def _cached_api_get(cache_prefix, url, params, headers=None):
+    """GET mit TTL-Cache. Gibt (data_dict, status_code) zurück."""
+    key = _cache_key(cache_prefix, params)
+    now = time.time()
+    if key in _api_cache:
+        ts, data, status = _api_cache[key]
+        if now - ts < _API_CACHE_TTL:
+            return data, status
+    r = requests.get(url, params=params, headers=headers or {}, timeout=10)
+    data, status = r.json(), r.status_code
+    # Nur erfolgreiche Antworten cachen
+    if status < 400:
+        if len(_api_cache) >= _API_CACHE_MAX:
+            oldest = min(_api_cache, key=lambda k: _api_cache[k][0])
+            del _api_cache[oldest]
+        _api_cache[key] = (now, data, status)
+    return data, status
+
+
 # ── Jobs (Adzuna proxy) ──────────────────────────────────────────
 
 @app.route("/jobs")
@@ -781,8 +973,8 @@ def jobs():
         params["where"] = location
     url = f"https://api.adzuna.com/v1/api/jobs/{country}/search/1"
     try:
-        r = requests.get(url, params=params, timeout=10)
-        return jsonify(r.json()), r.status_code
+        data, status = _cached_api_get("adzuna", url, params)
+        return jsonify(data), status
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -804,13 +996,13 @@ def jobs_ba():
     if title:    params["was"] = title
     if location: params["wo"]  = location
     try:
-        r = requests.get(
+        data, status = _cached_api_get(
+            "ba",
             "https://rest.arbeitsagentur.de/jobboerse/jobsuche-service/pc/v4/app/jobs",
-            params  = params,
-            headers = {"X-API-Key": "jobboerse-jobsuche"},
-            timeout = 10
+            params,
+            headers={"X-API-Key": "jobboerse-jobsuche"}
         )
-        return jsonify(r.json()), r.status_code
+        return jsonify(data), status
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -830,12 +1022,8 @@ def jobs_jobicy():
     if geo:
         params["geo"] = geo
     try:
-        r = requests.get(
-            "https://jobicy.com/api/v2/remote-jobs",
-            params  = params,
-            timeout = 10
-        )
-        return jsonify(r.json()), r.status_code
+        data, status = _cached_api_get("jobicy", "https://jobicy.com/api/v2/remote-jobs", params)
+        return jsonify(data), status
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -1180,6 +1368,7 @@ def watch_check_now(wid):
     try:
         jobs = _scrape_career_page(w["career_url"], merged_kw)
         new_count = _save_watch_results(wid, jobs)
+        _notify_after_watch_check(uid, new_count)
         return jsonify({"ok": True, "total": len(jobs), "new": new_count})
     except Exception as e:
         _mark_watch_error(wid, e)
@@ -1271,6 +1460,7 @@ def meta_legal():
 
 _schedule_backup()
 _schedule_watch_checks()
+_schedule_digest()
 
 if __name__ == "__main__":
     print("✅ JobPipeline Server läuft auf http://localhost:5500")

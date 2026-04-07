@@ -41,6 +41,7 @@
     <button type="button" class="nbtn" id="nb2" onclick="showTab('saved')">
       📌 Merkzettel<span class="badge" id="badge">0</span>
     </button>
+    <button type="button" class="nbtn" id="nb5" onclick="showTab('dashboard')">📊 Dashboard</button>
     <button type="button" class="nbtn" id="nb3" onclick="showTab('portals')">🌐 Portale</button>
     <button type="button" class="nbtn" id="nb4" onclick="showTab('watch')">👁 Beobachten<span class="badge" id="watchBadge" style="display:none">0</span></button>
     <div id="userBar" style="display:none;align-items:center;gap:6px;">
@@ -137,6 +138,8 @@
     <button type="button" class="gobtn" id="goBtn">🔍 Stellen suchen</button>
   </div>
 
+  <div id="searchHistory" class="sh-box" style="display:none"></div>
+
   <div id="errbx" style="display:none" class="errbx"></div>
   <div id="infobx" style="display:none" class="infobx"></div>
   <div id="loadbox" style="display:none"><div class="spinner"></div><div class="stxt" id="stxt">Suche…</div></div>
@@ -165,12 +168,25 @@
       </div>
       <button type="button" class="clrbtn" id="clrIgnBtn">🗑 Ignorierliste leeren</button>
       <button type="button" class="clrbtn" id="manualAddBtn" style="background:rgba(38,132,255,.12);border-color:rgba(38,132,255,.35);color:#4da3ff;">➕ Manuell hinzufügen</button>
+      <button type="button" class="clrbtn" id="exportCsvBtn" style="background:rgba(34,197,94,.08);border-color:rgba(34,197,94,.25);color:#22c55e;">📥 CSV-Export</button>
     </div>
   </div>
   <div id="savedList"></div>
   <div id="savEmpty" class="savempty" style="display:none">
     Noch keine Stellen gespeichert.<br>
     <span style="font-size:13px;">Klicke bei einem Suchergebnis auf 💾 Speichern.</span>
+  </div>
+</div>
+
+<!-- DASHBOARD TAB -->
+<div id="tabDashboard" style="display:none">
+  <div class="saved-hdr">
+    <div class="savtitle">📊 Bewerbungs-Dashboard</div>
+  </div>
+  <div id="dashContent"></div>
+  <div id="dashEmpty" class="savempty" style="display:none">
+    Noch keine Daten vorhanden.<br>
+    <span style="font-size:13px;">Speichere Stellen und setze den Status, um hier Statistiken zu sehen.</span>
   </div>
 </div>
 
@@ -410,6 +426,32 @@
     <div id="pwStatus" class="mstatus"></div>
     <div class="mactions" style="justify-content:flex-end;">
       <button type="button" class="msavebtn" onclick="savePassword()">🔑 Passwort ändern</button>
+    </div>
+  </div>
+
+  <!-- Benachrichtigungen -->
+  <div class="card">
+    <div class="card-stripe" style="background:linear-gradient(90deg,#ff4d6d,#ff8c42);"></div>
+    <div class="lbl">🔔 Benachrichtigungen</div>
+    <div style="color:#6b6b80;font-size:13px;margin-bottom:18px;">E-Mail-Benachrichtigungen wenn der Karriere-Monitor neue Stellen findet.</div>
+    <div class="mfield" style="display:flex;align-items:center;gap:12px;background:#0a0a0f;border:1px solid #2a2a3a;border-radius:10px;padding:13px 15px;">
+      <input type="checkbox" id="notifyEnabled" style="width:16px;height:16px;flex-shrink:0;cursor:pointer;accent-color:#ff4d6d;" checked>
+      <div>
+        <label for="notifyEnabled" style="cursor:pointer;font-size:13px;font-weight:600;display:block;">E-Mail-Benachrichtigungen aktiviert</label>
+        <div style="font-size:11px;color:#6b6b80;margin-top:3px;">Du erhältst eine E-Mail, wenn neue Stellen auf beobachteten Karriereseiten gefunden werden.</div>
+      </div>
+    </div>
+    <div class="mfield">
+      <label class="lbl">Häufigkeit</label>
+      <select class="inp" id="notifyFrequency" style="cursor:pointer;">
+        <option value="instant">Sofort (bei jedem Fund)</option>
+        <option value="daily">Tägliche Zusammenfassung</option>
+        <option value="weekly">Wöchentliche Zusammenfassung</option>
+      </select>
+    </div>
+    <div id="notifyStatus" class="mstatus"></div>
+    <div class="mactions" style="justify-content:flex-end;">
+      <button type="button" class="msavebtn" style="background:linear-gradient(135deg,#ff4d6d,#c9184a);" onclick="saveNotifySettings()">💾 Speichern</button>
     </div>
   </div>
 

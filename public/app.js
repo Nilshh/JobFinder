@@ -32,30 +32,33 @@ function refreshBadge(){
 
 // ── Tabs ──
 function showTab(t){
-  const GATED = ["saved", "portals", "watch"];
+  const GATED = ["saved", "dashboard", "portals", "watch"];
   if(GATED.includes(t) && !AUTH.user){
     _pendingAction = () => showTab(t);
-    const hints = { saved:"den Merkzettel", portals:"die Portale", watch:"den Karriere-Monitor" };
+    const hints = { saved:"den Merkzettel", dashboard:"das Dashboard", portals:"die Portale", watch:"den Karriere-Monitor" };
     openAuthModal("Für " + hints[t] + " ist ein Account erforderlich.");
     return;
   }
-  document.getElementById("tabSearch").style.display  = t==="search"  ?"block":"none";
-  document.getElementById("tabSaved").style.display   = t==="saved"   ?"block":"none";
-  document.getElementById("tabPortals").style.display = t==="portals" ?"block":"none";
-  document.getElementById("tabWatch").style.display   = t==="watch"   ?"block":"none";
-  document.getElementById("tabAdmin").style.display   = t==="admin"   ?"block":"none";
-  document.getElementById("tabProfile").style.display = t==="profile" ?"block":"none";
+  document.getElementById("tabSearch").style.display    = t==="search"    ?"block":"none";
+  document.getElementById("tabSaved").style.display     = t==="saved"     ?"block":"none";
+  document.getElementById("tabDashboard").style.display = t==="dashboard" ?"block":"none";
+  document.getElementById("tabPortals").style.display   = t==="portals"   ?"block":"none";
+  document.getElementById("tabWatch").style.display     = t==="watch"     ?"block":"none";
+  document.getElementById("tabAdmin").style.display     = t==="admin"     ?"block":"none";
+  document.getElementById("tabProfile").style.display   = t==="profile"   ?"block":"none";
   document.getElementById("nb1").classList.toggle("on", t==="search");
   document.getElementById("nb2").classList.toggle("on", t==="saved");
+  document.getElementById("nb5").classList.toggle("on", t==="dashboard");
   document.getElementById("nb3").classList.toggle("on", t==="portals");
   document.getElementById("nb4").classList.toggle("on", t==="watch");
   const ab = document.getElementById("adminBtn");
   if(ab) ab.classList.toggle("active", t==="admin");
-  if(t==="saved")   renderSaved();
-  if(t==="portals") renderPortalsTab();
-  if(t==="watch")   loadWatchTab();
-  if(t==="admin")   { loadAdminUsers(); loadBackupList(); }
-  if(t==="profile") loadProfileTab();
+  if(t==="saved")     renderSaved();
+  if(t==="dashboard") renderDashboard();
+  if(t==="portals")   renderPortalsTab();
+  if(t==="watch")     loadWatchTab();
+  if(t==="admin")     { loadAdminUsers(); loadBackupList(); }
+  if(t==="profile")   loadProfileTab();
 }
 
 function hideWelcomeHero(){
@@ -257,6 +260,78 @@ async function doSearch(){
 
   hide("loadbox");
   document.getElementById("goBtn").disabled = false;
+  _saveSearchHistory(arr, loc, plz, km, days, remoteOnly);
+  renderSearchHistory();
+}
+
+// ── Suchverlauf ──
+const SEARCH_HISTORY_KEY = "jf2_search_history";
+const SEARCH_HISTORY_MAX = 15;
+
+function _saveSearchHistory(titlesArr, location, plz, radius, daysVal, remote){
+  const hist = _getSearchHistory();
+  const entry = {titles:titlesArr, location, plz, km:radius, days:daysVal, remoteOnly:remote, ts:Date.now()};
+  // Duplikat-Check: gleiche Titel + Ort → alten Eintrag ersetzen
+  const key = JSON.stringify([titlesArr.sort(), location, plz, radius, remote]);
+  const filtered = hist.filter(h => JSON.stringify([h.titles.sort(), h.location, h.plz, h.km, h.remoteOnly]) !== key);
+  filtered.unshift(entry);
+  localStorage.setItem(SEARCH_HISTORY_KEY, JSON.stringify(filtered.slice(0, SEARCH_HISTORY_MAX)));
+}
+
+function _getSearchHistory(){
+  try { return JSON.parse(localStorage.getItem(SEARCH_HISTORY_KEY) || "[]"); } catch(e){ return []; }
+}
+
+function restoreSearch(idx){
+  const hist = _getSearchHistory();
+  const h = hist[idx];
+  if(!h) return;
+  titles.clear();
+  h.titles.forEach(t => titles.add(t));
+  document.querySelectorAll(".chip").forEach(c => c.classList.toggle("on", titles.has(c.dataset.t)));
+  renderSelTags();
+  document.getElementById("inpLoc").value = h.location || "";
+  document.getElementById("inpPlz").value = h.plz || "";
+  km = h.km || 50;
+  document.querySelectorAll("#rrowKm .rbtn").forEach(b => b.classList.toggle("on", parseInt(b.dataset.v) === km));
+  days = h.days ?? 7;
+  document.querySelectorAll("#rrowDays .rbtn").forEach(b => b.classList.toggle("on", parseInt(b.dataset.v) === days));
+  if(h.remoteOnly !== remoteOnly){
+    remoteOnly = !!h.remoteOnly;
+    document.getElementById("remoteToggle").classList.toggle("on", remoteOnly);
+    document.getElementById("locOptHint").style.display = remoteOnly ? "inline" : "none";
+    const rrowKm = document.getElementById("rrowKm");
+    rrowKm.style.opacity = remoteOnly ? "0.35" : "1";
+    rrowKm.style.pointerEvents = remoteOnly ? "none" : "";
+  }
+  doSearch();
+}
+
+function deleteSearchHistory(idx){
+  const hist = _getSearchHistory();
+  hist.splice(idx, 1);
+  localStorage.setItem(SEARCH_HISTORY_KEY, JSON.stringify(hist));
+  renderSearchHistory();
+}
+
+function renderSearchHistory(){
+  const box = document.getElementById("searchHistory");
+  if(!box) return;
+  const hist = _getSearchHistory();
+  if(!hist.length){ box.style.display = "none"; return; }
+  box.style.display = "block";
+  const dLabel = d => d===7?"1W":d===14?"2W":d===30?"1M":"alle";
+  box.innerHTML = '<div class="sh-hdr" onclick="this.parentElement.classList.toggle(\'sh-open\')">🕐 Letzte Suchen <span class="sh-cnt">'+hist.length+'</span> <span class="sh-toggle">▾</span></div>'
+    + '<div class="sh-list">' + hist.map((h, i) => {
+    const age = ago(new Date(h.ts).toISOString());
+    const tags = h.titles.map(t => '<span class="sh-tag">'+esc(t)+'</span>').join("");
+    const loc = h.location || h.plz || (h.remoteOnly ? "Remote" : "");
+    return '<div class="sh-entry" onclick="restoreSearch('+i+')">'
+      + '<div class="sh-tags">'+tags+'</div>'
+      + '<div class="sh-meta">'+(loc?'📍 '+esc(loc)+' · ':'')+'📡 '+h.km+'km · 📅 '+dLabel(h.days)+' · '+age+'</div>'
+      + '<button type="button" class="sh-del" onclick="event.stopPropagation();deleteSearchHistory('+i+')" title="Entfernen">×</button>'
+      + '</div>';
+  }).join("") + '</div>';
 }
 
 // ── Pagination ──
@@ -375,6 +450,7 @@ function saveJob(id){
 document.getElementById("manualAddBtn").addEventListener("click", () => {
   requireAuth("Zum Speichern bitte anmelden.", openManualAdd);
 });
+document.getElementById("exportCsvBtn").addEventListener("click", exportSavedCSV);
 
 function openManualAdd(){
   ["maUrl","maTitle","maCompany","maLocation"].forEach(id => {
@@ -921,6 +997,28 @@ function downloadWatchTemplate(){
   URL.revokeObjectURL(a.href);
 }
 
+function exportSavedCSV(){
+  const all = Object.values(LS.saved());
+  if(!all.length){ alert("Keine Stellen zum Exportieren vorhanden."); return; }
+  const statusMap = {neu:"Neu",interessant:"Interessant",beworben:"Beworben",abgelehnt:"Abgelehnt",angebot:"Angebot"};
+  const csvEsc = v => { const s = String(v||"").replace(/"/g,'""'); return s.includes(";") || s.includes('"') || s.includes("\n") ? '"'+s+'"' : s; };
+  const header = "Jobtitel;Unternehmen;Standort;URL;Status;Gehalt;Gespeichert am;Notizen";
+  const rows = all.map(j => {
+    const sal = fmtSal(j.salary_min, j.salary_max) || "";
+    const date = j.savedAt ? new Date(j.savedAt).toLocaleDateString("de-DE") : "";
+    return [j.title, j.company, j.location, j.url, statusMap[j.status]||j.status, sal, date, j.note]
+      .map(csvEsc).join(";");
+  });
+  const csv = [header, ...rows].join("\r\n");
+  const blob = new Blob(["\uFEFF"+csv], {type:"text/csv;charset=utf-8"});
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  const ts = new Date().toISOString().slice(0,10);
+  a.download = `jobpipeline-merkzettel-${ts}.csv`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
 async function importWatchCSV(input){
   const file = input.files[0];
   input.value = "";
@@ -1034,6 +1132,89 @@ function renderSaved(){
       if(card){ card.style.opacity="0"; card.style.transition="opacity .25s"; setTimeout(()=>{ card.remove(); renderSaved(); },260); }
     }
   });
+}
+
+// ── Dashboard ──
+function renderDashboard(){
+  const all = Object.values(LS.saved());
+  const box = document.getElementById("dashContent");
+  const empty = document.getElementById("dashEmpty");
+  if(!all.length){ box.innerHTML = ""; empty.style.display = "block"; return; }
+  empty.style.display = "none";
+
+  // Kennzahlen
+  const counts = {neu:0, interessant:0, beworben:0, abgelehnt:0, angebot:0};
+  all.forEach(j => { if(counts[j.status] !== undefined) counts[j.status]++; });
+  const total = all.length;
+  const applied = counts.beworben + counts.abgelehnt + counts.angebot;
+  const rate = applied > 0 ? Math.round((counts.angebot / applied) * 100) : 0;
+
+  // Timeline: Jobs pro Woche (letzte 8 Wochen)
+  const weeks = [];
+  const now = Date.now();
+  for(let i = 7; i >= 0; i--){
+    const wStart = now - (i+1) * 7 * 86400000;
+    const wEnd   = now - i * 7 * 86400000;
+    const label  = new Date(wEnd).toLocaleDateString("de-DE", {day:"2-digit", month:"2-digit"});
+    const count  = all.filter(j => { const t = new Date(j.savedAt).getTime(); return t >= wStart && t < wEnd; }).length;
+    weeks.push({label, count});
+  }
+  const maxW = Math.max(...weeks.map(w => w.count), 1);
+
+  // Top-Unternehmen
+  const compMap = {};
+  all.forEach(j => { const c = j.company || "Unbekannt"; compMap[c] = (compMap[c]||0) + 1; });
+  const topCompanies = Object.entries(compMap).sort((a,b) => b[1]-a[1]).slice(0, 5);
+  const maxC = topCompanies.length ? topCompanies[0][1] : 1;
+
+  const statusColors = {neu:"#4da3ff", interessant:"#ffd166", beworben:"#22c55e", abgelehnt:"#ff4d6d", angebot:"#c084fc"};
+  const statusLabels = {neu:"Neu", interessant:"Interessant", beworben:"Beworben", abgelehnt:"Abgelehnt", angebot:"Angebot"};
+
+  box.innerHTML =
+    // KPI-Karten
+    '<div class="dash-kpis">'
+    + '<div class="dash-kpi"><div class="dash-kpi-n">'+total+'</div><div class="dash-kpi-l">Gespeichert</div></div>'
+    + '<div class="dash-kpi"><div class="dash-kpi-n" style="color:#22c55e">'+counts.beworben+'</div><div class="dash-kpi-l">Beworben</div></div>'
+    + '<div class="dash-kpi"><div class="dash-kpi-n" style="color:#c084fc">'+counts.angebot+'</div><div class="dash-kpi-l">Angebote</div></div>'
+    + '<div class="dash-kpi"><div class="dash-kpi-n" style="color:#ff4d6d">'+counts.abgelehnt+'</div><div class="dash-kpi-l">Abgelehnt</div></div>'
+    + '<div class="dash-kpi"><div class="dash-kpi-n" style="color:#ffd166">'+rate+'%</div><div class="dash-kpi-l">Erfolgsquote</div></div>'
+    + '</div>'
+
+    // Status-Verteilung
+    + '<div class="dash-card"><div class="dash-card-title">Status-Verteilung</div>'
+    + '<div class="dash-bar-stack">'
+    + Object.entries(counts).filter(([,v])=>v>0).map(([s,v]) =>
+        '<div class="dash-bar-seg" style="flex:'+v+';background:'+statusColors[s]+'" title="'+statusLabels[s]+': '+v+'"></div>'
+      ).join("")
+    + '</div>'
+    + '<div class="dash-bar-legend">'
+    + Object.entries(counts).map(([s,v]) =>
+        '<span class="dash-leg"><span class="dash-leg-dot" style="background:'+statusColors[s]+'"></span>'+statusLabels[s]+' ('+v+')</span>'
+      ).join("")
+    + '</div></div>'
+
+    // Timeline
+    + '<div class="dash-card"><div class="dash-card-title">Gespeichert pro Woche</div>'
+    + '<div class="dash-timeline">'
+    + weeks.map(w =>
+        '<div class="dash-tw">'
+        + '<div class="dash-tw-bar" style="height:'+Math.max(Math.round((w.count/maxW)*100), w.count?8:0)+'%"></div>'
+        + '<div class="dash-tw-n">'+(w.count||"")+'</div>'
+        + '<div class="dash-tw-l">'+w.label+'</div>'
+        + '</div>'
+      ).join("")
+    + '</div></div>'
+
+    // Top-Unternehmen
+    + '<div class="dash-card"><div class="dash-card-title">Top-Unternehmen</div>'
+    + (topCompanies.length ? topCompanies.map(([name, cnt]) =>
+        '<div class="dash-comp">'
+        + '<div class="dash-comp-name">'+esc(name)+'</div>'
+        + '<div class="dash-comp-bar-wrap"><div class="dash-comp-bar" style="width:'+Math.round((cnt/maxC)*100)+'%"></div></div>'
+        + '<div class="dash-comp-cnt">'+cnt+'</div>'
+        + '</div>'
+      ).join("") : '<div style="color:#555570;font-size:13px;">Keine Daten</div>')
+    + '</div>';
 }
 
 // ── Platforms ──
@@ -1510,6 +1691,41 @@ function loadProfileTab(){
   document.getElementById("jUseProxy").checked   = c.useProxy !== false;
   const fb = document.getElementById("jiraFieldsBox");
   if(fb) fb.style.display = "none";
+  document.getElementById("notifyStatus").innerHTML = "";
+  loadNotifySettings();
+}
+
+async function loadNotifySettings(){
+  try {
+    const r = await fetch("/user/notifications", {credentials:"include"});
+    if(!r.ok) return;
+    const d = await r.json();
+    document.getElementById("notifyEnabled").checked    = d.enabled;
+    document.getElementById("notifyFrequency").value    = d.frequency || "instant";
+  } catch(e){}
+}
+
+async function saveNotifySettings(){
+  const enabled   = document.getElementById("notifyEnabled").checked;
+  const frequency = document.getElementById("notifyFrequency").value;
+  const status    = document.getElementById("notifyStatus");
+  status.innerHTML = '<span style="color:#6b6b80">Wird gespeichert…</span>';
+  try {
+    const r = await fetch("/user/notifications", {
+      method:"PATCH", credentials:"include",
+      headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({enabled, frequency})
+    });
+    if(r.ok){
+      status.innerHTML = '<span style="color:#22c55e">✓ Gespeichert.</span>';
+      setTimeout(()=>{ status.innerHTML=""; }, 2500);
+    } else {
+      const d = await r.json();
+      status.innerHTML = '<span style="color:#ff4d6d">'+esc(d.error||"Fehler")+'</span>';
+    }
+  } catch(e){
+    status.innerHTML = '<span style="color:#ff4d6d">Verbindungsfehler.</span>';
+  }
 }
 
 async function saveProfile(){
@@ -1939,3 +2155,4 @@ async function doLogout(){
 
 // ── Init ──────────────────────────────────────────────────────────
 checkAuth();
+renderSearchHistory();
