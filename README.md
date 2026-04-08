@@ -1,8 +1,8 @@
 # JobPipeline
 
-> Intelligente Jobsuche mit Bewerbungs-Tracking, Karriere-Monitor, Jira-Integration und Mehrbenutzer-Unterstützung
+> Intelligente Jobsuche mit Bewerbungs-Dashboard, Karriere-Monitor, E-Mail-Benachrichtigungen, Jira-Integration und Mehrbenutzer-Unterstützung
 
-JobPipeline ist eine schlanke Single-Page-App für die strukturierte Jobsuche. Sie durchsucht die **Adzuna-API**, die **Bundesagentur für Arbeit** und **Jobicy** parallel nach mehreren Jobtiteln, filtert bereits gespeicherte oder ignorierte Stellen automatisch heraus und verlinkt direkt auf **45+ Jobportale**. Gespeicherte Stellen lassen sich mit Status und Notizen tracken und per Knopfdruck als Jira-Ticket exportieren. Der integrierte **Karriere-Monitor** überwacht Unternehmens-Karriereseiten automatisch und meldet neue passende Stellen.
+JobPipeline ist eine schlanke Single-Page-App für die strukturierte Jobsuche. Sie durchsucht die **Adzuna-API**, die **Bundesagentur für Arbeit** und **Jobicy** parallel nach mehreren Jobtiteln, filtert bereits gespeicherte oder ignorierte Stellen automatisch heraus und verlinkt direkt auf **45+ Jobportale**. Gespeicherte Stellen lassen sich mit Status und Notizen tracken und per Knopfdruck als Jira-Ticket exportieren. Der integrierte **Karriere-Monitor** überwacht Unternehmens-Karriereseiten automatisch und benachrichtigt per E-Mail über neue passende Stellen. Das **Bewerbungs-Dashboard** zeigt Kennzahlen, Status-Verteilung und Trends auf einen Blick.
 
 ---
 
@@ -14,7 +14,9 @@ JobPipeline ist eine schlanke Single-Page-App für die strukturierte Jobsuche. S
 - **Remote-Filter** — Nur Remote-Jobs anzeigen (Jobicy + Adzuna mit Remote-Keyword)
 - **Standort-Filter** — Ort, PLZ und Umkreis (10 / 25 / 50 / 100 / 150 km); optional bei Remote
 - **Zeitfilter** — Letzte Woche / 2 Wochen / Monat / alle
+- **Suchverlauf** — Letzte 15 Suchen werden gespeichert; Ein-Klick-Wiederholung mit allen Filtern
 - **Seitennavigation** — Ergebnisse seitenweise blättern (20 je Seite)
+- **API-Caching** — Identische Suchen werden 5 Minuten gecacht (spart API-Quota, konfigurierbar)
 - **DACH-Support** — Automatische Länder-Erkennung (DE / AT / CH)
 - **Deduplication** — Bereits gespeicherte oder ignorierte Stellen werden ausgeblendet
 - **Ignorier-Funktion** — Stellen einmalig wegklicken, tauchen bei nächster Suche nicht mehr auf
@@ -26,13 +28,23 @@ JobPipeline ist eine schlanke Single-Page-App für die strukturierte Jobsuche. S
 - **Status-Tracking** — Neu · Interessant · Beworben · Abgelehnt · Angebot
 - **Notizen** — Freies Textfeld je Stelle (Ansprechpartner, Gehaltsvorstellung, Gesprächsnotizen)
 - **Status-Filter** — Merkzettel nach Bewerbungsstatus filtern
+- **CSV-Export** — Alle gespeicherten Stellen als CSV herunterladen (Excel-kompatibel, UTF-8)
 - **Serverseitige Persistenz** — Daten werden pro Benutzer in SQLite gespeichert
+
+### Bewerbungs-Dashboard
+Visueller Überblick über den Bewerbungsprozess:
+- **Kennzahlen** — Gesamt gespeichert, Beworben, Angebote, Ablehnungen, Erfolgsquote
+- **Status-Verteilung** — Farbcodierter Balken über alle Status
+- **Timeline** — Gespeicherte Jobs pro Woche (letzte 8 Wochen)
+- **Top-Unternehmen** — Die 5 Firmen mit den meisten gespeicherten Stellen
+- **Rein clientseitig** — Keine zusätzlichen Abhängigkeiten, berechnet aus vorhandenen Daten
 
 ### Karriere-Monitor
 Automatische Überwachung von Unternehmens-Karriereseiten auf neue passende Stellen:
 - **Seiten-Scraping** — Headless Chromium (Playwright) rendert auch JavaScript-lastige Karriereseiten
 - **Keyword-Matching** — Konfigurierbare Suchbegriffe je Unternehmen (z. B. CTO, Head of IT)
 - **Automatische Prüfung** — Einstellbares Prüfintervall pro Unternehmen (Standard: 24h)
+- **E-Mail-Benachrichtigungen** — Sofort, täglich oder wöchentlich bei neuen Treffern (konfigurierbar im Profil)
 - **Alle prüfen** — Manuell alle aktiven Watches sequenziell anstoßen mit Fortschrittsbalken
 - **Sub-Tab-Ansicht** — „🏢 Unternehmen" (Verwaltung) und „🔍 Gefundene Stellen" (Job-Feed) getrennt
 - **Neu-Badge** — Neufunde werden im Tab-Badge und in der Job-Liste hervorgehoben
@@ -46,14 +58,16 @@ Automatische Überwachung von Unternehmens-Karriereseiten auf neue passende Stel
 - **Pro-Nutzer** — Jeder Benutzer verwaltet seine eigene Watchlist
 
 ### Datensicherung
-- **Manueller Backup** — Kompletten Datenstand als JSON herunterladen
+- **Manueller Backup** — Kompletten Datenstand als JSON herunterladen (inkl. Watch-Daten)
 - **Automatisches tägliches Backup** — Serverseitig um 02:00 UTC (konfigurierbar), 7 Dateien Rotation
 - **Backup-Liste** — Alle serverseitigen Backups im Admin-Panel anzeigen und herunterladen
-- **Wiederherstellung** — Backup-Datei hochladen und vollständig einspielen
+- **Wiederherstellung** — Backup-Datei hochladen und vollständig einspielen (inkl. Karriere-Monitor-Daten)
 
 ### Benutzerverwaltung
 - **Registrierung & Login** — Eigenständige Konten mit Benutzername und Passwort
 - **Passwort-Reset** — Per E-Mail-Link (SMTP-konfigurierbar)
+- **Passwort ändern** — Im Profil-Tab mit aktuellem Passwort
+- **Benachrichtigungs-Einstellungen** — E-Mail-Frequenz im Profil konfigurieren (sofort / täglich / wöchentlich)
 - **Datenisolation** — Jeder Nutzer sieht nur seine eigenen gespeicherten Jobs und Jira-Konfiguration
 - **Mehrbenutzer-fähig** — Beliebig viele Accounts auf einer Instanz
 - **Admin-Panel** — Benutzer verwalten, sperren/entsperren, Adminrechte vergeben, Konten löschen
@@ -115,6 +129,26 @@ Nach dem Start läuft:
 
 ---
 
+## Deployment & Updates
+
+### Komplett-Update (System + App + Rebuild)
+
+```bash
+sudo ./update.sh
+```
+
+Führt in einem Durchlauf aus: OS-Updates, Docker-Base-Image-Pull, Git Pull, DB-Backup, Container-Rebuild, Health-Check und Cleanup.
+
+### Nur App deployen (Git Pull + Rebuild)
+
+```bash
+./deploy.sh
+```
+
+Pullt den neuesten Code, erstellt ein Backup, baut den API-Container neu und startet alle Services.
+
+---
+
 ## Konfiguration (.env)
 
 Vor dem ersten Start muss eine `.env`-Datei im Projektverzeichnis angelegt werden:
@@ -125,17 +159,18 @@ cp .env.example .env
 
 | Variable | Beschreibung | Pflicht |
 |---|---|---|
-| `ADZUNA_APP_ID` | Adzuna App ID ([developer.adzuna.com](https://developer.adzuna.com/)) | ✅ |
-| `ADZUNA_APP_KEY` | Adzuna API Key | ✅ |
-| `SECRET_KEY` | Flask Session Secret (zufälliger String, mind. 32 Zeichen) | ✅ |
-| `APP_DOMAIN` | Öffentliche Domain (z. B. `jobs.example.com`) — Caddy holt darüber automatisch das HTTPS-Zertifikat (Let's Encrypt) | ✅ |
+| `ADZUNA_APP_ID` | Adzuna App ID ([developer.adzuna.com](https://developer.adzuna.com/)) | ja |
+| `ADZUNA_APP_KEY` | Adzuna API Key | ja |
+| `SECRET_KEY` | Flask Session Secret (zufälliger String, mind. 32 Zeichen) | ja |
+| `APP_DOMAIN` | Öffentliche Domain (z. B. `jobs.example.com`) — Caddy holt darüber automatisch das HTTPS-Zertifikat (Let's Encrypt) | ja |
 | `ADMIN_USER` | Benutzername, der beim Start zum Admin befördert wird | Ersteinrichtung |
-| `SMTP_HOST` | SMTP-Server (z. B. `smtp.gmail.com`) | für Passwort-Reset |
-| `SMTP_PORT` | SMTP-Port (Standard: `587`) | für Passwort-Reset |
-| `SMTP_USER` | SMTP-Benutzername / Absender-Adresse | für Passwort-Reset |
-| `SMTP_PASSWORD` | SMTP-Passwort / App-Passwort | für Passwort-Reset |
-| `SMTP_FROM` | Absender-Name und -Adresse | für Passwort-Reset |
-| `APP_URL` | Öffentliche URL der App (z. B. `https://jobs.example.com`) | für Passwort-Reset |
+| `SMTP_HOST` | SMTP-Server (z. B. `smtp.gmail.com`) | E-Mail |
+| `SMTP_PORT` | SMTP-Port (Standard: `587`) | E-Mail |
+| `SMTP_USER` | SMTP-Benutzername / Absender-Adresse | E-Mail |
+| `SMTP_PASSWORD` | SMTP-Passwort / App-Passwort | E-Mail |
+| `SMTP_FROM` | Absender-Name und -Adresse | E-Mail |
+| `APP_URL` | Öffentliche URL der App (z. B. `https://jobs.example.com`) | E-Mail |
+| `API_CACHE_TTL` | Cache-Dauer für API-Antworten in Sekunden (Standard: `300`) | optional |
 | `BACKUP_KEEP` | Anzahl aufzubewahrender automatischer Backups (Standard: `7`) | optional |
 | `BACKUP_HOUR` | UTC-Stunde für das tägliche Backup (Standard: `2`, also 02:00 UTC) | optional |
 | `WATCH_INTERVAL_MINUTES` | Wie oft der Scheduler fällige Watches prüft, in Minuten (Standard: `60`) | optional |
@@ -146,6 +181,8 @@ Sicheren `SECRET_KEY` generieren:
 ```bash
 openssl rand -hex 32
 ```
+
+> **Hinweis:** SMTP-Konfiguration wird sowohl für Passwort-Reset als auch für Karriere-Monitor-Benachrichtigungen benötigt.
 
 ---
 
@@ -183,11 +220,12 @@ Internet
         │
         ├─► /jobs* /jira/* /auth/* /user/* /admin/* /watch/*  →  Flask API (intern :5500)
         │     │
-        │     ├─► /jobs          Adzuna-Proxy (API Key bleibt serverseitig)
-        │     ├─► /jobs/ba       Bundesagentur-Proxy (öffentliche API, nur DE)
-        │     ├─► /jobs/jobicy   Jobicy-Proxy (Remote Jobs, öffentliche API)
+        │     ├─► /jobs          Adzuna-Proxy (mit 5-Min-Cache)
+        │     ├─► /jobs/ba       Bundesagentur-Proxy (mit 5-Min-Cache)
+        │     ├─► /jobs/jobicy   Jobicy-Proxy (mit 5-Min-Cache)
         │     ├─► /auth/*        Registrierung, Login, Logout, Passwort-Reset
         │     ├─► /user/data     Gespeicherte Jobs & Jira-Config (pro User)
+        │     ├─► /user/notifications   Benachrichtigungs-Einstellungen (pro User)
         │     ├─► /admin/*       Benutzerverwaltung + Backup-Verwaltung (nur Admins)
         │     ├─► /jira/test     Verbindungstest → Jira REST API
         │     ├─► /jira/issue    Ticket erstellen → Jira REST API
@@ -197,6 +235,11 @@ Internet
         │     └─► /watch/keywords    Karriere-Monitor: globale Suchbegriffe (pro User)
         │
         └─► /* (alle anderen Pfade)  →  public/ (statische SPA: index.html, style.css, app.js)
+
+Hintergrund-Threads:
+  ├─► Tägliches Backup (02:00 UTC)
+  ├─► Watch-Scheduler (prüft fällige Watches alle 60 Min.)
+  └─► Digest-Mailer (prüft stündlich auf ausstehende tägliche/wöchentliche E-Mails)
 ```
 
 ### Dateien
@@ -204,15 +247,16 @@ Internet
 | Datei / Verzeichnis | Beschreibung |
 |---|---|
 | `public/index.html` | HTML-Skelett der Single-Page-App |
-| `public/style.css` | Alle CSS-Regeln |
+| `public/style.css` | Nova Design System (Glassmorphism, CSS Custom Properties) |
 | `public/app.js` | Komplette Frontend-Logik (Vanilla JS) |
-| `server.py` | Flask-Backend (Auth, Adzuna-Proxy, BA-Proxy, Jira-Proxy, SQLite) |
+| `server.py` | Flask-Backend (Auth, API-Proxies, Caching, Watch-Scheduler, Notifications) |
 | `Caddyfile` | Caddy-Konfiguration (HTTPS, Reverse Proxy) |
 | `Dockerfile.api` | Python-Container für das Backend |
 | `docker-compose.yml` | Orchestrierung aller Services |
+| `deploy.sh` | Git Pull + Backup + Docker Rebuild + Health-Check |
+| `update.sh` | Komplett-Update (System + Docker + App + Rebuild) |
 | `.env` | Secrets & Konfiguration (nicht im Repository) |
 | `.env.example` | Vorlage für `.env` |
-| `.gitignore` | Schützt `.env` und Datenbankdateien vor Commits |
 
 ### Datenspeicherung
 
@@ -220,7 +264,7 @@ Benutzerdaten werden serverseitig in einer **SQLite-Datenbank** gespeichert (per
 
 | Tabelle | Inhalt |
 |---|---|
-| `users` | Benutzerkonten (Benutzername, Passwort-Hash, E-Mail, is_admin, is_locked, globale Karriere-Monitor-Keywords) |
+| `users` | Benutzerkonten (Passwort-Hash, E-Mail, Admin/Locked, Karriere-Monitor-Keywords, Benachrichtigungs-Einstellungen) |
 | `user_data` | Gespeicherte Jobs & Jira-Konfiguration pro Benutzer |
 | `password_reset_tokens` | Temporäre Reset-Tokens (1 Stunde gültig) |
 | `company_watches` | Karriere-Monitor: überwachte Unternehmen pro Benutzer (URL, Keywords, Intervall, Status) |
@@ -234,7 +278,7 @@ Benutzerdaten werden serverseitig in einer **SQLite-Datenbank** gespeichert (per
 
 1. **Anmelden**-Button oben rechts klicken
 2. Auf **Registrieren** wechseln
-3. Benutzername, E-Mail (optional, für Passwort-Reset) und Passwort eingeben
+3. Benutzername, E-Mail (optional, für Passwort-Reset und Benachrichtigungen) und Passwort eingeben
 
 ### Passwort vergessen
 
@@ -269,9 +313,26 @@ Erreichbar über den **⚙️ Admin**-Button (nur für Admins sichtbar):
 | E-Mail anpassen | Inline editierbar, Enter oder 💾-Button |
 | Sperren / Entsperren | Gesperrte Benutzer können sich nicht mehr anmelden |
 | Zum Admin / Admin entziehen | Adminrechte für andere Benutzer verwalten |
-| Benutzer löschen | Löscht Konto + alle gespeicherten Daten (unwiderruflich) |
+| Benutzer löschen | Löscht Konto + alle gespeicherten Daten inkl. Watches (unwiderruflich) |
 
 > Admins können sich nicht selbst sperren, ihre eigenen Adminrechte entziehen oder ihr eigenes Konto löschen.
+
+---
+
+## E-Mail-Benachrichtigungen
+
+Der Karriere-Monitor kann per E-Mail über neue Stellenfunde informieren. Voraussetzung: SMTP ist in der `.env` konfiguriert.
+
+### Einrichtung
+
+1. Im **Profil-Tab** den Abschnitt **Benachrichtigungen** öffnen
+2. E-Mail-Benachrichtigungen aktivieren
+3. Häufigkeit wählen:
+   - **Sofort** — E-Mail bei jedem Fund (max. 1x pro Stunde)
+   - **Tägliche Zusammenfassung** — Einmal täglich alle neuen Treffer
+   - **Wöchentliche Zusammenfassung** — Einmal pro Woche
+
+> Die E-Mail enthält die gefundenen Stellentitel mit Direktlinks und einen Button zur App.
 
 ---
 
@@ -284,15 +345,15 @@ Erreichbar über den **⚙️ Admin**-Button (nur für Admins sichtbar):
 
 ### 2. Konfiguration in JobPipeline
 
-⚡ **Jira**-Button oben rechts klicken und ausfüllen:
+Im **Profil-Tab** unter **Jira-Integration** ausfüllen:
 
 | Feld | Beispiel | Pflicht |
 |---|---|---|
-| Jira Cloud Domain | `meinunternehmen.atlassian.net` | ✅ |
-| E-Mail | `max@unternehmen.de` | ✅ |
-| API Token | `ATATxxxx…` | ✅ |
-| Projekt-Key | `JOBS` | ✅ |
-| Issue-Typ | `Task` (Standard) | ✅ |
+| Jira Cloud Domain | `meinunternehmen.atlassian.net` | ja |
+| E-Mail | `max@unternehmen.de` | ja |
+| API Token | `ATATxxxx…` | ja |
+| Projekt-Key | `JOBS` | ja |
+| Issue-Typ | `Task` (Standard) | ja |
 | URL-Feld | `customfield_10050` | optional |
 | Unternehmen-Feld | `customfield_10051` | optional |
 
@@ -332,6 +393,12 @@ Auf **Verfügbare Felder anzeigen →** klicken:
 ### Admin-Button nicht sichtbar
 - Sicherstellen, dass `ADMIN_USER=benutzername` in `.env` gesetzt und Container neu gestartet wurde (`docker compose up -d --build`)
 - Nach dem nächsten Login erscheint der Button
+
+### E-Mail-Benachrichtigungen kommen nicht an
+- SMTP-Einstellungen in `.env` prüfen (SMTP_HOST, SMTP_USER, SMTP_PASSWORD)
+- E-Mail-Adresse im Profil hinterlegt?
+- Spam-Ordner prüfen
+- API-Logs prüfen: `docker compose logs -f api | grep Notify`
 
 ### Passwort-Reset-Mail kommt nicht an
 - SMTP-Einstellungen in `.env` prüfen
@@ -384,11 +451,15 @@ open http://localhost:5500
 | Schicht | Technologie |
 |---|---|
 | Frontend | Vanilla HTML / CSS / JavaScript (kein Framework, kein Build) |
+| Design | Nova Design System (Space Grotesk + Inter, Glassmorphism, CSS Custom Properties) |
 | Backend | Python 3.12 · Flask · Requests |
 | Datenbank | SQLite (serverseitig, Docker Volume) |
+| Caching | In-Memory TTL-Cache (API-Antworten, 5 Min) |
 | Authentifizierung | Session-Cookies · Werkzeug Password Hashing |
+| E-Mail | SMTP (Benachrichtigungen + Passwort-Reset) |
 | Reverse Proxy / HTTPS | Caddy (automatisches Let's Encrypt) |
 | Jobdaten | [Adzuna Jobs API](https://developer.adzuna.com/) · [Bundesagentur für Arbeit](https://jobsuche.api.bund.dev/) · [Jobicy](https://jobicy.com/jobs-rss-feed) |
 | Container | Docker Compose |
 | Jira | Atlassian REST API v3 · ADF |
 | Karriere-Monitor | Playwright (headless Chromium) · BeautifulSoup4 |
+| Deployment | deploy.sh (Git Pull + Rebuild) · update.sh (System + App) |
