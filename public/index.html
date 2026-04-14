@@ -47,6 +47,7 @@
     <button type="button" class="nbtn" id="nb5" onclick="showTab('dashboard')">📊 Dashboard</button>
     <button type="button" class="nbtn" id="nb3" onclick="showTab('portals')">🌐 Portale</button>
     <button type="button" class="nbtn" id="nb4" onclick="showTab('watch')">👁 Beobachten<span class="badge" id="watchBadge" style="display:none">0</span></button>
+    <button type="button" class="nbtn" id="nb6" onclick="showTab('alerts')">🔔 Alerts<span class="badge" id="alertBadge" style="display:none">0</span></button>
     <div id="userBar" style="display:none;align-items:center;gap:6px;">
       <button type="button" class="cfgbtn" id="profileBtn" onclick="showTab('profile')" title="Mein Profil">👤 <span id="uname"></span></button>
       <button type="button" class="cfgbtn" id="adminBtn" style="display:none" onclick="showTab('admin')" title="Benutzerverwaltung">⚙️ Admin</button>
@@ -111,6 +112,7 @@
     </div>
     <div class="seltags" id="selTags"></div>
     <div class="hint" id="selHint" style="display:none"><span id="selCnt">0</span> Jobtitel ausgewählt</div>
+    <div class="syn-hint" id="synHint" style="display:none"></div>
   </div>
 
   <div class="card">
@@ -181,6 +183,19 @@
   </div>
 </div>
 
+<!-- ALERTS TAB -->
+<div id="tabAlerts" style="display:none">
+  <div class="saved-hdr">
+    <div class="savtitle">🔔 Suche-Alerts</div>
+    <div style="color:#c1a0cb;font-size:13px;">Gespeicherte Suchen werden im Hintergrund regelmäßig ausgeführt.</div>
+  </div>
+  <div id="alertsList"></div>
+  <div id="alertsEmpty" class="savempty" style="display:none">
+    Noch keine Alerts gespeichert.<br>
+    <span style="font-size:13px;">Führe eine Suche aus und klicke auf <b>🔔 Diese Suche abonnieren</b>.</span>
+  </div>
+</div>
+
 <!-- DASHBOARD TAB -->
 <div id="tabDashboard" style="display:none">
   <div class="saved-hdr">
@@ -205,6 +220,7 @@
     <div class="watch-stabs">
       <button class="wstab wstab-active" id="wst1" onclick="switchWatchSubTab('companies')">🏢 Unternehmen</button>
       <button class="wstab" id="wst2" onclick="switchWatchSubTab('jobs')">🔍 Gefundene Stellen<span id="watchJobsTabCount" style="color:#555570;font-weight:400;margin-left:3px;"></span></button>
+      <button class="wstab" id="wst3" onclick="switchWatchSubTab('boards')">📡 Company Boards</button>
     </div>
     <!-- Aktionsleiste: Unternehmen -->
     <div id="watchCompanyActions" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
@@ -237,6 +253,28 @@
   <div id="watchPaneJobs" style="display:none">
     <div id="watchJobFeed"></div>
   </div>
+  <!-- Pane: Company Boards -->
+  <div id="watchPaneBoards" style="display:none">
+    <div class="watch-gkw-card" style="margin-bottom:14px;">
+      <div class="wgkw-title">📡 Company Boards (Greenhouse / Lever)</div>
+      <div class="wgkw-sub" style="margin-bottom:10px;">Strukturierte APIs vieler Scale-ups (z.B. Airbnb, Stripe, Shopify) – schneller und zuverlässiger als Karriereseiten-Scraping.</div>
+      <div style="display:grid;grid-template-columns:130px 1fr 130px auto;gap:8px;">
+        <select class="inp" id="bdProvider" style="cursor:pointer;">
+          <option value="greenhouse">Greenhouse</option>
+          <option value="lever">Lever</option>
+        </select>
+        <input type="text" class="inp" id="bdSlug" placeholder="Slug (z.B. airbnb, stripe, shopify)">
+        <input type="text" class="inp" id="bdName" placeholder="Anzeigename (optional)">
+        <button type="button" class="msavebtn" style="width:auto;padding:8px 18px;" onclick="addBoard()">+ Hinzufügen</button>
+      </div>
+      <div id="bdStatus" class="mstatus"></div>
+    </div>
+    <div id="boardsList"></div>
+    <div id="boardsEmpty" class="savempty" style="display:none">
+      Noch keine Boards hinzugefügt.<br>
+      <span style="font-size:13px;">Slug aus der Karriereseite-URL: <code style="color:#ca98ff">boards.greenhouse.io/<b>airbnb</b></code> oder <code style="color:#ca98ff">jobs.lever.co/<b>shopify</b></code></span>
+    </div>
+  </div>
 </div>
 
 </div><!-- /wrap -->
@@ -265,6 +303,36 @@
     <div class="mactions">
       <button type="button" class="mcancelbtn" onclick="closeWatchModal()">Abbrechen</button>
       <button type="button" class="msavebtn" onclick="submitWatch()">👁 Beobachten</button>
+    </div>
+  </div>
+</div>
+
+<!-- Save Alert Modal -->
+<div id="saveAlertModal" class="modal-bg" style="display:none" onclick="if(event.target===this)closeSaveAlert()">
+  <div class="modal">
+    <div class="modal-title">🔔 Suche abonnieren</div>
+    <div class="modal-sub">Diese Suche wird im Hintergrund regelmäßig ausgeführt. Neue Treffer landen im Alerts-Tab und optional per E-Mail.</div>
+    <div class="mfield">
+      <label class="lbl">📝 Name des Alerts <span style="color:#ff8b9a">*</span></label>
+      <input type="text" class="inp" id="saName" placeholder="z.B. CTO Berlin">
+    </div>
+    <div class="mfield">
+      <label class="lbl">⏱ Prüfintervall</label>
+      <select class="inp" id="saInterval" style="cursor:pointer;">
+        <option value="1">Jede Stunde</option>
+        <option value="6" selected>Alle 6 Stunden</option>
+        <option value="24">Täglich</option>
+        <option value="168">Wöchentlich</option>
+      </select>
+    </div>
+    <div class="mfield" style="display:flex;align-items:center;gap:12px;background:rgba(0,0,0,.2);border:1px solid rgba(89,62,99,.25);border-radius:10px;padding:13px 15px;">
+      <input type="checkbox" id="saNotify" style="width:16px;height:16px;flex-shrink:0;cursor:pointer;accent-color:#ca98ff;" checked>
+      <label for="saNotify" style="cursor:pointer;font-size:13px;font-weight:600;">📧 Per E-Mail benachrichtigen</label>
+    </div>
+    <div id="saStatus" class="mstatus"></div>
+    <div class="mactions">
+      <button type="button" class="mcancelbtn" onclick="closeSaveAlert()">Abbrechen</button>
+      <button type="button" class="msavebtn" onclick="submitSaveAlert()">🔔 Abonnieren</button>
     </div>
   </div>
 </div>

@@ -579,12 +579,84 @@ def init_db():
                 FOREIGN KEY (company_id) REFERENCES company_watches(id)
             )
         """)
+        # ── Search Alerts ──
+        db.execute("""
+            CREATE TABLE IF NOT EXISTS saved_searches (
+                id                   INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id              INTEGER NOT NULL,
+                name                 TEXT NOT NULL,
+                titles               TEXT NOT NULL DEFAULT '[]',
+                location             TEXT,
+                plz                  TEXT,
+                km                   INTEGER NOT NULL DEFAULT 50,
+                days                 INTEGER NOT NULL DEFAULT 7,
+                remote_only          INTEGER NOT NULL DEFAULT 0,
+                country              TEXT NOT NULL DEFAULT 'de',
+                check_interval_hours INTEGER NOT NULL DEFAULT 6,
+                active               INTEGER NOT NULL DEFAULT 1,
+                notify_enabled       INTEGER NOT NULL DEFAULT 1,
+                last_run_at          TEXT,
+                last_run_status      TEXT,
+                created_at           TEXT DEFAULT (datetime('now')),
+                FOREIGN KEY (user_id) REFERENCES users(id)
+            )
+        """)
+        db.execute("""
+            CREATE TABLE IF NOT EXISTS alert_jobs (
+                id           INTEGER PRIMARY KEY AUTOINCREMENT,
+                search_id    INTEGER NOT NULL,
+                job_key      TEXT NOT NULL,
+                title        TEXT NOT NULL,
+                company      TEXT,
+                url          TEXT,
+                location     TEXT,
+                salary_min   INTEGER,
+                salary_max   INTEGER,
+                source       TEXT,
+                found_at     TEXT DEFAULT (datetime('now')),
+                is_new       INTEGER NOT NULL DEFAULT 1,
+                FOREIGN KEY (search_id) REFERENCES saved_searches(id)
+            )
+        """)
+        # ── Company Boards (Greenhouse/Lever) ──
+        db.execute("""
+            CREATE TABLE IF NOT EXISTS company_boards (
+                id                   INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id              INTEGER NOT NULL,
+                provider             TEXT NOT NULL,
+                slug                 TEXT NOT NULL,
+                name                 TEXT,
+                active               INTEGER NOT NULL DEFAULT 1,
+                check_interval_hours INTEGER NOT NULL DEFAULT 24,
+                last_checked_at      TEXT,
+                last_check_status    TEXT,
+                created_at           TEXT DEFAULT (datetime('now')),
+                FOREIGN KEY (user_id) REFERENCES users(id)
+            )
+        """)
+        db.execute("""
+            CREATE TABLE IF NOT EXISTS board_jobs (
+                id           INTEGER PRIMARY KEY AUTOINCREMENT,
+                board_id     INTEGER NOT NULL,
+                title        TEXT NOT NULL,
+                url          TEXT,
+                location     TEXT,
+                found_at     TEXT DEFAULT (datetime('now')),
+                last_seen_at TEXT DEFAULT (datetime('now')),
+                is_new       INTEGER NOT NULL DEFAULT 1,
+                FOREIGN KEY (board_id) REFERENCES company_boards(id)
+            )
+        """)
         # Indexes
         db.execute("CREATE INDEX IF NOT EXISTS idx_users_email ON users(email)")
         db.execute("CREATE INDEX IF NOT EXISTS idx_reset_tokens_user ON password_reset_tokens(user_id)")
         db.execute("CREATE INDEX IF NOT EXISTS idx_reset_tokens_expires ON password_reset_tokens(expires_at)")
         db.execute("CREATE INDEX IF NOT EXISTS idx_watches_user ON company_watches(user_id)")
         db.execute("CREATE INDEX IF NOT EXISTS idx_watch_jobs_company ON watch_jobs(company_id)")
+        db.execute("CREATE INDEX IF NOT EXISTS idx_searches_user ON saved_searches(user_id)")
+        db.execute("CREATE INDEX IF NOT EXISTS idx_alert_jobs_search ON alert_jobs(search_id)")
+        db.execute("CREATE INDEX IF NOT EXISTS idx_boards_user ON company_boards(user_id)")
+        db.execute("CREATE INDEX IF NOT EXISTS idx_board_jobs_board ON board_jobs(board_id)")
 
     # Bootstrap: promote ADMIN_USER from env if set
     if ADMIN_USER:
@@ -924,6 +996,42 @@ def update_notifications():
     return jsonify({"ok": True})
 
 
+# ── Synonyme (Spiegelbild der Frontend-Map für Search-Alerts) ─────
+
+SYNONYMS = {
+    "CTO":            ["Chief Technology Officer", "VP Engineering", "VP of Engineering", "Head of Engineering", "Technischer Geschäftsführer"],
+    "CIO":            ["Chief Information Officer", "IT Director", "Director IT"],
+    "CDO":            ["Chief Digital Officer", "Chief Data Officer", "Head of Digital"],
+    "Head of IT":     ["IT-Leiter", "Leiter IT", "IT Director", "Director IT", "VP IT"],
+    "Leiter IT":      ["IT-Leiter", "Head of IT", "IT Director"],
+    "Direktor IT":    ["IT Director", "Director IT", "Head of IT"],
+    "IT-Manager":     ["IT Manager", "IT Leader", "Senior IT Manager"],
+    "VP of Engineering": ["VP Engineering", "Vice President Engineering", "Head of Engineering", "CTO"],
+    "CISO":           ["Chief Information Security Officer", "Head of Security", "Head of InfoSec"],
+    "CFO":            ["Chief Financial Officer", "Finanzchef", "Finanzleiter", "VP Finance"],
+    "COO":            ["Chief Operating Officer", "Operations Director", "Head of Operations"],
+    "CEO":            ["Chief Executive Officer", "Geschäftsführer", "Managing Director"],
+    "Product Manager":["Produktmanager", "Senior Product Manager", "Head of Product"],
+    "Data Scientist": ["Senior Data Scientist", "ML Engineer", "Machine Learning Engineer"],
+    "DevOps Engineer":["Site Reliability Engineer", "SRE", "Platform Engineer", "Cloud Engineer"],
+}
+
+def expand_titles(arr):
+    """Erweitert Jobtitel um bekannte Synonyme."""
+    out = []
+    seen = set()
+    keys_lower = {k.lower(): k for k in SYNONYMS}
+    for t in arr:
+        if t not in seen:
+            seen.add(t); out.append(t)
+        key = keys_lower.get(t.lower())
+        if key:
+            for s in SYNONYMS[key]:
+                if s not in seen:
+                    seen.add(s); out.append(s)
+    return out
+
+
 # ── API-Cache ─────────────────────────────────────────────────────
 
 _api_cache = {}
@@ -1023,6 +1131,37 @@ def jobs_jobicy():
         params["geo"] = geo
     try:
         data, status = _cached_api_get("jobicy", "https://jobicy.com/api/v2/remote-jobs", params)
+        return jsonify(data), status
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+# ── Jobs (RemoteOK proxy – Remote Jobs) ─────────────────────────
+
+@app.route("/jobs/remoteok")
+def jobs_remoteok():
+    """Liefert alle aktuellen RemoteOK-Jobs. Filterung nach Jobtitel passiert clientseitig."""
+    try:
+        # RemoteOK gibt ein Array zurück, erstes Element ist ein Meta-Objekt
+        data, status = _cached_api_get("remoteok", "https://remoteok.com/api", {})
+        jobs = [j for j in (data or []) if isinstance(j, dict) and "id" in j]
+        return jsonify({"jobs": jobs, "count": len(jobs)}), status
+    except Exception as e:
+        return jsonify({"error": str(e), "jobs": [], "count": 0}), 500
+
+
+# ── Jobs (The Muse proxy) ───────────────────────────────────────
+
+@app.route("/jobs/muse")
+def jobs_muse():
+    category = request.args.get("category", "")
+    location = request.args.get("location", "")
+    page     = request.args.get("page", "1")
+    params   = {"page": page}
+    if category: params["category"] = category
+    if location: params["location"] = location
+    try:
+        data, status = _cached_api_get("muse", "https://www.themuse.com/api/public/jobs", params)
         return jsonify(data), status
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -1171,6 +1310,10 @@ def admin_delete_user(uid):
     if uid == session["user_id"]:
         return jsonify({"error": "Du kannst dich nicht selbst löschen"}), 400
     with get_db() as db:
+        db.execute("DELETE FROM alert_jobs WHERE search_id IN (SELECT id FROM saved_searches WHERE user_id = ?)", [uid])
+        db.execute("DELETE FROM saved_searches WHERE user_id = ?", [uid])
+        db.execute("DELETE FROM board_jobs WHERE board_id IN (SELECT id FROM company_boards WHERE user_id = ?)", [uid])
+        db.execute("DELETE FROM company_boards WHERE user_id = ?", [uid])
         db.execute("DELETE FROM watch_jobs WHERE company_id IN (SELECT id FROM company_watches WHERE user_id = ?)", [uid])
         db.execute("DELETE FROM company_watches WHERE user_id = ?", [uid])
         db.execute("DELETE FROM user_data WHERE user_id = ?", [uid])
@@ -1441,6 +1584,550 @@ def watch_keywords_update():
     return jsonify({"ok": True})
 
 
+# ══════════════════════════════════════════════════════════════════
+# Search Alerts
+# ══════════════════════════════════════════════════════════════════
+
+def _job_key(j):
+    """Eindeutiger Key für Dedup. Nutzt URL oder Titel+Company."""
+    url = (j.get("redirect_url") or j.get("url") or "").strip()
+    if url:
+        return url[:180]
+    return ((j.get("title", "") + "|" + (j.get("company", {}).get("display_name", "") if isinstance(j.get("company"), dict) else (j.get("company") or "")))[:180])
+
+
+def _fetch_jobs_for_search(s):
+    """Führt eine gespeicherte Suche aus und gibt eine Liste normalisierter Jobs zurück."""
+    titles = json.loads(s["titles"] or "[]")
+    expanded = expand_titles(titles)
+    location = s["location"] or ""
+    plz      = s["plz"] or ""
+    where    = (plz + " " + location).strip() if plz else location
+    country  = s["country"] or "de"
+    remote_only = bool(s["remote_only"])
+    cutoff_days = s["days"] or 7
+    radius = s["km"] or 50
+
+    found = []
+    for title in expanded:
+        # Adzuna
+        try:
+            params = {"app_id": APP_ID, "app_key": APP_KEY, "results_per_page": 20,
+                      "what": (title + " remote") if remote_only else title,
+                      "distance": radius, "content-type": "application/json"}
+            if where: params["where"] = where
+            url = f"https://api.adzuna.com/v1/api/jobs/{country}/search/1"
+            data, _ = _cached_api_get("adzuna", url, params)
+            for j in (data.get("results") or []):
+                if remote_only:
+                    text = (j.get("title", "") + " " + j.get("description", "")).lower()
+                    if "remote" not in text:
+                        continue
+                found.append({"title": j.get("title", ""), "company": (j.get("company") or {}).get("display_name", ""),
+                              "url": j.get("redirect_url", ""), "location": (j.get("location") or {}).get("display_name", ""),
+                              "salary_min": j.get("salary_min"), "salary_max": j.get("salary_max"),
+                              "source": "Adzuna", "created": j.get("created", "")})
+        except Exception as e:
+            print(f"[Alert] Adzuna-Fehler: {e}", flush=True)
+
+        # BA (nur DE, nicht remote)
+        if not remote_only and country == "de":
+            try:
+                ba_params = {"angebotsart": 1, "page": 1, "pav": "false", "size": 25, "umkreis": radius, "was": title}
+                if where: ba_params["wo"] = where
+                data, _ = _cached_api_get("ba",
+                    "https://rest.arbeitsagentur.de/jobboerse/jobsuche-service/pc/v4/app/jobs",
+                    ba_params, headers={"X-API-Key": "jobboerse-jobsuche"})
+                for j in (data.get("stellenangebote") or []):
+                    refnr = j.get("refnr", "")
+                    loc_obj = j.get("arbeitsort") or {}
+                    found.append({
+                        "title": j.get("titel", ""),
+                        "company": j.get("arbeitgeber", ""),
+                        "url": j.get("externeUrl") or (f"https://www.arbeitsagentur.de/jobsuche/jobdetail/{refnr}" if refnr else ""),
+                        "location": ", ".join(filter(None, [loc_obj.get("ort"), loc_obj.get("region")])),
+                        "salary_min": None, "salary_max": None,
+                        "source": "BA", "created": j.get("aktuelleVeroeffentlichungsdatum", "")
+                    })
+            except Exception as e:
+                print(f"[Alert] BA-Fehler: {e}", flush=True)
+
+    # Cutoff nach Datum
+    if cutoff_days > 0:
+        cutoff_iso = (datetime.now(timezone.utc) - timedelta(days=cutoff_days)).isoformat()
+        found = [j for j in found if not j.get("created") or j["created"] >= cutoff_iso[:10]]
+
+    return found
+
+
+def _save_alert_results(search_id, jobs):
+    """Vergleicht mit existierenden alert_jobs, fügt neue ein. Gibt new_count zurück."""
+    now = datetime.now(timezone.utc).isoformat()
+    with get_db() as db:
+        existing = {r["job_key"] for r in db.execute(
+            "SELECT job_key FROM alert_jobs WHERE search_id = ?", [search_id]
+        ).fetchall()}
+        new_count = 0
+        for j in jobs:
+            key = (j.get("url") or (j.get("title", "") + "|" + (j.get("company") or "")))[:180]
+            if key in existing:
+                continue
+            db.execute("""
+                INSERT INTO alert_jobs (search_id, job_key, title, company, url, location,
+                                        salary_min, salary_max, source)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, [search_id, key, j.get("title", ""), j.get("company", ""), j.get("url", ""),
+                  j.get("location", ""), j.get("salary_min"), j.get("salary_max"), j.get("source", "")])
+            new_count += 1
+        db.execute(
+            "UPDATE saved_searches SET last_run_at = ?, last_run_status = 'ok' WHERE id = ?",
+            [now, search_id]
+        )
+    return new_count
+
+
+def _mark_alert_error(search_id, error):
+    now = datetime.now(timezone.utc).isoformat()
+    with get_db() as db:
+        db.execute(
+            "UPDATE saved_searches SET last_run_at = ?, last_run_status = ? WHERE id = ?",
+            [now, f"error: {str(error)[:200]}", search_id]
+        )
+
+
+def _send_alert_notification(user_id, search_name, new_jobs):
+    """Sendet eine E-Mail mit neuen Alert-Treffern."""
+    if not SMTP_HOST or not SMTP_USER:
+        return
+    with get_db() as db:
+        user = db.execute("SELECT email, username, watch_notify_enabled FROM users WHERE id = ?", [user_id]).fetchone()
+    if not user or not user["email"] or not user["watch_notify_enabled"]:
+        return
+    now = time.time()
+    if user_id in _notify_last_sent and now - _notify_last_sent[user_id] < 3600:
+        return
+    _notify_last_sent[user_id] = now
+    job_rows = "".join(
+        f'<tr><td style="padding:8px 12px;border-bottom:1px solid #1e1e30;">'
+        f'<a href="{j.get("url", "#")}" style="color:#ca98ff;text-decoration:none;font-weight:600;">{j.get("title", "")}</a>'
+        f'<br><span style="color:#c1a0cb;font-size:12px;">{j.get("company", "")} · {j.get("source", "")}</span></td></tr>'
+        for j in new_jobs[:20]
+    )
+    more = f'<tr><td style="padding:8px 12px;color:#c1a0cb;font-size:12px;">… und {len(new_jobs)-20} weitere</td></tr>' if len(new_jobs) > 20 else ""
+    body = f"""
+<div style="font-family:'Inter',sans-serif;max-width:520px;margin:0 auto;background:#1a0425;color:#f9dcff;border-radius:14px;padding:32px 28px;">
+  <div style="font-size:22px;font-weight:900;margin-bottom:4px;background:linear-gradient(135deg,#ca98ff,#00bdfd);-webkit-background-clip:text;-webkit-text-fill-color:transparent;">JobPipeline</div>
+  <h3 style="margin:0 0 16px;color:#f9dcff;font-size:18px;">🔔 {len(new_jobs)} neue Treffer für „{search_name}"</h3>
+  <p style="color:#c1a0cb;line-height:1.6;margin-bottom:20px;">Deine gespeicherte Suche hat neue Stellen gefunden:</p>
+  <table style="width:100%;border-collapse:collapse;background:#290c36;border-radius:10px;overflow:hidden;">
+    {job_rows}{more}
+  </table>
+  <div style="text-align:center;margin:24px 0 16px;">
+    <a href="{APP_URL}" style="background:linear-gradient(135deg,#9c42f4,#00bdfd);color:#fff;padding:13px 28px;border-radius:10px;text-decoration:none;font-weight:700;font-size:15px;display:inline-block;">Alle ansehen</a>
+  </div>
+  <p style="color:#c1a0cb;font-size:11px;text-align:center;">
+    <a href="{APP_URL}" style="color:#896b93;">Benachrichtigungen verwalten</a>
+  </p>
+</div>"""
+    msg = MIMEMultipart("alternative")
+    msg["Subject"] = f"JobPipeline – {len(new_jobs)} neue Treffer für „{search_name}\""
+    msg["From"]    = SMTP_FROM
+    msg["To"]      = user["email"]
+    msg.attach(MIMEText(body, "html"))
+    try:
+        with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as smtp:
+            smtp.ehlo(); smtp.starttls(); smtp.login(SMTP_USER, SMTP_PASS)
+            smtp.sendmail(SMTP_FROM, user["email"], msg.as_string())
+        print(f"[Alert] E-Mail an {user['username']} ({len(new_jobs)} Jobs für „{search_name}\")", flush=True)
+    except Exception as e:
+        print(f"[Alert] E-Mail-Fehler: {e}", flush=True)
+
+
+def _run_alert_checks():
+    """Prüft alle fälligen aktiven Alerts."""
+    with get_db() as db:
+        due = [dict(r) for r in db.execute("""
+            SELECT * FROM saved_searches WHERE active = 1
+            AND (last_run_at IS NULL
+              OR datetime(last_run_at, '+' || check_interval_hours || ' hours') <= datetime('now'))
+        """).fetchall()]
+    for s in due:
+        try:
+            jobs = _fetch_jobs_for_search(s)
+            new_count = _save_alert_results(s["id"], jobs)
+            print(f"[Alert] „{s['name']}\" geprüft – {len(jobs)} Treffer ({new_count} neu)", flush=True)
+            if new_count > 0 and s["notify_enabled"]:
+                # Neue Jobs für die Mail laden
+                with get_db() as db:
+                    new_jobs = [dict(r) for r in db.execute(
+                        "SELECT title, company, url, source FROM alert_jobs WHERE search_id = ? AND is_new = 1 ORDER BY found_at DESC LIMIT 30",
+                        [s["id"]]
+                    ).fetchall()]
+                _send_alert_notification(s["user_id"], s["name"], new_jobs)
+        except Exception as e:
+            _mark_alert_error(s["id"], e)
+            print(f"[Alert] Fehler bei „{s['name']}\": {e}", flush=True)
+
+
+def _schedule_alert_checks():
+    def _loop():
+        while True:
+            time.sleep(WATCH_INTERVAL_MINUTES * 60)
+            try:
+                _run_alert_checks()
+            except Exception as e:
+                print(f"[Alert] Scheduler-Fehler: {e}", flush=True)
+    threading.Thread(target=_loop, daemon=True, name="alert-checker").start()
+
+
+@app.route("/search/alerts", methods=["GET", "OPTIONS"])
+@login_required
+def alerts_list():
+    uid = session["user_id"]
+    with get_db() as db:
+        rows = db.execute("""
+            SELECT s.*,
+                   COUNT(j.id) AS total_jobs,
+                   SUM(j.is_new) AS new_jobs
+            FROM saved_searches s
+            LEFT JOIN alert_jobs j ON j.search_id = s.id
+            WHERE s.user_id = ?
+            GROUP BY s.id
+            ORDER BY s.created_at DESC
+        """, [uid]).fetchall()
+    return jsonify([dict(r) for r in rows])
+
+
+@app.route("/search/alerts", methods=["POST"])
+@login_required
+def alerts_create():
+    uid  = session["user_id"]
+    data = request.get_json(force=True) or {}
+    name = (data.get("name") or "").strip()
+    if not name:
+        return jsonify({"error": "Name ist Pflicht"}), 400
+    titles = json.dumps([t.strip() for t in (data.get("titles") or []) if str(t).strip()])
+    with get_db() as db:
+        cur = db.execute("""
+            INSERT INTO saved_searches (user_id, name, titles, location, plz, km, days,
+                                        remote_only, country, check_interval_hours, notify_enabled)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, [uid, name, titles, data.get("location", ""), data.get("plz", ""),
+              int(data.get("km", 50)), int(data.get("days", 7)),
+              1 if data.get("remote_only") else 0, data.get("country", "de"),
+              int(data.get("check_interval_hours", 6)),
+              1 if data.get("notify_enabled", True) else 0])
+        row = db.execute("SELECT * FROM saved_searches WHERE id = ?", [cur.lastrowid]).fetchone()
+    return jsonify(dict(row)), 201
+
+
+@app.route("/search/alerts/<int:sid>", methods=["PATCH", "OPTIONS"])
+@login_required
+def alerts_update(sid):
+    uid  = session["user_id"]
+    data = request.get_json(force=True) or {}
+    with get_db() as db:
+        row = db.execute("SELECT id FROM saved_searches WHERE id = ? AND user_id = ?", [sid, uid]).fetchone()
+        if not row:
+            return jsonify({"error": "Nicht gefunden"}), 404
+        allowed = {"name", "active", "notify_enabled", "check_interval_hours"}
+        for field, val in data.items():
+            if field in allowed:
+                db.execute(f"UPDATE saved_searches SET {field} = ? WHERE id = ?", [val, sid])
+    return jsonify({"ok": True})
+
+
+@app.route("/search/alerts/<int:sid>", methods=["DELETE", "OPTIONS"])
+@login_required
+def alerts_delete(sid):
+    uid = session["user_id"]
+    with get_db() as db:
+        row = db.execute("SELECT id FROM saved_searches WHERE id = ? AND user_id = ?", [sid, uid]).fetchone()
+        if not row:
+            return jsonify({"error": "Nicht gefunden"}), 404
+        db.execute("DELETE FROM alert_jobs WHERE search_id = ?", [sid])
+        db.execute("DELETE FROM saved_searches WHERE id = ?", [sid])
+    return jsonify({"ok": True})
+
+
+@app.route("/search/alerts/<int:sid>/run", methods=["POST", "OPTIONS"])
+@login_required
+def alerts_run_now(sid):
+    uid = session["user_id"]
+    with get_db() as db:
+        row = db.execute("SELECT * FROM saved_searches WHERE id = ? AND user_id = ?", [sid, uid]).fetchone()
+        if not row:
+            return jsonify({"error": "Nicht gefunden"}), 404
+        s = dict(row)
+    try:
+        jobs = _fetch_jobs_for_search(s)
+        new_count = _save_alert_results(sid, jobs)
+        return jsonify({"ok": True, "total": len(jobs), "new": new_count})
+    except Exception as e:
+        _mark_alert_error(sid, e)
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/search/alerts/<int:sid>/jobs", methods=["GET", "OPTIONS"])
+@login_required
+def alerts_jobs(sid):
+    uid = session["user_id"]
+    with get_db() as db:
+        row = db.execute("SELECT id FROM saved_searches WHERE id = ? AND user_id = ?", [sid, uid]).fetchone()
+        if not row:
+            return jsonify({"error": "Nicht gefunden"}), 404
+        jobs = db.execute(
+            "SELECT * FROM alert_jobs WHERE search_id = ? ORDER BY found_at DESC LIMIT 200", [sid]
+        ).fetchall()
+    return jsonify([dict(r) for r in jobs])
+
+
+@app.route("/search/alerts/<int:sid>/read-all", methods=["POST", "OPTIONS"])
+@login_required
+def alerts_read_all(sid):
+    uid = session["user_id"]
+    with get_db() as db:
+        row = db.execute("SELECT id FROM saved_searches WHERE id = ? AND user_id = ?", [sid, uid]).fetchone()
+        if not row:
+            return jsonify({"error": "Nicht gefunden"}), 404
+        db.execute("UPDATE alert_jobs SET is_new = 0 WHERE search_id = ?", [sid])
+    return jsonify({"ok": True})
+
+
+@app.route("/search/alerts/jobs/<int:jid>", methods=["DELETE", "OPTIONS"])
+@login_required
+def alerts_job_delete(jid):
+    uid = session["user_id"]
+    with get_db() as db:
+        row = db.execute(
+            "SELECT j.id FROM alert_jobs j JOIN saved_searches s ON s.id = j.search_id WHERE j.id = ? AND s.user_id = ?",
+            [jid, uid]
+        ).fetchone()
+        if not row:
+            return jsonify({"error": "Nicht gefunden"}), 404
+        db.execute("DELETE FROM alert_jobs WHERE id = ?", [jid])
+    return jsonify({"ok": True})
+
+
+# ══════════════════════════════════════════════════════════════════
+# Company Boards (Greenhouse / Lever)
+# ══════════════════════════════════════════════════════════════════
+
+def _fetch_greenhouse_jobs(slug):
+    """Lädt Jobs von Greenhouse-Board."""
+    url = f"https://boards-api.greenhouse.io/v1/boards/{slug}/jobs"
+    r = requests.get(url, timeout=15)
+    r.raise_for_status()
+    data = r.json()
+    return [{
+        "title":    j.get("title", ""),
+        "url":      j.get("absolute_url", ""),
+        "location": (j.get("location") or {}).get("name", ""),
+    } for j in (data.get("jobs") or [])]
+
+
+def _fetch_lever_jobs(slug):
+    """Lädt Jobs von Lever-Board."""
+    url = f"https://api.lever.co/v0/postings/{slug}?mode=json"
+    r = requests.get(url, timeout=15)
+    r.raise_for_status()
+    data = r.json()
+    return [{
+        "title":    j.get("text", ""),
+        "url":      j.get("hostedUrl", ""),
+        "location": (j.get("categories") or {}).get("location", ""),
+    } for j in (data or [])]
+
+
+def _save_board_results(board_id, jobs):
+    now = datetime.now(timezone.utc).isoformat()
+    with get_db() as db:
+        existing = {r["url"] for r in db.execute(
+            "SELECT url FROM board_jobs WHERE board_id = ?", [board_id]
+        ).fetchall()}
+        new_count = 0
+        for j in jobs:
+            if j["url"] not in existing:
+                db.execute(
+                    "INSERT INTO board_jobs (board_id, title, url, location) VALUES (?, ?, ?, ?)",
+                    [board_id, j["title"], j["url"], j.get("location", "")]
+                )
+                new_count += 1
+            else:
+                db.execute(
+                    "UPDATE board_jobs SET last_seen_at = ? WHERE board_id = ? AND url = ?",
+                    [now, board_id, j["url"]]
+                )
+        db.execute(
+            "UPDATE company_boards SET last_checked_at = ?, last_check_status = 'ok' WHERE id = ?",
+            [now, board_id]
+        )
+    return new_count
+
+
+def _check_board(board):
+    """Lädt Jobs für ein Board, speichert neue. Gibt new_count zurück."""
+    if board["provider"] == "greenhouse":
+        jobs = _fetch_greenhouse_jobs(board["slug"])
+    elif board["provider"] == "lever":
+        jobs = _fetch_lever_jobs(board["slug"])
+    else:
+        raise ValueError(f"Unbekannter Provider: {board['provider']}")
+    return _save_board_results(board["id"], jobs), len(jobs)
+
+
+def _run_board_checks():
+    """Prüft alle fälligen aktiven Boards."""
+    with get_db() as db:
+        due = [dict(r) for r in db.execute("""
+            SELECT * FROM company_boards WHERE active = 1
+            AND (last_checked_at IS NULL
+              OR datetime(last_checked_at, '+' || check_interval_hours || ' hours') <= datetime('now'))
+        """).fetchall()]
+    for b in due:
+        try:
+            new_count, total = _check_board(b)
+            print(f"[Board] {b['provider']}/{b['slug']} – {total} Jobs ({new_count} neu)", flush=True)
+        except Exception as e:
+            now = datetime.now(timezone.utc).isoformat()
+            with get_db() as db:
+                db.execute(
+                    "UPDATE company_boards SET last_checked_at = ?, last_check_status = ? WHERE id = ?",
+                    [now, f"error: {str(e)[:200]}", b["id"]]
+                )
+            print(f"[Board] Fehler bei {b['provider']}/{b['slug']}: {e}", flush=True)
+
+
+@app.route("/boards", methods=["GET", "OPTIONS"])
+@login_required
+def boards_list():
+    uid = session["user_id"]
+    with get_db() as db:
+        rows = db.execute("""
+            SELECT b.*, COUNT(j.id) AS total_jobs, SUM(j.is_new) AS new_jobs
+            FROM company_boards b
+            LEFT JOIN board_jobs j ON j.board_id = b.id
+            WHERE b.user_id = ?
+            GROUP BY b.id
+            ORDER BY b.created_at DESC
+        """, [uid]).fetchall()
+    return jsonify([dict(r) for r in rows])
+
+
+@app.route("/boards", methods=["POST"])
+@login_required
+def boards_create():
+    uid  = session["user_id"]
+    data = request.get_json(force=True) or {}
+    provider = (data.get("provider") or "").strip().lower()
+    slug     = (data.get("slug") or "").strip()
+    name     = (data.get("name") or slug).strip()
+    if provider not in ("greenhouse", "lever"):
+        return jsonify({"error": "Provider muss greenhouse oder lever sein"}), 400
+    if not slug:
+        return jsonify({"error": "Slug ist Pflicht"}), 400
+    interval = int(data.get("check_interval_hours", 24))
+    with get_db() as db:
+        cur = db.execute(
+            "INSERT INTO company_boards (user_id, provider, slug, name, check_interval_hours) VALUES (?, ?, ?, ?, ?)",
+            [uid, provider, slug, name, interval]
+        )
+        row = db.execute("SELECT * FROM company_boards WHERE id = ?", [cur.lastrowid]).fetchone()
+    return jsonify(dict(row)), 201
+
+
+@app.route("/boards/<int:bid>", methods=["PATCH", "OPTIONS"])
+@login_required
+def boards_update(bid):
+    uid  = session["user_id"]
+    data = request.get_json(force=True) or {}
+    with get_db() as db:
+        row = db.execute("SELECT id FROM company_boards WHERE id = ? AND user_id = ?", [bid, uid]).fetchone()
+        if not row:
+            return jsonify({"error": "Nicht gefunden"}), 404
+        allowed = {"name", "active", "check_interval_hours"}
+        for field, val in data.items():
+            if field in allowed:
+                db.execute(f"UPDATE company_boards SET {field} = ? WHERE id = ?", [val, bid])
+    return jsonify({"ok": True})
+
+
+@app.route("/boards/<int:bid>", methods=["DELETE", "OPTIONS"])
+@login_required
+def boards_delete(bid):
+    uid = session["user_id"]
+    with get_db() as db:
+        row = db.execute("SELECT id FROM company_boards WHERE id = ? AND user_id = ?", [bid, uid]).fetchone()
+        if not row:
+            return jsonify({"error": "Nicht gefunden"}), 404
+        db.execute("DELETE FROM board_jobs WHERE board_id = ?", [bid])
+        db.execute("DELETE FROM company_boards WHERE id = ?", [bid])
+    return jsonify({"ok": True})
+
+
+@app.route("/boards/<int:bid>/check", methods=["POST", "OPTIONS"])
+@login_required
+def boards_check_now(bid):
+    uid = session["user_id"]
+    with get_db() as db:
+        row = db.execute("SELECT * FROM company_boards WHERE id = ? AND user_id = ?", [bid, uid]).fetchone()
+        if not row:
+            return jsonify({"error": "Nicht gefunden"}), 404
+    try:
+        new_count, total = _check_board(dict(row))
+        return jsonify({"ok": True, "total": total, "new": new_count})
+    except Exception as e:
+        now = datetime.now(timezone.utc).isoformat()
+        with get_db() as db:
+            db.execute(
+                "UPDATE company_boards SET last_checked_at = ?, last_check_status = ? WHERE id = ?",
+                [now, f"error: {str(e)[:200]}", bid]
+            )
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/boards/jobs", methods=["GET", "OPTIONS"])
+@login_required
+def boards_jobs():
+    uid = session["user_id"]
+    with get_db() as db:
+        rows = db.execute("""
+            SELECT j.*, b.name AS board_name, b.provider, b.slug
+            FROM board_jobs j
+            JOIN company_boards b ON b.id = j.board_id
+            WHERE b.user_id = ?
+            ORDER BY j.found_at DESC LIMIT 200
+        """, [uid]).fetchall()
+    return jsonify([dict(r) for r in rows])
+
+
+@app.route("/boards/jobs/<int:jid>", methods=["DELETE", "OPTIONS"])
+@login_required
+def boards_job_delete(jid):
+    uid = session["user_id"]
+    with get_db() as db:
+        row = db.execute(
+            "SELECT j.id FROM board_jobs j JOIN company_boards b ON b.id = j.board_id WHERE j.id = ? AND b.user_id = ?",
+            [jid, uid]
+        ).fetchone()
+        if not row:
+            return jsonify({"error": "Nicht gefunden"}), 404
+        db.execute("DELETE FROM board_jobs WHERE id = ?", [jid])
+    return jsonify({"ok": True})
+
+
+@app.route("/boards/jobs/read-all", methods=["POST", "OPTIONS"])
+@login_required
+def boards_jobs_read_all():
+    uid = session["user_id"]
+    with get_db() as db:
+        db.execute("""
+            UPDATE board_jobs SET is_new = 0
+            WHERE board_id IN (SELECT id FROM company_boards WHERE user_id = ?)
+        """, [uid])
+    return jsonify({"ok": True})
+
+
 # ── Legal Meta ────────────────────────────────────────────────────
 
 @app.route("/meta/legal")
@@ -1461,6 +2148,20 @@ def meta_legal():
 _schedule_backup()
 _schedule_watch_checks()
 _schedule_digest()
+_schedule_alert_checks()
+
+
+def _schedule_board_checks():
+    def _loop():
+        while True:
+            time.sleep(WATCH_INTERVAL_MINUTES * 60)
+            try:
+                _run_board_checks()
+            except Exception as e:
+                print(f"[Board] Scheduler-Fehler: {e}", flush=True)
+    threading.Thread(target=_loop, daemon=True, name="board-checker").start()
+
+_schedule_board_checks()
 
 if __name__ == "__main__":
     print("✅ JobPipeline Server läuft auf http://localhost:5500")

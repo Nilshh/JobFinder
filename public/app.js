@@ -6,6 +6,43 @@ let sfFilter = "all";
 let allMerged = [], currentPage = 0, renderMeta = {};
 const PAGE_SIZE = 20;
 let remoteOnly = false;
+let useSynonyms = localStorage.getItem("jf2_use_synonyms") !== "0";
+
+// ── Synonym-Map ──
+const SYNONYMS = {
+  "CTO":            ["Chief Technology Officer", "VP Engineering", "VP of Engineering", "Head of Engineering", "Technischer Geschäftsführer"],
+  "CIO":            ["Chief Information Officer", "IT Director", "Director IT"],
+  "CDO":            ["Chief Digital Officer", "Chief Data Officer", "Head of Digital"],
+  "Head of IT":     ["IT-Leiter", "Leiter IT", "IT Director", "Director IT", "VP IT"],
+  "Leiter IT":      ["IT-Leiter", "Head of IT", "IT Director"],
+  "Direktor IT":    ["IT Director", "Director IT", "Head of IT"],
+  "IT-Manager":     ["IT Manager", "IT Leader", "Senior IT Manager"],
+  "VP of Engineering": ["VP Engineering", "Vice President Engineering", "Head of Engineering", "CTO"],
+  "CISO":           ["Chief Information Security Officer", "Head of Security", "Head of InfoSec"],
+  "CFO":            ["Chief Financial Officer", "Finanzchef", "Finanzleiter", "VP Finance"],
+  "COO":            ["Chief Operating Officer", "Operations Director", "Head of Operations"],
+  "CEO":            ["Chief Executive Officer", "Geschäftsführer", "Managing Director"],
+  "Product Manager":["Produktmanager", "Senior Product Manager", "Head of Product"],
+  "Data Scientist": ["Senior Data Scientist", "ML Engineer", "Machine Learning Engineer"],
+  "DevOps Engineer":["Site Reliability Engineer", "SRE", "Platform Engineer", "Cloud Engineer"],
+};
+
+function expandTitles(arr){
+  if(!useSynonyms) return Array.from(new Set(arr));
+  const out = new Set();
+  arr.forEach(t => {
+    out.add(t);
+    // Exact-Match in Synonym-Map (case-insensitive Key-Lookup)
+    const key = Object.keys(SYNONYMS).find(k => k.toLowerCase() === t.toLowerCase());
+    if(key) SYNONYMS[key].forEach(s => out.add(s));
+  });
+  return Array.from(out);
+}
+
+function countSynonymExpansions(arr){
+  if(!useSynonyms) return 0;
+  return expandTitles(arr).length - new Set(arr).size;
+}
 
 // ── Auth state ──
 let AUTH = { user: null };
@@ -32,10 +69,10 @@ function refreshBadge(){
 
 // ── Tabs ──
 function showTab(t){
-  const GATED = ["saved", "dashboard", "portals", "watch"];
+  const GATED = ["saved", "dashboard", "portals", "watch", "alerts"];
   if(GATED.includes(t) && !AUTH.user){
     _pendingAction = () => showTab(t);
-    const hints = { saved:"den Merkzettel", dashboard:"das Dashboard", portals:"die Portale", watch:"den Karriere-Monitor" };
+    const hints = { saved:"den Merkzettel", dashboard:"das Dashboard", portals:"die Portale", watch:"den Karriere-Monitor", alerts:"die Alerts" };
     openAuthModal("Für " + hints[t] + " ist ein Account erforderlich.");
     return;
   }
@@ -44,6 +81,7 @@ function showTab(t){
   document.getElementById("tabDashboard").style.display = t==="dashboard" ?"block":"none";
   document.getElementById("tabPortals").style.display   = t==="portals"   ?"block":"none";
   document.getElementById("tabWatch").style.display     = t==="watch"     ?"block":"none";
+  document.getElementById("tabAlerts").style.display    = t==="alerts"    ?"block":"none";
   document.getElementById("tabAdmin").style.display     = t==="admin"     ?"block":"none";
   document.getElementById("tabProfile").style.display   = t==="profile"   ?"block":"none";
   document.getElementById("nb1").classList.toggle("on", t==="search");
@@ -51,12 +89,14 @@ function showTab(t){
   document.getElementById("nb5").classList.toggle("on", t==="dashboard");
   document.getElementById("nb3").classList.toggle("on", t==="portals");
   document.getElementById("nb4").classList.toggle("on", t==="watch");
+  document.getElementById("nb6").classList.toggle("on", t==="alerts");
   const ab = document.getElementById("adminBtn");
   if(ab) ab.classList.toggle("active", t==="admin");
   if(t==="saved")     renderSaved();
   if(t==="dashboard") renderDashboard();
   if(t==="portals")   renderPortalsTab();
   if(t==="watch")     loadWatchTab();
+  if(t==="alerts")    loadAlertsTab();
   if(t==="admin")     { loadAdminUsers(); loadBackupList(); }
   if(t==="profile")   loadProfileTab();
 }
@@ -107,6 +147,27 @@ function renderSelTags(){
   });
   document.getElementById("selHint").style.display = titles.size ? "block":"none";
   document.getElementById("selCnt").textContent = titles.size;
+  renderSynonymHint();
+}
+
+function renderSynonymHint(){
+  const el = document.getElementById("synHint");
+  if(!el) return;
+  const arr = Array.from(titles);
+  const n = countSynonymExpansions(arr);
+  if(!arr.length){ el.style.display = "none"; return; }
+  el.style.display = "flex";
+  el.innerHTML =
+    '<span class="syn-label">'+(useSynonyms
+      ? (n>0 ? "🔄 "+n+" zusätzliche Synonyme werden mitgesucht" : "🔄 Synonym-Suche aktiv (keine Synonyme für die aktuellen Titel)")
+      : "🔄 Synonym-Suche aus")+'</span>'
+    + '<button type="button" class="syn-toggle" onclick="toggleSynonyms()">'+(useSynonyms?"Ausschalten":"Einschalten")+'</button>';
+}
+
+function toggleSynonyms(){
+  useSynonyms = !useSynonyms;
+  localStorage.setItem("jf2_use_synonyms", useSynonyms ? "1" : "0");
+  renderSynonymHint();
 }
 
 // ── Radio rows ──
@@ -161,6 +222,41 @@ function normJobicyJob(j, title){
   };
 }
 
+// ── RemoteOK Job Normalizer ──
+function normRemoteOKJob(j, title){
+  return {
+    title:         j.position || "",
+    company:       { display_name: j.company || "" },
+    location:      { display_name: j.location || "Remote" },
+    redirect_url:  j.url || (j.id ? "https://remoteok.com/remote-jobs/"+j.id : ""),
+    created:       j.date || "",
+    contract_type: undefined,
+    salary_min:    j.salary_min || undefined,
+    salary_max:    j.salary_max || undefined,
+    description:   j.description || "",
+    _t:            title,
+    _source:       "RemoteOK"
+  };
+}
+
+// ── The Muse Job Normalizer ──
+function normMuseJob(j, title){
+  const loc = (j.locations && j.locations[0]?.name) || "";
+  return {
+    title:         j.name || "",
+    company:       { display_name: j.company?.name || "" },
+    location:      { display_name: loc },
+    redirect_url:  j.refs?.landing_page || "",
+    created:       j.publication_date || "",
+    contract_type: j.type || undefined,
+    salary_min:    undefined,
+    salary_max:    undefined,
+    description:   j.contents || "",
+    _t:            title,
+    _source:       "Muse"
+  };
+}
+
 // ── Remote toggle ──
 document.getElementById("remoteToggle").addEventListener("click", () => {
   remoteOnly = !remoteOnly;
@@ -187,11 +283,15 @@ async function doSearch(){
   show("loadbox");
   document.getElementById("goBtn").disabled = true;
 
-  const arr = Array.from(titles);
+  const origArr = Array.from(titles);
+  const arr = expandTitles(origArr);
   const country = where.toLowerCase().includes("wien")||where.toLowerCase().includes("österreich")?"at"
                 : where.toLowerCase().includes("zürich")||where.toLowerCase().includes("schweiz")?"ch":"de";
   const displayWhere = remoteOnly ? (where || "Remote") : (where || "Deutschland");
-  document.getElementById("stxt").textContent = arr.length>1 ? "Suche nach "+arr.length+" Jobtiteln parallel…" : "Suche nach „"+arr[0]+"\"…";
+  const synExtra = arr.length - origArr.length;
+  document.getElementById("stxt").textContent = arr.length>1
+    ? "Suche nach "+arr.length+" Jobtiteln parallel"+(synExtra>0?" (inkl. "+synExtra+" Synonyme)":"")+"…"
+    : "Suche nach „"+arr[0]+"\"…";
 
   try {
     const results = await Promise.all(arr.map(async title => {
@@ -220,12 +320,40 @@ async function doSearch(){
         .then(d=>({ list:(d.jobs||[]).map(j=>normJobicyJob(j,title)), count:d.jobCount||0 }))
         .catch(()=>({ list:[], count:0 }));
 
-      const [az, ba, jobicy] = await Promise.all([azProm, baProm, jobicyProm]);
-      // Im Remote-Modus: nur Jobicy + Adzuna-Remote-Treffer; BA immer ausgefiltert
+      // RemoteOK: nur im Remote-Modus, Filterung clientseitig nach Titel
+      const remoteokProm = remoteOnly
+        ? fetch("/jobs/remoteok")
+            .then(r=>r.json())
+            .then(d=>{
+              const tLower = title.toLowerCase();
+              const filtered = (d.jobs||[]).filter(j =>
+                (j.position||"").toLowerCase().includes(tLower) ||
+                (j.tags||[]).some(t => (t||"").toLowerCase().includes(tLower))
+              );
+              return { list: filtered.map(j=>normRemoteOKJob(j,title)), count: filtered.length };
+            })
+            .catch(()=>({ list:[], count:0 }))
+        : Promise.resolve({ list:[], count:0 });
+
+      // The Muse: für alle Suchen, clientseitig nach Titel filtern
+      const museProm = fetch("/jobs/muse?"+new URLSearchParams({page:1}))
+        .then(r=>r.json())
+        .then(d=>{
+          const tLower = title.toLowerCase();
+          const filtered = (d.results||[]).filter(j =>
+            (j.name||"").toLowerCase().includes(tLower) ||
+            (j.categories||[]).some(c => (c.name||"").toLowerCase().includes(tLower))
+          );
+          return { list: filtered.map(j=>normMuseJob(j,title)), count: filtered.length };
+        })
+        .catch(()=>({ list:[], count:0 }));
+
+      const [az, ba, jobicy, remoteok, muse] = await Promise.all([azProm, baProm, jobicyProm, remoteokProm, museProm]);
+      // Im Remote-Modus: nur Remote-Quellen; BA immer ausgefiltert
       const list = remoteOnly
-        ? [...az.list.filter(j=>(j.title||"").toLowerCase().includes("remote")||(j.description||"").toLowerCase().includes("remote")||j._source==="Jobicy"), ...jobicy.list]
-        : [...az.list,...ba.list,...jobicy.list];
-      return { title, list, count:az.count+ba.count+jobicy.count };
+        ? [...az.list.filter(j=>(j.title||"").toLowerCase().includes("remote")||(j.description||"").toLowerCase().includes("remote")||j._source==="Jobicy"), ...jobicy.list, ...remoteok.list, ...muse.list]
+        : [...az.list,...ba.list,...jobicy.list, ...muse.list];
+      return { title, list, count: az.count+ba.count+jobicy.count+remoteok.count+muse.count };
     }));
 
     const saved = LS.saved(), ignSet = new Set(LS.ignored());
@@ -260,9 +388,12 @@ async function doSearch(){
 
   hide("loadbox");
   document.getElementById("goBtn").disabled = false;
-  _saveSearchHistory(arr, loc, plz, km, days, remoteOnly);
+  _saveSearchHistory(origArr, loc, plz, km, days, remoteOnly);
+  _lastSearchParams = {titles: origArr, location: loc, plz, km, days, remote_only: remoteOnly, country};
   renderSearchHistory();
 }
+
+let _lastSearchParams = null;
 
 // ── Suchverlauf ──
 const SEARCH_HISTORY_KEY = "jf2_search_history";
@@ -366,7 +497,8 @@ function renderResults(jobs, total, arr, where){
   if(!allMerged.length){ show("nores"); document.getElementById("pagination").innerHTML=""; }
   else {
     const hdr = document.getElementById("reshdr");
-    hdr.innerHTML = "<span class='rc'>"+allMerged.length+"</span> neue Stellen &nbsp;<span class='rt'>("+total.toLocaleString("de-DE")+" gesamt · "+km+" km · "+where+" · "+dLabel+")</span>";
+    hdr.innerHTML = "<span class='rc'>"+allMerged.length+"</span> neue Stellen &nbsp;<span class='rt'>("+total.toLocaleString("de-DE")+" gesamt · "+km+" km · "+where+" · "+dLabel+")</span>"
+      + ' <button type="button" class="clrbtn" style="margin-left:12px;background:rgba(202,152,255,.08);border-color:rgba(202,152,255,.3);color:#ca98ff;" onclick="openSaveAlert()">🔔 Suche abonnieren</button>';
     show("reshdr");
 
     const rt = document.getElementById("restags");
@@ -526,6 +658,214 @@ document.getElementById("csvImportBtn").addEventListener("click", () => {
   document.getElementById("watchCsvFile").click();
 });
 
+// ══════════════════════════════════════════════════════════════════
+// Search Alerts
+// ══════════════════════════════════════════════════════════════════
+
+function openSaveAlert(){
+  if(!_lastSearchParams || !_lastSearchParams.titles?.length){
+    alert("Keine Suche zum Speichern vorhanden. Bitte zuerst eine Suche ausführen.");
+    return;
+  }
+  requireAuth("Bitte anmelden, um Alerts zu speichern.", () => {
+    document.getElementById("saName").value = _lastSearchParams.titles.join(", ") + (_lastSearchParams.location ? " in "+_lastSearchParams.location : "");
+    document.getElementById("saInterval").value = "6";
+    document.getElementById("saNotify").checked = true;
+    document.getElementById("saStatus").innerHTML = "";
+    document.getElementById("saveAlertModal").style.display = "flex";
+    setTimeout(()=>document.getElementById("saName").focus(), 50);
+  });
+}
+
+function closeSaveAlert(){
+  document.getElementById("saveAlertModal").style.display = "none";
+}
+
+async function submitSaveAlert(){
+  const name     = document.getElementById("saName").value.trim();
+  const interval = parseInt(document.getElementById("saInterval").value) || 6;
+  const notify   = document.getElementById("saNotify").checked;
+  const status   = document.getElementById("saStatus");
+  if(!name){ status.style.color="#ff8b9a"; status.textContent="⚠️ Name ist Pflicht."; return; }
+  status.style.color="#c1a0cb"; status.textContent="Wird gespeichert…";
+  try {
+    const r = await fetch("/search/alerts", {
+      method:"POST", credentials:"include",
+      headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({...(_lastSearchParams||{}), name, check_interval_hours:interval, notify_enabled:notify})
+    });
+    const j = await r.json();
+    if(!r.ok){ status.style.color="#ff8b9a"; status.textContent="⚠️ "+j.error; return; }
+    status.style.color="#22c55e"; status.textContent="✓ Alert erstellt!";
+    setTimeout(closeSaveAlert, 1000);
+    loadAlertsTab();
+  } catch(e){ status.style.color="#ff8b9a"; status.textContent="⚠️ "+e.message; }
+}
+
+async function loadAlertsTab(){
+  if(!AUTH.user){
+    document.getElementById("alertsList").innerHTML = '<div class="savempty">Bitte anmelden, um Alerts zu nutzen.</div>';
+    return;
+  }
+  try {
+    const r = await fetch("/search/alerts", {credentials:"include"});
+    const alerts = r.ok ? await r.json() : [];
+    renderAlerts(alerts);
+    updateAlertBadge(alerts);
+  } catch(e){
+    document.getElementById("alertsList").innerHTML = `<div class="savempty">⚠️ Fehler: ${e.message}</div>`;
+  }
+}
+
+function updateAlertBadge(alerts){
+  const total = (alerts||[]).reduce((sum, a) => sum + (a.new_jobs || 0), 0);
+  const bdg = document.getElementById("alertBadge");
+  bdg.textContent = total;
+  bdg.style.display = total ? "block" : "none";
+}
+
+function renderAlerts(list){
+  const box = document.getElementById("alertsList");
+  document.getElementById("alertsEmpty").style.display = list.length ? "none" : "block";
+  if(!list.length){ box.innerHTML = ""; return; }
+  box.innerHTML = list.map(a => {
+    const titles = JSON.parse(a.titles||"[]");
+    const statusDot = a.last_run_status === "ok"
+      ? '<span class="sdot sdot-ok" title="Zuletzt erfolgreich"></span>'
+      : a.last_run_status?.startsWith("error")
+        ? `<span class="sdot sdot-err" title="${esc(a.last_run_status)}"></span>`
+        : '<span class="sdot sdot-idle" title="Noch nicht geprüft"></span>';
+    const lastRun = a.last_run_at
+      ? new Date(a.last_run_at+"Z").toLocaleString("de-DE",{dateStyle:"short",timeStyle:"short"})
+      : "–";
+    const tagsHtml = titles.map(t => `<span class="watch-kw">${esc(t)}</span>`).join("");
+    const newCnt = a.new_jobs || 0;
+    return `<div class="watch-company-card" id="al${a.id}">
+      <div class="wc-header">
+        <div class="wc-title">${statusDot}${esc(a.name)}
+          ${!a.active ? '<span class="watch-paused">pausiert</span>' : ''}
+          ${newCnt > 0 ? '<span class="badge-new" style="margin-left:6px;">'+newCnt+' neu</span>' : ''}
+        </div>
+        <div class="wc-actions">
+          <button class="wc-btn" onclick="alertJobsToggle(${a.id})" title="Treffer anzeigen">📋</button>
+          <button class="wc-btn" onclick="alertRunNow(${a.id})" title="Jetzt prüfen">🔍</button>
+          <button class="wc-btn" onclick="alertToggleActive(${a.id},${a.active?0:1})" title="${a.active?'Pausieren':'Aktivieren'}">${a.active?"⏸":"▶"}</button>
+          <button class="wc-btn" onclick="alertToggleNotify(${a.id},${a.notify_enabled?0:1})" title="${a.notify_enabled?'E-Mail aus':'E-Mail an'}">${a.notify_enabled?"📧":"🔕"}</button>
+          <button class="wc-btn wc-del" onclick="alertDelete(${a.id},'${esc(a.name).replace(/'/g,"\\'")}')">🗑</button>
+        </div>
+      </div>
+      <div class="wc-meta">
+        <span>Zuletzt geprüft: ${lastRun}</span>
+        <span>· alle ${a.check_interval_hours}h</span>
+        <span>· ${a.total_jobs||0} Treffer (${newCnt} neu)</span>
+        ${a.location ? '<span>· 📍 '+esc(a.location)+'</span>' : ''}
+        ${a.remote_only ? '<span>· 🌐 Remote</span>' : ''}
+      </div>
+      <div class="wc-kws">${tagsHtml}</div>
+      <div class="al-jobs" id="alJobs${a.id}" style="display:none;margin-top:12px;border-top:1px solid rgba(89,62,99,.15);padding-top:12px;"></div>
+    </div>`;
+  }).join("");
+}
+
+async function alertJobsToggle(sid){
+  const box = document.getElementById("alJobs"+sid);
+  if(!box) return;
+  if(box.style.display !== "none"){ box.style.display = "none"; return; }
+  box.style.display = "block";
+  box.innerHTML = '<div style="color:#c1a0cb;font-size:12px;">Lade Treffer…</div>';
+  try {
+    const r = await fetch(`/search/alerts/${sid}/jobs`, {credentials:"include"});
+    const jobs = r.ok ? await r.json() : [];
+    if(!jobs.length){ box.innerHTML = '<div style="color:#896b93;font-size:12px;">Noch keine Treffer.</div>'; return; }
+    const saved = LS.saved();
+    box.innerHTML = jobs.map(j => {
+      const isSaved = !!saved[j.job_key];
+      const age = j.found_at ? new Date(j.found_at+"Z").toLocaleString("de-DE",{dateStyle:"short",timeStyle:"short"}) : "";
+      return `<div class="watch-job-card" id="alJob${j.id}">
+        <div style="display:flex;align-items:flex-start;gap:10px;">
+          <div style="flex:1;min-width:0;">
+            ${j.is_new ? '<span class="badge-new">Neu</span> ' : ""}
+            <a class="wjob-title" href="${esc(j.url||'#')}" target="_blank" rel="noopener">${esc(j.title)}</a>
+            <div class="wjob-meta">${esc(j.company||'')} · ${esc(j.source||'')} · ${age}</div>
+          </div>
+          <button class="wc-btn wjob-save-btn${isSaved?' wjob-saved':''}" onclick="saveAlertJob(${j.id})" ${isSaved?'disabled':''}>${isSaved?'✓':'💾'}</button>
+          <button class="wc-btn wc-del" onclick="dismissAlertJob(${j.id})">×</button>
+        </div>
+      </div>`;
+    }).join("")
+    + '<div style="text-align:center;margin-top:8px;"><button type="button" class="clrbtn" onclick="alertReadAll('+sid+')">✓ Alle als gelesen markieren</button></div>';
+    // Cache für saveAlertJob
+    _alertJobsMap = _alertJobsMap || {};
+    jobs.forEach(j => _alertJobsMap[j.id] = j);
+  } catch(e){ box.innerHTML = '<div style="color:#ff8b9a;font-size:12px;">⚠️ '+e.message+'</div>'; }
+}
+
+let _alertJobsMap = {};
+
+function saveAlertJob(id){
+  requireAuth("Bitte anmelden, um Stellen zu speichern.", () => {
+    const j = _alertJobsMap[id]; if(!j) return;
+    const k = j.job_key;
+    const saved = LS.saved();
+    if(!saved[k]){
+      saved[k] = {
+        key:k, title:j.title, company:j.company||"", location:j.location||"", url:j.url||"",
+        salary_min:j.salary_min, salary_max:j.salary_max,
+        contract_type:undefined, created:j.found_at||new Date().toISOString(),
+        searchedAs:"Alert", savedAt:new Date().toISOString(), status:"neu", note:""
+      };
+      LS.setSaved(saved);
+    }
+    const btn = document.querySelector(`#alJob${id} .wjob-save-btn`);
+    if(btn){ btn.textContent="✓"; btn.classList.add("wjob-saved"); btn.disabled=true; }
+  });
+}
+
+async function dismissAlertJob(id){
+  await fetch(`/search/alerts/jobs/${id}`, {method:"DELETE", credentials:"include"});
+  document.getElementById("alJob"+id)?.remove();
+}
+
+async function alertRunNow(sid){
+  const btn = document.querySelector(`#al${sid} .wc-btn[title="Jetzt prüfen"]`);
+  if(btn) btn.textContent = "⏳";
+  try {
+    const r = await fetch(`/search/alerts/${sid}/run`, {method:"POST", credentials:"include"});
+    const j = await r.json();
+    if(!r.ok){ alert("Fehler: "+j.error); }
+  } catch(e){ alert("Fehler: "+e.message); }
+  loadAlertsTab();
+}
+
+async function alertToggleActive(sid, val){
+  await fetch(`/search/alerts/${sid}`, {
+    method:"PATCH", credentials:"include",
+    headers:{"Content-Type":"application/json"},
+    body: JSON.stringify({active: val})
+  });
+  loadAlertsTab();
+}
+
+async function alertToggleNotify(sid, val){
+  await fetch(`/search/alerts/${sid}`, {
+    method:"PATCH", credentials:"include",
+    headers:{"Content-Type":"application/json"},
+    body: JSON.stringify({notify_enabled: val})
+  });
+  loadAlertsTab();
+}
+
+async function alertDelete(sid, name){
+  if(!confirm(`Alert „${name}" und alle gefundenen Stellen löschen?`)) return;
+  await fetch(`/search/alerts/${sid}`, {method:"DELETE", credentials:"include"});
+  loadAlertsTab();
+}
+
+async function alertReadAll(sid){
+  await fetch(`/search/alerts/${sid}/read-all`, {method:"POST", credentials:"include"});
+  loadAlertsTab();
+}
+
 // ── Karriere-Monitor ──────────────────────────────────────────────
 
 let _watchEditId    = null;
@@ -618,10 +958,174 @@ function switchWatchSubTab(tab){
   _watchSubTab = tab;
   document.getElementById("watchPaneCompanies").style.display  = tab === "companies" ? "" : "none";
   document.getElementById("watchPaneJobs").style.display       = tab === "jobs"      ? "" : "none";
+  document.getElementById("watchPaneBoards").style.display     = tab === "boards"    ? "" : "none";
   document.getElementById("watchCompanyActions").style.display = tab === "companies" ? "flex" : "none";
   document.getElementById("watchJobActions").style.display     = tab === "jobs"      ? "flex" : "none";
   document.getElementById("wst1").classList.toggle("wstab-active", tab === "companies");
   document.getElementById("wst2").classList.toggle("wstab-active", tab === "jobs");
+  document.getElementById("wst3").classList.toggle("wstab-active", tab === "boards");
+  if(tab === "boards") loadBoards();
+}
+
+// ── Company Boards (Greenhouse/Lever) ──
+async function loadBoards(){
+  if(!AUTH.user) return;
+  try {
+    const r = await fetch("/boards", {credentials:"include"});
+    const list = r.ok ? await r.json() : [];
+    renderBoards(list);
+  } catch(e){
+    document.getElementById("boardsList").innerHTML = `<div class="savempty">⚠️ Fehler: ${e.message}</div>`;
+  }
+}
+
+function renderBoards(list){
+  const box = document.getElementById("boardsList");
+  document.getElementById("boardsEmpty").style.display = list.length ? "none" : "block";
+  if(!list.length){ box.innerHTML = ""; return; }
+  box.innerHTML = list.map(b => {
+    const statusDot = b.last_check_status === "ok"
+      ? '<span class="sdot sdot-ok"></span>'
+      : b.last_check_status?.startsWith("error")
+        ? `<span class="sdot sdot-err" title="${esc(b.last_check_status)}"></span>`
+        : '<span class="sdot sdot-idle"></span>';
+    const lastCheck = b.last_checked_at
+      ? new Date(b.last_checked_at+"Z").toLocaleString("de-DE",{dateStyle:"short",timeStyle:"short"})
+      : "–";
+    const newCnt = b.new_jobs || 0;
+    return `<div class="watch-company-card" id="bd${b.id}">
+      <div class="wc-header">
+        <div class="wc-title">${statusDot}${esc(b.name||b.slug)}
+          <span class="watch-kw" style="font-size:10px;">${b.provider}</span>
+          ${!b.active ? '<span class="watch-paused">pausiert</span>' : ''}
+          ${newCnt > 0 ? '<span class="badge-new" style="margin-left:6px;">'+newCnt+' neu</span>' : ''}
+        </div>
+        <div class="wc-actions">
+          <button class="wc-btn" onclick="boardJobsToggle(${b.id})" title="Jobs anzeigen">📋</button>
+          <button class="wc-btn" onclick="boardCheckNow(${b.id})" title="Jetzt prüfen">🔍</button>
+          <button class="wc-btn" onclick="boardToggleActive(${b.id},${b.active?0:1})" title="${b.active?'Pausieren':'Aktivieren'}">${b.active?"⏸":"▶"}</button>
+          <button class="wc-btn wc-del" onclick="boardDelete(${b.id},'${esc(b.name||b.slug).replace(/'/g,"\\'")}')">🗑</button>
+        </div>
+      </div>
+      <div class="wc-meta">
+        <span>Slug: <code style="color:#ca98ff">${esc(b.slug)}</code></span>
+        <span>· Zuletzt: ${lastCheck}</span>
+        <span>· alle ${b.check_interval_hours}h</span>
+        <span>· ${b.total_jobs||0} Jobs</span>
+      </div>
+      <div class="al-jobs" id="bdJobs${b.id}" style="display:none;margin-top:12px;border-top:1px solid rgba(89,62,99,.15);padding-top:12px;"></div>
+    </div>`;
+  }).join("");
+}
+
+async function addBoard(){
+  const provider = document.getElementById("bdProvider").value;
+  const slug     = document.getElementById("bdSlug").value.trim();
+  const name     = document.getElementById("bdName").value.trim() || slug;
+  const status   = document.getElementById("bdStatus");
+  if(!slug){ status.style.color="#ff8b9a"; status.textContent="⚠️ Slug ist Pflicht."; return; }
+  status.style.color="#c1a0cb"; status.textContent="Wird hinzugefügt…";
+  try {
+    const r = await fetch("/boards", {
+      method:"POST", credentials:"include",
+      headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({provider, slug, name})
+    });
+    const j = await r.json();
+    if(!r.ok){ status.style.color="#ff8b9a"; status.textContent="⚠️ "+j.error; return; }
+    status.style.color="#22c55e"; status.textContent="✓ Hinzugefügt – Erstprüfung läuft…";
+    document.getElementById("bdSlug").value = "";
+    document.getElementById("bdName").value = "";
+    setTimeout(()=>{ status.textContent=""; }, 2500);
+    // Initial check sofort triggern
+    await fetch(`/boards/${j.id}/check`, {method:"POST", credentials:"include"}).catch(()=>{});
+    loadBoards();
+  } catch(e){ status.style.color="#ff8b9a"; status.textContent="⚠️ "+e.message; }
+}
+
+let _boardJobsMap = {};
+
+async function boardJobsToggle(bid){
+  const box = document.getElementById("bdJobs"+bid);
+  if(!box) return;
+  if(box.style.display !== "none"){ box.style.display = "none"; return; }
+  box.style.display = "block";
+  box.innerHTML = '<div style="color:#c1a0cb;font-size:12px;">Lade Jobs…</div>';
+  try {
+    const r = await fetch("/boards/jobs", {credentials:"include"});
+    const all = r.ok ? await r.json() : [];
+    const jobs = all.filter(j => j.board_id === bid);
+    if(!jobs.length){ box.innerHTML = '<div style="color:#896b93;font-size:12px;">Noch keine Jobs.</div>'; return; }
+    const saved = LS.saved();
+    box.innerHTML = jobs.map(j => {
+      const k = (j.url || (j.title+"|"+(j.board_name||""))).slice(0,180);
+      const isSaved = !!saved[k];
+      const age = j.found_at ? new Date(j.found_at+"Z").toLocaleString("de-DE",{dateStyle:"short",timeStyle:"short"}) : "";
+      _boardJobsMap[j.id] = j;
+      return `<div class="watch-job-card" id="bdJob${j.id}">
+        <div style="display:flex;align-items:flex-start;gap:10px;">
+          <div style="flex:1;min-width:0;">
+            ${j.is_new ? '<span class="badge-new">Neu</span> ' : ""}
+            <a class="wjob-title" href="${esc(j.url||'#')}" target="_blank" rel="noopener">${esc(j.title)}</a>
+            <div class="wjob-meta">${esc(j.location||'')} · ${age}</div>
+          </div>
+          <button class="wc-btn wjob-save-btn${isSaved?' wjob-saved':''}" onclick="saveBoardJob(${j.id})" ${isSaved?'disabled':''}>${isSaved?'✓':'💾'}</button>
+          <button class="wc-btn wc-del" onclick="dismissBoardJob(${j.id})">×</button>
+        </div>
+      </div>`;
+    }).join("");
+  } catch(e){ box.innerHTML = '<div style="color:#ff8b9a;font-size:12px;">⚠️ '+e.message+'</div>'; }
+}
+
+function saveBoardJob(id){
+  requireAuth("Bitte anmelden, um Stellen zu speichern.", () => {
+    const j = _boardJobsMap[id]; if(!j) return;
+    const k = (j.url || (j.title+"|"+(j.board_name||""))).slice(0,180);
+    const saved = LS.saved();
+    if(!saved[k]){
+      saved[k] = {
+        key:k, title:j.title, company:j.board_name||"", location:j.location||"", url:j.url||"",
+        salary_min:undefined, salary_max:undefined,
+        contract_type:undefined, created:j.found_at||new Date().toISOString(),
+        searchedAs:j.provider==="greenhouse"?"Greenhouse":"Lever",
+        savedAt:new Date().toISOString(), status:"neu", note:""
+      };
+      LS.setSaved(saved);
+    }
+    const btn = document.querySelector(`#bdJob${id} .wjob-save-btn`);
+    if(btn){ btn.textContent="✓"; btn.classList.add("wjob-saved"); btn.disabled=true; }
+  });
+}
+
+async function dismissBoardJob(id){
+  await fetch(`/boards/jobs/${id}`, {method:"DELETE", credentials:"include"});
+  document.getElementById("bdJob"+id)?.remove();
+}
+
+async function boardCheckNow(bid){
+  const btn = document.querySelector(`#bd${bid} .wc-btn[title="Jetzt prüfen"]`);
+  if(btn) btn.textContent = "⏳";
+  try {
+    const r = await fetch(`/boards/${bid}/check`, {method:"POST", credentials:"include"});
+    const j = await r.json();
+    if(!r.ok) alert("Fehler: "+j.error);
+  } catch(e){ alert("Fehler: "+e.message); }
+  loadBoards();
+}
+
+async function boardToggleActive(bid, val){
+  await fetch(`/boards/${bid}`, {
+    method:"PATCH", credentials:"include",
+    headers:{"Content-Type":"application/json"},
+    body: JSON.stringify({active: val})
+  });
+  loadBoards();
+}
+
+async function boardDelete(bid, name){
+  if(!confirm(`Board „${name}" und alle gefundenen Jobs löschen?`)) return;
+  await fetch(`/boards/${bid}`, {method:"DELETE", credentials:"include"});
+  loadBoards();
 }
 
 // ── Globale Keywords ──────────────────────────────────────────────
@@ -1641,6 +2145,8 @@ async function checkAuth(){
     if(d.user){
       AUTH.user = d.user;
       await loadUserData();
+      // Badges für Alerts (im Hintergrund)
+      fetch("/search/alerts", {credentials:"include"}).then(r=>r.ok?r.json():[]).then(updateAlertBadge).catch(()=>{});
     }
   } catch(e) { /* Server nicht erreichbar – App funktioniert trotzdem */ }
   updateUserBar();

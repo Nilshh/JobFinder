@@ -184,6 +184,10 @@ body{
 .stag-x{background:none;border:none;color:var(--primary);cursor:pointer;font-size:14px;padding:0;line-height:1;opacity:.7;}
 .stag-x:hover{opacity:1;}
 .hint{font-size:11px;color:var(--on-surface-variant);margin-bottom:12px;}
+.syn-hint{display:flex;align-items:center;gap:12px;margin-bottom:12px;padding:8px 12px;background:rgba(0,189,253,.04);border:1px solid rgba(0,189,253,.12);border-radius:10px;font-size:12px;}
+.syn-label{color:var(--on-surface-variant);flex:1;}
+.syn-toggle{background:transparent;border:1px solid rgba(0,189,253,.2);border-radius:8px;color:var(--secondary);cursor:pointer;font-size:11px;font-weight:600;padding:4px 10px;font-family:inherit;transition:all .2s;}
+.syn-toggle:hover{background:rgba(0,189,253,.08);border-color:rgba(0,189,253,.4);}
 
 /* ── Radio rows ── */
 .rrow{display:flex;gap:8px;margin-bottom:16px;}
