@@ -974,6 +974,69 @@ async function copyLetter(){
   catch(e){ alert("⚠️ Kopieren fehlgeschlagen: "+e.message); }
 }
 
+async function generateAILetter(){
+  if(!_letterJobKey) return;
+  const job = LS.saved()[_letterJobKey];
+  if(!job) return;
+  const textarea = document.getElementById("letterText");
+  const originalText = textarea.value;
+  textarea.value = "⏳ KI generiert dein Anschreiben…";
+  textarea.disabled = true;
+  try {
+    const r = await fetch("/ai/coverletter", {
+      method:"POST", credentials:"include",
+      headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({
+        title:       job.title || "",
+        company:     job.company || "",
+        location:    job.location || "",
+        description: job.description || "",
+        tone:        "professionell"
+      })
+    });
+    const d = await r.json();
+    if(!r.ok){ textarea.value = originalText; alert("⚠️ "+(d.error||"Fehler bei der KI-Anfrage")); return; }
+    textarea.value = d.letter || originalText;
+  } catch(e){ textarea.value = originalText; alert("⚠️ "+e.message); }
+  finally { textarea.disabled = false; }
+}
+
+// ══════════════════════════════════════════════════════════════════
+// KI-Profil + Match-Score
+// ══════════════════════════════════════════════════════════════════
+
+async function loadProfileSummary(){
+  if(!AUTH.user) return;
+  try {
+    const r = await fetch("/user/profile-summary", {credentials:"include"});
+    if(!r.ok) return;
+    const d = await r.json();
+    const ta = document.getElementById("profileSummary");
+    if(ta) ta.value = d.summary || "";
+  } catch(e){}
+}
+
+async function saveProfileSummary(){
+  const summary = document.getElementById("profileSummary").value;
+  const status  = document.getElementById("profileSummaryStatus");
+  status.style.color = "#c1a0cb"; status.textContent = "Wird gespeichert…";
+  try {
+    const r = await fetch("/user/profile-summary", {
+      method:"PATCH", credentials:"include",
+      headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({summary})
+    });
+    if(r.ok){
+      status.style.color = "#22c55e"; status.textContent = "✓ Profil gespeichert.";
+      setTimeout(()=>{ status.textContent = ""; }, 2500);
+    } else {
+      status.style.color = "#ff8b9a"; status.textContent = "⚠️ Fehler.";
+    }
+  } catch(e){
+    status.style.color = "#ff8b9a"; status.textContent = "⚠️ "+e.message;
+  }
+}
+
 // ══════════════════════════════════════════════════════════════════
 // Search Alerts
 // ══════════════════════════════════════════════════════════════════
@@ -2605,6 +2668,7 @@ function loadProfileTab(){
   loadNotifySettings();
   loadCvs();
   loadTemplates();
+  loadProfileSummary();
 }
 
 async function loadNotifySettings(){

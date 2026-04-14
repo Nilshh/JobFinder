@@ -388,6 +388,7 @@
     </div>
     <div class="mactions">
       <button type="button" class="mcancelbtn" onclick="closeLetter()">Schließen</button>
+      <button type="button" class="mcancelbtn" onclick="generateAILetter()" style="border-color:rgba(202,152,255,.3);color:#ca98ff;">🤖 Mit KI generieren</button>
       <button type="button" class="msavebtn" onclick="copyLetter()">📋 Kopieren</button>
     </div>
   </div>
@@ -610,6 +611,20 @@
     <div class="mactions" style="justify-content:flex-end;">
       <button type="button" class="mcancelbtn" onclick="enablePushNotifications()" style="border-color:rgba(0,189,253,.3);color:#00bdfd;">🔔 Browser-Push aktivieren</button>
       <button type="button" class="msavebtn" style="background:linear-gradient(135deg,#ff4d6d,#c9184a);" onclick="saveNotifySettings()">💾 Speichern</button>
+    </div>
+  </div>
+
+  <!-- Profil-Zusammenfassung für KI -->
+  <div class="card">
+    <div class="card-stripe" style="background:linear-gradient(90deg,#ca98ff,#00bdfd);"></div>
+    <div class="lbl">🤖 Profil für KI-Matching</div>
+    <div style="color:#c1a0cb;font-size:13px;margin-bottom:14px;">Beschreibe kurz deine Erfahrung, Skills und Wunschposition. Wird für Match-Score und AI-Anschreiben verwendet.</div>
+    <div class="mfield">
+      <textarea class="snote" id="profileSummary" rows="8" style="min-height:180px;" placeholder="Beispiel:&#10;Erfahrener CTO mit 15 Jahren IT-Leitung in SaaS-Unternehmen.&#10;Schwerpunkte: Team-Aufbau, Cloud-Architekturen (AWS/GCP), Agile Transformation.&#10;Technologien: Python, Go, Kubernetes, PostgreSQL.&#10;Gesucht: Leitende Position in mittelständischem Tech-Unternehmen in DACH."></textarea>
+    </div>
+    <div id="profileSummaryStatus" class="mstatus"></div>
+    <div class="mactions" style="justify-content:flex-end;">
+      <button type="button" class="msavebtn" style="background:linear-gradient(135deg,#ca98ff,#00bdfd);" onclick="saveProfileSummary()">💾 Profil speichern</button>
     </div>
   </div>
 

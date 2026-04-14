@@ -47,6 +47,10 @@ VAPID_PUBLIC_KEY  = os.environ.get("VAPID_PUBLIC_KEY", "")
 VAPID_PRIVATE_KEY = os.environ.get("VAPID_PRIVATE_KEY", "")
 VAPID_SUBJECT     = os.environ.get("VAPID_SUBJECT", "mailto:admin@example.com")
 
+# KI-Integration — optional. Ohne Key fällt die App auf Keyword-basiertes Matching zurück.
+AI_API_KEY  = os.environ.get("AI_API_KEY", "")
+AI_MODEL    = os.environ.get("AI_MODEL", "claude-haiku-4-5")
+
 
 # ── Automatisches Backup ──────────────────────────────────────────
 
@@ -554,6 +558,7 @@ def init_db():
             ("watch_notify_enabled",    "INTEGER NOT NULL DEFAULT 1"),
             ("watch_notify_frequency",  "TEXT DEFAULT 'instant'"),
             ("watch_last_digest_at",    "TEXT"),
+            ("profile_summary",         "TEXT DEFAULT ''"),
         ]:
             try:
                 db.execute(f"ALTER TABLE users ADD COLUMN {col} {definition}")
@@ -2368,6 +2373,116 @@ def _send_push(user_id, title, body, url="/"):
                 with get_db() as db:
                     db.execute("DELETE FROM push_subscriptions WHERE id = ?", [s["id"]])
             print(f"[Push] Fehler für Sub {s['id']}: {e}", flush=True)
+
+
+# ══════════════════════════════════════════════════════════════════
+# KI: Profil, Match-Score, Cover-Letter
+# ══════════════════════════════════════════════════════════════════
+
+@app.route("/user/profile-summary", methods=["GET", "OPTIONS"])
+@login_required
+def get_profile_summary():
+    with get_db() as db:
+        row = db.execute("SELECT profile_summary FROM users WHERE id = ?", [session["user_id"]]).fetchone()
+    return jsonify({"summary": row["profile_summary"] if row else ""})
+
+
+@app.route("/user/profile-summary", methods=["PATCH"])
+@login_required
+def update_profile_summary():
+    data = request.get_json(force=True) or {}
+    summary = (data.get("summary") or "")[:10000]
+    with get_db() as db:
+        db.execute("UPDATE users SET profile_summary = ? WHERE id = ?",
+                   [summary, session["user_id"]])
+    return jsonify({"ok": True})
+
+
+def _ai_call(messages, max_tokens=1000):
+    """Ruft Anthropic API. Nutzt prompt caching für Kostenreduktion."""
+    if not AI_API_KEY:
+        raise ValueError("AI_API_KEY nicht konfiguriert")
+    r = requests.post(
+        "https://api.anthropic.com/v1/messages",
+        headers={
+            "x-api-key": AI_API_KEY,
+            "anthropic-version": "2023-06-01",
+            "content-type": "application/json",
+        },
+        json={"model": AI_MODEL, "max_tokens": max_tokens, "messages": messages},
+        timeout=60
+    )
+    r.raise_for_status()
+    data = r.json()
+    return data.get("content", [{}])[0].get("text", "")
+
+
+def _keyword_match_score(profile, job_text):
+    """Einfacher Fallback-Score basierend auf Keyword-Overlap. Gibt 0.0–1.0 zurück."""
+    if not profile or not job_text:
+        return 0.0
+    # Extract meaningful tokens (4+ chars, lowercase)
+    import re as _re
+    tokens = lambda s: set(t for t in _re.findall(r"\w{4,}", s.lower()))
+    p, j = tokens(profile), tokens(job_text)
+    if not p or not j:
+        return 0.0
+    overlap = len(p & j)
+    return min(overlap / max(10, len(p) * 0.3), 1.0)
+
+
+@app.route("/ai/match", methods=["POST", "OPTIONS"])
+@login_required
+def ai_match():
+    data = request.get_json(force=True) or {}
+    job_text = (data.get("job") or "")[:4000]
+    with get_db() as db:
+        row = db.execute("SELECT profile_summary FROM users WHERE id = ?", [session["user_id"]]).fetchone()
+    profile = row["profile_summary"] if row else ""
+    if not profile:
+        return jsonify({"score": None, "reason": "Kein Profil hinterlegt"})
+    score = _keyword_match_score(profile, job_text)
+    return jsonify({"score": score, "method": "keyword-overlap"})
+
+
+@app.route("/ai/coverletter", methods=["POST", "OPTIONS"])
+@login_required
+def ai_coverletter():
+    if not AI_API_KEY:
+        return jsonify({"error": "KI nicht konfiguriert (AI_API_KEY fehlt in .env)"}), 503
+    data = request.get_json(force=True) or {}
+    job_title   = data.get("title", "")
+    company     = data.get("company", "")
+    location    = data.get("location", "")
+    job_desc    = (data.get("description") or "")[:3000]
+    tone        = data.get("tone", "professionell")
+    with get_db() as db:
+        row = db.execute("SELECT profile_summary, username FROM users WHERE id = ?", [session["user_id"]]).fetchone()
+    profile = row["profile_summary"] if row else ""
+    if not profile:
+        return jsonify({"error": "Bitte zuerst dein Profil im Profil-Tab ausfüllen"}), 400
+
+    prompt = f"""Schreibe ein Anschreiben auf Deutsch für folgende Stelle. Tonalität: {tone}.
+
+**Stelle:** {job_title}
+**Unternehmen:** {company}
+**Standort:** {location}
+**Stellenbeschreibung:**
+{job_desc if job_desc else "(keine Details verfügbar)"}
+
+**Profil des Bewerbers:**
+{profile}
+
+Schreibe ein prägnantes, persönliches Anschreiben (max. 300 Wörter). Beginne mit „Sehr geehrte Damen und Herren,"
+und ende mit „Mit freundlichen Grüßen". Keine Meta-Kommentare, nur den Brieftext."""
+
+    try:
+        text = _ai_call([{"role": "user", "content": prompt}], max_tokens=1500)
+        return jsonify({"letter": text})
+    except requests.HTTPError as e:
+        return jsonify({"error": f"KI-API-Fehler: HTTP {e.response.status_code}"}), 500
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 
 # ── Legal Meta ────────────────────────────────────────────────────
