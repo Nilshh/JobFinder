@@ -1,6 +1,7 @@
 // JobPipeline Service Worker
-const CACHE_NAME = "jobpipeline-v1";
+const CACHE_NAME = "jobpipeline-v2";
 const STATIC_ASSETS = ["/", "/index.html", "/style.css", "/app.js", "/favicon.svg", "/manifest.json"];
+const API_PREFIXES = ["/jobs", "/user", "/auth", "/admin", "/watch", "/search", "/boards", "/jira", "/ai", "/push", "/health", "/meta"];
 
 self.addEventListener("install", event => {
   event.waitUntil(
@@ -20,25 +21,22 @@ self.addEventListener("activate", event => {
 
 self.addEventListener("fetch", event => {
   const req = event.request;
-  if (req.method !== "GET") return;
   const url = new URL(req.url);
-  // Network-first für API (damit Daten aktuell bleiben)
-  if (url.pathname.startsWith("/jobs") || url.pathname.startsWith("/user") ||
-      url.pathname.startsWith("/auth") || url.pathname.startsWith("/admin") ||
-      url.pathname.startsWith("/watch") || url.pathname.startsWith("/search") ||
-      url.pathname.startsWith("/boards") || url.pathname.startsWith("/jira")) {
-    event.respondWith(fetch(req).catch(() => caches.match(req)));
-    return;
-  }
-  // Cache-first für statische Assets
+
+  // POST/PATCH/DELETE und alle API-Requests: immer direkt ans Netz, kein SW-Intercept.
+  // (Safari hat Bugs wenn respondWith bei non-GET verwendet wird.)
+  if (req.method !== "GET") return;
+  if (API_PREFIXES.some(p => url.pathname.startsWith(p))) return;
+
+  // Nur GET auf statische Assets: Cache-first
   event.respondWith(
     caches.match(req).then(cached => cached || fetch(req).then(res => {
-      if (res && res.status === 200) {
+      if (res && res.status === 200 && url.origin === self.location.origin) {
         const clone = res.clone();
         caches.open(CACHE_NAME).then(cache => cache.put(req, clone));
       }
       return res;
-    }))
+    }).catch(() => cached))
   );
 });
 
