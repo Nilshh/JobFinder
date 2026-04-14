@@ -69,10 +69,10 @@ function refreshBadge(){
 
 // ── Tabs ──
 function showTab(t){
-  const GATED = ["saved", "dashboard", "portals", "watch", "alerts"];
+  const GATED = ["saved", "dashboard", "portals", "watch", "alerts", "pipeline"];
   if(GATED.includes(t) && !AUTH.user){
     _pendingAction = () => showTab(t);
-    const hints = { saved:"den Merkzettel", dashboard:"das Dashboard", portals:"die Portale", watch:"den Karriere-Monitor", alerts:"die Alerts" };
+    const hints = { saved:"den Merkzettel", dashboard:"das Dashboard", portals:"die Portale", watch:"den Karriere-Monitor", alerts:"die Alerts", pipeline:"die Pipeline" };
     openAuthModal("Für " + hints[t] + " ist ein Account erforderlich.");
     return;
   }
@@ -82,6 +82,7 @@ function showTab(t){
   document.getElementById("tabPortals").style.display   = t==="portals"   ?"block":"none";
   document.getElementById("tabWatch").style.display     = t==="watch"     ?"block":"none";
   document.getElementById("tabAlerts").style.display    = t==="alerts"    ?"block":"none";
+  document.getElementById("tabPipeline").style.display  = t==="pipeline"  ?"block":"none";
   document.getElementById("tabAdmin").style.display     = t==="admin"     ?"block":"none";
   document.getElementById("tabProfile").style.display   = t==="profile"   ?"block":"none";
   document.getElementById("nb1").classList.toggle("on", t==="search");
@@ -90,6 +91,7 @@ function showTab(t){
   document.getElementById("nb3").classList.toggle("on", t==="portals");
   document.getElementById("nb4").classList.toggle("on", t==="watch");
   document.getElementById("nb6").classList.toggle("on", t==="alerts");
+  document.getElementById("nb7").classList.toggle("on", t==="pipeline");
   const ab = document.getElementById("adminBtn");
   if(ab) ab.classList.toggle("active", t==="admin");
   if(t==="saved")     renderSaved();
@@ -97,6 +99,7 @@ function showTab(t){
   if(t==="portals")   renderPortalsTab();
   if(t==="watch")     loadWatchTab();
   if(t==="alerts")    loadAlertsTab();
+  if(t==="pipeline")  renderPipeline();
   if(t==="admin")     { loadAdminUsers(); loadBackupList(); }
   if(t==="profile")   loadProfileTab();
 }
@@ -657,6 +660,319 @@ document.getElementById("watchDeleteSelBtn").addEventListener("click", deleteSel
 document.getElementById("csvImportBtn").addEventListener("click", () => {
   document.getElementById("watchCsvFile").click();
 });
+
+// ══════════════════════════════════════════════════════════════════
+// Pipeline (Kanban-Board)
+// ══════════════════════════════════════════════════════════════════
+
+const KANBAN_COLS = [
+  {key:"neu",         label:"🔵 Neu",         cls:"kcol-neu"},
+  {key:"interessant", label:"⭐ Interessant", cls:"kcol-interessant"},
+  {key:"beworben",    label:"✅ Beworben",    cls:"kcol-beworben"},
+  {key:"abgelehnt",   label:"❌ Abgelehnt",   cls:"kcol-abgelehnt"},
+  {key:"angebot",     label:"🎉 Angebot",     cls:"kcol-angebot"},
+];
+
+function renderPipeline(){
+  const all = Object.values(LS.saved());
+  const box = document.getElementById("kanbanBoard");
+  const empty = document.getElementById("pipelineEmpty");
+  if(!all.length){ box.innerHTML = ""; empty.style.display = "block"; return; }
+  empty.style.display = "none";
+
+  const grouped = {};
+  KANBAN_COLS.forEach(c => grouped[c.key] = []);
+  all.forEach(j => {
+    const s = j.status || "neu";
+    (grouped[s] || grouped.neu).push(j);
+  });
+
+  const now = Date.now();
+  box.innerHTML = KANBAN_COLS.map(col => {
+    const jobs = grouped[col.key] || [];
+    const cards = jobs.map(j => {
+      const appliedAgo = j.appliedAt ? Math.floor((now - new Date(j.appliedAt))/86400000) : null;
+      const showFollowup = col.key === "beworben" && appliedAgo != null && appliedAgo >= 7;
+      return `<div class="kcard" draggable="true" data-key="${esc(j.key)}"
+                   ondragstart="kDragStart(event,'${esc(j.key)}')"
+                   ondragend="kDragEnd(event)">
+        <div class="kcard-title"><a href="${esc(j.url||'#')}" target="_blank" rel="noopener">${esc(j.title||'')}</a></div>
+        <div class="kcard-co">${esc(j.company||'')}</div>
+        <div class="kcard-meta">
+          ${j.location ? '<span>📍 '+esc(j.location)+'</span>' : ''}
+          <span>💾 ${j.savedAt ? new Date(j.savedAt).toLocaleDateString("de-DE") : ""}</span>
+        </div>
+        ${showFollowup ? '<div class="kcard-fu">📌 Vor '+appliedAgo+' Tagen beworben — nachhaken?</div>' : ''}
+        <div class="kcard-actions">
+          ${col.key === "beworben" ? `<button class="kcard-btn" onclick="setInterviewDate('${esc(j.key)}')">📅 Termin</button>` : ''}
+          <button class="kcard-btn" onclick="openLetter('${esc(j.key)}')">✍️ Brief</button>
+          ${j.interviewDate ? `<button class="kcard-btn" onclick="downloadICS('${esc(j.key)}')" title="Kalender-Event">📆 ICS</button>` : ''}
+        </div>
+      </div>`;
+    }).join("");
+    return `<div class="kcol ${col.cls}" data-status="${col.key}"
+                 ondragover="kDragOver(event)" ondragleave="kDragLeave(event)" ondrop="kDrop(event,'${col.key}')">
+      <div class="kcol-hdr">
+        <div class="kcol-title">${col.label}</div>
+        <div class="kcol-cnt">${jobs.length}</div>
+      </div>
+      ${cards || '<div style="color:rgba(89,62,99,.5);font-size:11px;text-align:center;padding:20px 0;">Keine Jobs</div>'}
+    </div>`;
+  }).join("");
+}
+
+function kDragStart(e, key){ e.dataTransfer.setData("text/plain", key); e.currentTarget.classList.add("kdrag"); }
+function kDragEnd(e){ e.currentTarget.classList.remove("kdrag"); }
+function kDragOver(e){ e.preventDefault(); e.currentTarget.classList.add("kdrop"); }
+function kDragLeave(e){ e.currentTarget.classList.remove("kdrop"); }
+function kDrop(e, newStatus){
+  e.preventDefault(); e.currentTarget.classList.remove("kdrop");
+  const key = e.dataTransfer.getData("text/plain");
+  const saved = LS.saved();
+  if(saved[key]){
+    saved[key].status = newStatus;
+    if(newStatus === "beworben" && !saved[key].appliedAt) saved[key].appliedAt = new Date().toISOString();
+    LS.setSaved(saved);
+    renderPipeline();
+  }
+}
+
+function setInterviewDate(key){
+  const saved = LS.saved();
+  if(!saved[key]) return;
+  const current = saved[key].interviewDate ? saved[key].interviewDate.slice(0,16) : "";
+  const input = prompt("Termin für Vorstellungsgespräch (YYYY-MM-DDTHH:MM):", current || new Date().toISOString().slice(0,16));
+  if(input === null) return;
+  if(input === ""){
+    delete saved[key].interviewDate;
+  } else {
+    if(isNaN(new Date(input).getTime())){ alert("Ungültiges Datum."); return; }
+    saved[key].interviewDate = new Date(input).toISOString();
+  }
+  LS.setSaved(saved);
+  renderPipeline();
+}
+
+function downloadICS(key){
+  const saved = LS.saved();
+  const j = saved[key];
+  if(!j || !j.interviewDate){ alert("Kein Termin gesetzt."); return; }
+  const dt = new Date(j.interviewDate);
+  const dtEnd = new Date(dt.getTime() + 60*60*1000);
+  const fmt = d => d.toISOString().replace(/[-:]/g,"").split(".")[0]+"Z";
+  const uid = "jp-"+Math.random().toString(36).slice(2,12);
+  const ics = [
+    "BEGIN:VCALENDAR","VERSION:2.0","PRODID:-//JobPipeline//DE",
+    "BEGIN:VEVENT",
+    "UID:"+uid,
+    "DTSTAMP:"+fmt(new Date()),
+    "DTSTART:"+fmt(dt),
+    "DTEND:"+fmt(dtEnd),
+    "SUMMARY:Vorstellungsgespräch: "+(j.title||"")+" @ "+(j.company||""),
+    "DESCRIPTION:"+((j.note||"").replace(/\n/g,"\\n"))+(j.url?"\\n\\nURL: "+j.url:""),
+    "LOCATION:"+(j.location||""),
+    "END:VEVENT","END:VCALENDAR"
+  ].join("\r\n");
+  const blob = new Blob([ics], {type:"text/calendar;charset=utf-8"});
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "interview-"+(j.company||"job").replace(/\W+/g,"_")+".ics";
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+// ══════════════════════════════════════════════════════════════════
+// CVs
+// ══════════════════════════════════════════════════════════════════
+let _cvEditId = null;
+
+async function loadCvs(){
+  const box = document.getElementById("cvList");
+  if(!box || !AUTH.user) return;
+  try {
+    const r = await fetch("/user/cvs", {credentials:"include"});
+    const list = r.ok ? await r.json() : [];
+    if(!list.length){ box.innerHTML = '<div style="color:#896b93;font-size:12px;">Noch keine CVs vorhanden.</div>'; return; }
+    box.innerHTML = list.map(c => `<div class="cv-row">
+      <div class="cv-name">${esc(c.name)}</div>
+      ${c.is_default ? '<span class="cv-default">Standard</span>' : ''}
+      <button class="kcard-btn" onclick="openCvEditor(${c.id})">✏️</button>
+      <button class="kcard-btn" onclick="deleteCv(${c.id},'${esc(c.name).replace(/'/g,"\\'")}')">🗑</button>
+    </div>`).join("");
+  } catch(e){ box.innerHTML = '<div style="color:#ff8b9a;font-size:12px;">⚠️ '+e.message+'</div>'; }
+}
+
+async function openCvEditor(id){
+  _cvEditId = id || null;
+  document.getElementById("cvEditorTitle").textContent = id ? "📄 Lebenslauf bearbeiten" : "📄 Neuer Lebenslauf";
+  document.getElementById("cvStatus").innerHTML = "";
+  if(id){
+    const r = await fetch("/user/cvs", {credentials:"include"});
+    const list = r.ok ? await r.json() : [];
+    const cv = list.find(c => c.id === id);
+    if(cv){
+      document.getElementById("cvName").value = cv.name;
+      document.getElementById("cvContent").value = cv.content;
+      document.getElementById("cvDefault").checked = !!cv.is_default;
+    }
+  } else {
+    document.getElementById("cvName").value = "";
+    document.getElementById("cvContent").value = "";
+    document.getElementById("cvDefault").checked = false;
+  }
+  document.getElementById("cvEditorModal").style.display = "flex";
+}
+
+function closeCvEditor(){ document.getElementById("cvEditorModal").style.display = "none"; }
+
+async function saveCv(){
+  const name    = document.getElementById("cvName").value.trim();
+  const content = document.getElementById("cvContent").value;
+  const isDef   = document.getElementById("cvDefault").checked;
+  const status  = document.getElementById("cvStatus");
+  if(!name){ status.style.color="#ff8b9a"; status.textContent="⚠️ Name ist Pflicht."; return; }
+  status.style.color="#c1a0cb"; status.textContent="Wird gespeichert…";
+  try {
+    const url = _cvEditId ? `/user/cvs/${_cvEditId}` : "/user/cvs";
+    const method = _cvEditId ? "PATCH" : "POST";
+    const r = await fetch(url, {
+      method, credentials:"include",
+      headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({name, content, is_default: isDef})
+    });
+    if(!r.ok){ const j=await r.json(); status.style.color="#ff8b9a"; status.textContent="⚠️ "+j.error; return; }
+    status.style.color="#22c55e"; status.textContent="✓ Gespeichert.";
+    setTimeout(closeCvEditor, 800);
+    loadCvs();
+  } catch(e){ status.style.color="#ff8b9a"; status.textContent="⚠️ "+e.message; }
+}
+
+async function deleteCv(id, name){
+  if(!confirm(`CV „${name}" löschen?`)) return;
+  await fetch(`/user/cvs/${id}`, {method:"DELETE", credentials:"include"});
+  loadCvs();
+}
+
+// ══════════════════════════════════════════════════════════════════
+// Letter-Templates & Letter-Editor
+// ══════════════════════════════════════════════════════════════════
+let _tplEditId = null;
+let _letterJobKey = null;
+let _tplCache = [];
+
+async function loadTemplates(){
+  const box = document.getElementById("tplList");
+  if(!box || !AUTH.user) return;
+  try {
+    const r = await fetch("/user/templates", {credentials:"include"});
+    const list = r.ok ? await r.json() : [];
+    _tplCache = list;
+    if(!list.length){ box.innerHTML = '<div style="color:#896b93;font-size:12px;">Noch keine Vorlagen vorhanden.</div>'; return; }
+    box.innerHTML = list.map(t => `<div class="tpl-row">
+      <div class="tpl-name">${esc(t.name)}</div>
+      ${t.is_default ? '<span class="tpl-default">Standard</span>' : ''}
+      <button class="kcard-btn" onclick="openTplEditor(${t.id})">✏️</button>
+      <button class="kcard-btn" onclick="deleteTpl(${t.id},'${esc(t.name).replace(/'/g,"\\'")}')">🗑</button>
+    </div>`).join("");
+  } catch(e){ box.innerHTML = '<div style="color:#ff8b9a;font-size:12px;">⚠️ '+e.message+'</div>'; }
+}
+
+async function openTplEditor(id){
+  _tplEditId = id || null;
+  document.getElementById("tplEditorTitle").textContent = id ? "✍️ Vorlage bearbeiten" : "✍️ Neue Vorlage";
+  document.getElementById("tplStatus").innerHTML = "";
+  if(id){
+    const r = await fetch("/user/templates", {credentials:"include"});
+    const list = r.ok ? await r.json() : [];
+    const t = list.find(x => x.id === id);
+    if(t){
+      document.getElementById("tplName").value = t.name;
+      document.getElementById("tplBody").value = t.body;
+      document.getElementById("tplDefault").checked = !!t.is_default;
+    }
+  } else {
+    document.getElementById("tplName").value = "";
+    document.getElementById("tplBody").value = "Sehr geehrte Damen und Herren,\n\nmit großem Interesse habe ich Ihre Stellenanzeige für {{role}} bei {{company}}{{location_part}} gelesen.\n\n[Absatz zu deinem Profil]\n\nMit freundlichen Grüßen\n[Name]";
+    document.getElementById("tplDefault").checked = false;
+  }
+  document.getElementById("tplEditorModal").style.display = "flex";
+}
+
+function closeTplEditor(){ document.getElementById("tplEditorModal").style.display = "none"; }
+
+async function saveTpl(){
+  const name = document.getElementById("tplName").value.trim();
+  const body = document.getElementById("tplBody").value;
+  const isDef= document.getElementById("tplDefault").checked;
+  const status = document.getElementById("tplStatus");
+  if(!name){ status.style.color="#ff8b9a"; status.textContent="⚠️ Name ist Pflicht."; return; }
+  status.style.color="#c1a0cb"; status.textContent="Wird gespeichert…";
+  try {
+    const url = _tplEditId ? `/user/templates/${_tplEditId}` : "/user/templates";
+    const method = _tplEditId ? "PATCH" : "POST";
+    const r = await fetch(url, {
+      method, credentials:"include",
+      headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({name, body, is_default: isDef})
+    });
+    if(!r.ok){ const j=await r.json(); status.style.color="#ff8b9a"; status.textContent="⚠️ "+j.error; return; }
+    status.style.color="#22c55e"; status.textContent="✓ Gespeichert.";
+    setTimeout(closeTplEditor, 800);
+    loadTemplates();
+  } catch(e){ status.style.color="#ff8b9a"; status.textContent="⚠️ "+e.message; }
+}
+
+async function deleteTpl(id, name){
+  if(!confirm(`Vorlage „${name}" löschen?`)) return;
+  await fetch(`/user/templates/${id}`, {method:"DELETE", credentials:"include"});
+  loadTemplates();
+}
+
+function fillTemplate(body, job){
+  const today = new Date().toLocaleDateString("de-DE");
+  const loc = job.location || "";
+  return (body||"")
+    .replace(/\{\{company\}\}/g,  job.company || "")
+    .replace(/\{\{role\}\}/g,     job.title || "")
+    .replace(/\{\{location\}\}/g, loc)
+    .replace(/\{\{location_part\}\}/g, loc ? " in "+loc : "")
+    .replace(/\{\{date\}\}/g,     today)
+    .replace(/\{\{my_name\}\}/g,  AUTH.user ? AUTH.user.username : "");
+}
+
+async function openLetter(key){
+  _letterJobKey = key;
+  if(!_tplCache.length){
+    const r = await fetch("/user/templates", {credentials:"include"}).catch(()=>null);
+    if(r && r.ok) _tplCache = await r.json();
+  }
+  const select = document.getElementById("letterTplSelect");
+  if(!_tplCache.length){
+    select.innerHTML = '<option value="">Keine Vorlagen vorhanden — erstelle eine im Profil</option>';
+    document.getElementById("letterText").value = "";
+  } else {
+    select.innerHTML = _tplCache.map(t => `<option value="${t.id}" ${t.is_default?'selected':''}>${esc(t.name)}${t.is_default?' (Standard)':''}</option>`).join("");
+    fillLetterFromTemplate();
+  }
+  document.getElementById("letterModal").style.display = "flex";
+}
+
+function fillLetterFromTemplate(){
+  const tid = parseInt(document.getElementById("letterTplSelect").value);
+  const tpl = _tplCache.find(t => t.id === tid);
+  if(!tpl || !_letterJobKey) return;
+  const job = LS.saved()[_letterJobKey];
+  if(!job) return;
+  document.getElementById("letterText").value = fillTemplate(tpl.body, job);
+}
+
+function closeLetter(){ document.getElementById("letterModal").style.display = "none"; }
+
+async function copyLetter(){
+  const text = document.getElementById("letterText").value;
+  try { await navigator.clipboard.writeText(text); alert("✓ Anschreiben in die Zwischenablage kopiert."); }
+  catch(e){ alert("⚠️ Kopieren fehlgeschlagen: "+e.message); }
+}
 
 // ══════════════════════════════════════════════════════════════════
 // Search Alerts
@@ -2199,6 +2515,8 @@ function loadProfileTab(){
   if(fb) fb.style.display = "none";
   document.getElementById("notifyStatus").innerHTML = "";
   loadNotifySettings();
+  loadCvs();
+  loadTemplates();
 }
 
 async function loadNotifySettings(){

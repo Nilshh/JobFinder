@@ -48,6 +48,7 @@
     <button type="button" class="nbtn" id="nb3" onclick="showTab('portals')">🌐 Portale</button>
     <button type="button" class="nbtn" id="nb4" onclick="showTab('watch')">👁 Beobachten<span class="badge" id="watchBadge" style="display:none">0</span></button>
     <button type="button" class="nbtn" id="nb6" onclick="showTab('alerts')">🔔 Alerts<span class="badge" id="alertBadge" style="display:none">0</span></button>
+    <button type="button" class="nbtn" id="nb7" onclick="showTab('pipeline')">📊 Pipeline</button>
     <div id="userBar" style="display:none;align-items:center;gap:6px;">
       <button type="button" class="cfgbtn" id="profileBtn" onclick="showTab('profile')" title="Mein Profil">👤 <span id="uname"></span></button>
       <button type="button" class="cfgbtn" id="adminBtn" style="display:none" onclick="showTab('admin')" title="Benutzerverwaltung">⚙️ Admin</button>
@@ -183,6 +184,19 @@
   </div>
 </div>
 
+<!-- PIPELINE TAB (Kanban) -->
+<div id="tabPipeline" style="display:none">
+  <div class="saved-hdr">
+    <div class="savtitle">📊 Bewerbungs-Pipeline</div>
+    <div style="color:#c1a0cb;font-size:13px;">Ziehe Jobs zwischen den Spalten, um den Status zu ändern.</div>
+  </div>
+  <div id="kanbanBoard" class="kanban"></div>
+  <div id="pipelineEmpty" class="savempty" style="display:none">
+    Keine gespeicherten Stellen vorhanden.<br>
+    <span style="font-size:13px;">Speichere zuerst Jobs über die Suche oder den Merkzettel.</span>
+  </div>
+</div>
+
 <!-- ALERTS TAB -->
 <div id="tabAlerts" style="display:none">
   <div class="saved-hdr">
@@ -303,6 +317,74 @@
     <div class="mactions">
       <button type="button" class="mcancelbtn" onclick="closeWatchModal()">Abbrechen</button>
       <button type="button" class="msavebtn" onclick="submitWatch()">👁 Beobachten</button>
+    </div>
+  </div>
+</div>
+
+<!-- CV Editor Modal -->
+<div id="cvEditorModal" class="modal-bg" style="display:none" onclick="if(event.target===this)closeCvEditor()">
+  <div class="modal" style="max-width:720px;">
+    <div class="modal-title" id="cvEditorTitle">📄 Lebenslauf</div>
+    <div class="mfield">
+      <label class="lbl">Name</label>
+      <input type="text" class="inp" id="cvName" placeholder="z.B. Tech-Lead-Version">
+    </div>
+    <div class="mfield">
+      <label class="lbl">Inhalt (Markdown)</label>
+      <textarea class="snote" id="cvContent" rows="14" style="min-height:320px;font-family:'Menlo',monospace;font-size:13px;" placeholder="# Max Mustermann&#10;&#10;## Erfahrung&#10;- …"></textarea>
+    </div>
+    <div class="mfield" style="display:flex;align-items:center;gap:10px;">
+      <input type="checkbox" id="cvDefault" style="width:16px;height:16px;accent-color:#22c55e;cursor:pointer;">
+      <label for="cvDefault" style="cursor:pointer;font-size:13px;">Als Standard-CV markieren</label>
+    </div>
+    <div id="cvStatus" class="mstatus"></div>
+    <div class="mactions">
+      <button type="button" class="mcancelbtn" onclick="closeCvEditor()">Abbrechen</button>
+      <button type="button" class="msavebtn" onclick="saveCv()" style="background:linear-gradient(135deg,#22c55e,#00bdfd);">💾 Speichern</button>
+    </div>
+  </div>
+</div>
+
+<!-- Template Editor Modal -->
+<div id="tplEditorModal" class="modal-bg" style="display:none" onclick="if(event.target===this)closeTplEditor()">
+  <div class="modal" style="max-width:720px;">
+    <div class="modal-title" id="tplEditorTitle">✍️ Anschreiben-Vorlage</div>
+    <div class="mfield">
+      <label class="lbl">Name</label>
+      <input type="text" class="inp" id="tplName" placeholder="z.B. Standard-Bewerbung">
+    </div>
+    <div class="mfield">
+      <label class="lbl">Text</label>
+      <textarea class="snote" id="tplBody" rows="14" style="min-height:320px;font-family:'Menlo',monospace;font-size:13px;" placeholder="Sehr geehrte Damen und Herren,&#10;&#10;mit großem Interesse habe ich Ihre Stellenanzeige für {{role}} bei {{company}} in {{location}} gelesen.&#10;&#10;…"></textarea>
+    </div>
+    <div class="mfield" style="display:flex;align-items:center;gap:10px;">
+      <input type="checkbox" id="tplDefault" style="width:16px;height:16px;accent-color:#ff8b9a;cursor:pointer;">
+      <label for="tplDefault" style="cursor:pointer;font-size:13px;">Als Standard-Vorlage markieren</label>
+    </div>
+    <div id="tplStatus" class="mstatus"></div>
+    <div class="mactions">
+      <button type="button" class="mcancelbtn" onclick="closeTplEditor()">Abbrechen</button>
+      <button type="button" class="msavebtn" onclick="saveTpl()" style="background:linear-gradient(135deg,#ff8b9a,#ffd166);">💾 Speichern</button>
+    </div>
+  </div>
+</div>
+
+<!-- Letter Preview Modal -->
+<div id="letterModal" class="modal-bg" style="display:none" onclick="if(event.target===this)closeLetter()">
+  <div class="modal" style="max-width:720px;">
+    <div class="modal-title">✉️ Anschreiben</div>
+    <div class="modal-sub">Platzhalter wurden mit den Job-Daten gefüllt. Du kannst den Text beliebig bearbeiten.</div>
+    <div class="mfield">
+      <label class="lbl">Vorlage wählen</label>
+      <select class="inp" id="letterTplSelect" style="cursor:pointer;" onchange="fillLetterFromTemplate()"></select>
+    </div>
+    <div class="mfield">
+      <label class="lbl">Text</label>
+      <textarea class="snote" id="letterText" rows="14" style="min-height:320px;"></textarea>
+    </div>
+    <div class="mactions">
+      <button type="button" class="mcancelbtn" onclick="closeLetter()">Schließen</button>
+      <button type="button" class="msavebtn" onclick="copyLetter()">📋 Kopieren</button>
     </div>
   </div>
 </div>
@@ -524,6 +606,24 @@
     <div class="mactions" style="justify-content:flex-end;">
       <button type="button" class="msavebtn" style="background:linear-gradient(135deg,#ff4d6d,#c9184a);" onclick="saveNotifySettings()">💾 Speichern</button>
     </div>
+  </div>
+
+  <!-- CVs -->
+  <div class="card">
+    <div class="card-stripe" style="background:linear-gradient(90deg,#22c55e,#00bdfd);"></div>
+    <div class="lbl">📄 Lebensläufe</div>
+    <div style="color:#c1a0cb;font-size:13px;margin-bottom:14px;">Verwalte verschiedene CV-Versionen. Markdown wird unterstützt.</div>
+    <div id="cvList" style="margin-bottom:12px;"></div>
+    <button type="button" class="clrbtn" onclick="openCvEditor()" style="background:rgba(34,197,94,.08);border-color:rgba(34,197,94,.25);color:#22c55e;">➕ Neuer Lebenslauf</button>
+  </div>
+
+  <!-- Letter Templates -->
+  <div class="card">
+    <div class="card-stripe" style="background:linear-gradient(90deg,#ff8b9a,#ffd166);"></div>
+    <div class="lbl">✍️ Anschreiben-Vorlagen</div>
+    <div style="color:#c1a0cb;font-size:13px;margin-bottom:14px;">Platzhalter: <code style="color:#ca98ff">{{company}}</code> <code style="color:#ca98ff">{{role}}</code> <code style="color:#ca98ff">{{location}}</code> <code style="color:#ca98ff">{{date}}</code></div>
+    <div id="tplList" style="margin-bottom:12px;"></div>
+    <button type="button" class="clrbtn" onclick="openTplEditor()" style="background:rgba(255,139,154,.08);border-color:rgba(255,139,154,.25);color:#ff8b9a;">➕ Neue Vorlage</button>
   </div>
 
   <!-- Jira-Integration -->

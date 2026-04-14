@@ -591,6 +591,44 @@ body{
 @media(max-width:500px){.dash-kpis{grid-template-columns:repeat(2,1fr);}.dash-comp-name{min-width:80px;max-width:100px;}}
 
 /* ══════════════════════════════════════════════════════════════════
+   Kanban-Board (Pipeline)
+   ══════════════════════════════════════════════════════════════════ */
+.kanban{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;}
+.kcol{backdrop-filter:blur(8px);background:rgba(33,7,45,.4);border:1px solid rgba(89,62,99,.15);border-radius:14px;padding:12px;min-height:300px;display:flex;flex-direction:column;transition:background .2s,border-color .2s;}
+.kcol.kdrop{background:rgba(156,66,244,.08);border-color:rgba(156,66,244,.3);}
+.kcol-hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;padding:0 4px;}
+.kcol-title{font-size:12px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;font-family:'Space Grotesk',sans-serif;}
+.kcol-cnt{font-size:11px;background:rgba(89,62,99,.2);padding:1px 8px;border-radius:20px;color:var(--on-surface-variant);}
+.kcard{backdrop-filter:blur(8px);background:rgba(33,7,45,.7);border:1px solid rgba(89,62,99,.2);border-radius:10px;padding:10px 12px;margin-bottom:8px;cursor:grab;transition:all .2s;user-select:none;}
+.kcard:hover{border-color:rgba(202,152,255,.3);transform:translateY(-1px);}
+.kcard:active,.kcard.kdrag{cursor:grabbing;opacity:.5;}
+.kcard-title{font-size:13px;font-weight:700;color:var(--on-surface);margin-bottom:3px;font-family:'Space Grotesk',sans-serif;}
+.kcard-title a{color:inherit;text-decoration:none;}
+.kcard-title a:hover{color:var(--primary);}
+.kcard-co{font-size:11px;color:var(--secondary);margin-bottom:4px;}
+.kcard-meta{font-size:10px;color:var(--on-surface-variant);display:flex;gap:6px;flex-wrap:wrap;}
+.kcard-fu{font-size:10px;color:var(--warning);margin-top:4px;}
+.kcard-actions{display:flex;gap:4px;margin-top:6px;}
+.kcard-btn{background:transparent;border:1px solid rgba(89,62,99,.25);border-radius:6px;color:var(--on-surface-variant);cursor:pointer;font-size:11px;padding:3px 8px;font-family:inherit;transition:all .15s;}
+.kcard-btn:hover{border-color:var(--primary);color:var(--primary);}
+.kcol-neu .kcol-title{color:var(--secondary);}
+.kcol-interessant .kcol-title{color:var(--warning);}
+.kcol-beworben .kcol-title{color:var(--success);}
+.kcol-abgelehnt .kcol-title{color:var(--tertiary);}
+.kcol-angebot .kcol-title{color:var(--primary);}
+@media(max-width:1000px){.kanban{grid-template-columns:repeat(3,1fr);}}
+@media(max-width:700px){.kanban{grid-template-columns:repeat(2,1fr);}}
+@media(max-width:500px){.kanban{grid-template-columns:1fr;}}
+
+/* ══════════════════════════════════════════════════════════════════
+   CV & Template-Listen
+   ══════════════════════════════════════════════════════════════════ */
+.cv-row,.tpl-row{display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--surface-container-lowest);border:1px solid rgba(89,62,99,.2);border-radius:10px;margin-bottom:6px;}
+.cv-row:hover,.tpl-row:hover{border-color:var(--outline);}
+.cv-name,.tpl-name{flex:1;font-size:13px;font-weight:600;}
+.cv-default,.tpl-default{font-size:10px;background:rgba(34,197,94,.1);color:var(--success);border:1px solid rgba(34,197,94,.2);border-radius:20px;padding:2px 8px;font-weight:700;}
+
+/* ══════════════════════════════════════════════════════════════════
    Suchverlauf
    ══════════════════════════════════════════════════════════════════ */
 .sh-box{

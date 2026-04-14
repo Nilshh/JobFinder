@@ -657,6 +657,32 @@ def init_db():
         db.execute("CREATE INDEX IF NOT EXISTS idx_alert_jobs_search ON alert_jobs(search_id)")
         db.execute("CREATE INDEX IF NOT EXISTS idx_boards_user ON company_boards(user_id)")
         db.execute("CREATE INDEX IF NOT EXISTS idx_board_jobs_board ON board_jobs(board_id)")
+        # ── Bewerbungs-Workflow (CVs + Templates) ──
+        db.execute("""
+            CREATE TABLE IF NOT EXISTS cvs (
+                id         INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id    INTEGER NOT NULL,
+                name       TEXT NOT NULL,
+                content    TEXT NOT NULL DEFAULT '',
+                is_default INTEGER NOT NULL DEFAULT 0,
+                created_at TEXT DEFAULT (datetime('now')),
+                updated_at TEXT DEFAULT (datetime('now')),
+                FOREIGN KEY (user_id) REFERENCES users(id)
+            )
+        """)
+        db.execute("""
+            CREATE TABLE IF NOT EXISTS letter_templates (
+                id         INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id    INTEGER NOT NULL,
+                name       TEXT NOT NULL,
+                body       TEXT NOT NULL DEFAULT '',
+                is_default INTEGER NOT NULL DEFAULT 0,
+                created_at TEXT DEFAULT (datetime('now')),
+                FOREIGN KEY (user_id) REFERENCES users(id)
+            )
+        """)
+        db.execute("CREATE INDEX IF NOT EXISTS idx_cvs_user ON cvs(user_id)")
+        db.execute("CREATE INDEX IF NOT EXISTS idx_templates_user ON letter_templates(user_id)")
 
     # Bootstrap: promote ADMIN_USER from env if set
     if ADMIN_USER:
@@ -1310,6 +1336,8 @@ def admin_delete_user(uid):
     if uid == session["user_id"]:
         return jsonify({"error": "Du kannst dich nicht selbst löschen"}), 400
     with get_db() as db:
+        db.execute("DELETE FROM cvs WHERE user_id = ?", [uid])
+        db.execute("DELETE FROM letter_templates WHERE user_id = ?", [uid])
         db.execute("DELETE FROM alert_jobs WHERE search_id IN (SELECT id FROM saved_searches WHERE user_id = ?)", [uid])
         db.execute("DELETE FROM saved_searches WHERE user_id = ?", [uid])
         db.execute("DELETE FROM board_jobs WHERE board_id IN (SELECT id FROM company_boards WHERE user_id = ?)", [uid])
@@ -2125,6 +2153,132 @@ def boards_jobs_read_all():
             UPDATE board_jobs SET is_new = 0
             WHERE board_id IN (SELECT id FROM company_boards WHERE user_id = ?)
         """, [uid])
+    return jsonify({"ok": True})
+
+
+# ══════════════════════════════════════════════════════════════════
+# Bewerbungs-Workflow (CVs + Templates)
+# ══════════════════════════════════════════════════════════════════
+
+@app.route("/user/cvs", methods=["GET", "OPTIONS"])
+@login_required
+def cvs_list():
+    with get_db() as db:
+        rows = db.execute(
+            "SELECT id, name, content, is_default, created_at, updated_at FROM cvs WHERE user_id = ? ORDER BY is_default DESC, updated_at DESC",
+            [session["user_id"]]
+        ).fetchall()
+    return jsonify([dict(r) for r in rows])
+
+
+@app.route("/user/cvs", methods=["POST"])
+@login_required
+def cvs_create():
+    uid  = session["user_id"]
+    data = request.get_json(force=True) or {}
+    name = (data.get("name") or "").strip()
+    content = data.get("content") or ""
+    if not name:
+        return jsonify({"error": "Name ist Pflicht"}), 400
+    is_default = 1 if data.get("is_default") else 0
+    with get_db() as db:
+        if is_default:
+            db.execute("UPDATE cvs SET is_default = 0 WHERE user_id = ?", [uid])
+        cur = db.execute(
+            "INSERT INTO cvs (user_id, name, content, is_default) VALUES (?, ?, ?, ?)",
+            [uid, name, content, is_default]
+        )
+        row = db.execute("SELECT * FROM cvs WHERE id = ?", [cur.lastrowid]).fetchone()
+    return jsonify(dict(row)), 201
+
+
+@app.route("/user/cvs/<int:cid>", methods=["PATCH", "OPTIONS"])
+@login_required
+def cvs_update(cid):
+    uid  = session["user_id"]
+    data = request.get_json(force=True) or {}
+    with get_db() as db:
+        row = db.execute("SELECT id FROM cvs WHERE id = ? AND user_id = ?", [cid, uid]).fetchone()
+        if not row:
+            return jsonify({"error": "Nicht gefunden"}), 404
+        if data.get("is_default"):
+            db.execute("UPDATE cvs SET is_default = 0 WHERE user_id = ?", [uid])
+        allowed = {"name", "content", "is_default"}
+        for field, val in data.items():
+            if field in allowed:
+                db.execute(f"UPDATE cvs SET {field} = ?, updated_at = datetime('now') WHERE id = ?", [val, cid])
+    return jsonify({"ok": True})
+
+
+@app.route("/user/cvs/<int:cid>", methods=["DELETE", "OPTIONS"])
+@login_required
+def cvs_delete(cid):
+    with get_db() as db:
+        row = db.execute("SELECT id FROM cvs WHERE id = ? AND user_id = ?", [cid, session["user_id"]]).fetchone()
+        if not row:
+            return jsonify({"error": "Nicht gefunden"}), 404
+        db.execute("DELETE FROM cvs WHERE id = ?", [cid])
+    return jsonify({"ok": True})
+
+
+@app.route("/user/templates", methods=["GET", "OPTIONS"])
+@login_required
+def templates_list():
+    with get_db() as db:
+        rows = db.execute(
+            "SELECT id, name, body, is_default, created_at FROM letter_templates WHERE user_id = ? ORDER BY is_default DESC, created_at DESC",
+            [session["user_id"]]
+        ).fetchall()
+    return jsonify([dict(r) for r in rows])
+
+
+@app.route("/user/templates", methods=["POST"])
+@login_required
+def templates_create():
+    uid  = session["user_id"]
+    data = request.get_json(force=True) or {}
+    name = (data.get("name") or "").strip()
+    body = data.get("body") or ""
+    if not name:
+        return jsonify({"error": "Name ist Pflicht"}), 400
+    is_default = 1 if data.get("is_default") else 0
+    with get_db() as db:
+        if is_default:
+            db.execute("UPDATE letter_templates SET is_default = 0 WHERE user_id = ?", [uid])
+        cur = db.execute(
+            "INSERT INTO letter_templates (user_id, name, body, is_default) VALUES (?, ?, ?, ?)",
+            [uid, name, body, is_default]
+        )
+        row = db.execute("SELECT * FROM letter_templates WHERE id = ?", [cur.lastrowid]).fetchone()
+    return jsonify(dict(row)), 201
+
+
+@app.route("/user/templates/<int:tid>", methods=["PATCH", "OPTIONS"])
+@login_required
+def templates_update(tid):
+    uid  = session["user_id"]
+    data = request.get_json(force=True) or {}
+    with get_db() as db:
+        row = db.execute("SELECT id FROM letter_templates WHERE id = ? AND user_id = ?", [tid, uid]).fetchone()
+        if not row:
+            return jsonify({"error": "Nicht gefunden"}), 404
+        if data.get("is_default"):
+            db.execute("UPDATE letter_templates SET is_default = 0 WHERE user_id = ?", [uid])
+        allowed = {"name", "body", "is_default"}
+        for field, val in data.items():
+            if field in allowed:
+                db.execute(f"UPDATE letter_templates SET {field} = ? WHERE id = ?", [val, tid])
+    return jsonify({"ok": True})
+
+
+@app.route("/user/templates/<int:tid>", methods=["DELETE", "OPTIONS"])
+@login_required
+def templates_delete(tid):
+    with get_db() as db:
+        row = db.execute("SELECT id FROM letter_templates WHERE id = ? AND user_id = ?", [tid, session["user_id"]]).fetchone()
+        if not row:
+            return jsonify({"error": "Nicht gefunden"}), 404
+        db.execute("DELETE FROM letter_templates WHERE id = ?", [tid])
     return jsonify({"ok": True})
 
 
