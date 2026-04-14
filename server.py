@@ -1000,7 +1000,7 @@ def update_profile():
     return jsonify({"ok": True, "email": email})
 
 
-@app.route("/user/password", methods=["POST"])
+@app.route("/user/password", methods=["POST", "OPTIONS"])
 @login_required
 def change_password():
     data       = request.get_json(force=True)
@@ -1475,7 +1475,7 @@ def download_backup(filename):
     return send_file(path, as_attachment=True, download_name=filename, mimetype="application/json")
 
 
-@app.route("/admin/backups/trigger", methods=["POST"])
+@app.route("/admin/backups/trigger", methods=["POST", "OPTIONS"])
 @admin_required
 def trigger_backup():
     try:
@@ -1504,7 +1504,7 @@ def watch_list():
     return jsonify([dict(r) for r in rows])
 
 
-@app.route("/watch/companies", methods=["POST"])
+@app.route("/watch/companies", methods=["POST", "OPTIONS"])
 @login_required
 def watch_create():
     uid  = session["user_id"]
@@ -1860,7 +1860,7 @@ def alerts_list():
     return jsonify([dict(r) for r in rows])
 
 
-@app.route("/search/alerts", methods=["POST"])
+@app.route("/search/alerts", methods=["POST", "OPTIONS"])
 @login_required
 def alerts_create():
     uid  = session["user_id"]
@@ -2076,7 +2076,7 @@ def boards_list():
     return jsonify([dict(r) for r in rows])
 
 
-@app.route("/boards", methods=["POST"])
+@app.route("/boards", methods=["POST", "OPTIONS"])
 @login_required
 def boards_create():
     uid  = session["user_id"]
@@ -2205,7 +2205,7 @@ def cvs_list():
     return jsonify([dict(r) for r in rows])
 
 
-@app.route("/user/cvs", methods=["POST"])
+@app.route("/user/cvs", methods=["POST", "OPTIONS"])
 @login_required
 def cvs_create():
     uid  = session["user_id"]
@@ -2266,7 +2266,7 @@ def templates_list():
     return jsonify([dict(r) for r in rows])
 
 
-@app.route("/user/templates", methods=["POST"])
+@app.route("/user/templates", methods=["POST", "OPTIONS"])
 @login_required
 def templates_create():
     uid  = session["user_id"]
