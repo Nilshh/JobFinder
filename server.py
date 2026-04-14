@@ -42,6 +42,11 @@ WATCH_INTERVAL_MINUTES = int(os.environ.get("WATCH_INTERVAL_MINUTES", "60"))  # 
 WATCH_SCRAPE_DELAY     = int(os.environ.get("WATCH_SCRAPE_DELAY", "5"))       # Sekunden zwischen zwei Scrapes
 WATCH_MAX_PAGES        = int(os.environ.get("WATCH_MAX_PAGES",    "10"))      # Max. Seiten pro Karriereseite
 
+# Web Push (VAPID) — optional. Ohne Keys bleibt Push deaktiviert.
+VAPID_PUBLIC_KEY  = os.environ.get("VAPID_PUBLIC_KEY", "")
+VAPID_PRIVATE_KEY = os.environ.get("VAPID_PRIVATE_KEY", "")
+VAPID_SUBJECT     = os.environ.get("VAPID_SUBJECT", "mailto:admin@example.com")
+
 
 # ── Automatisches Backup ──────────────────────────────────────────
 
@@ -425,6 +430,8 @@ def _send_watch_notification(user_id, new_jobs):
         print(f"[Notify] E-Mail an {user['username']} gesendet ({len(new_jobs)} Jobs)", flush=True)
     except Exception as e:
         print(f"[Notify] E-Mail-Fehler für {user['username']}: {e}", flush=True)
+    # Zusätzlich Web-Push (falls aktiviert)
+    _send_push(user_id, f"🔔 {len(new_jobs)} neue Stellen", f"Der Karriere-Monitor hat neue Treffer gefunden.", "/")
 
 
 def _notify_after_watch_check(user_id, new_count):
@@ -683,6 +690,18 @@ def init_db():
         """)
         db.execute("CREATE INDEX IF NOT EXISTS idx_cvs_user ON cvs(user_id)")
         db.execute("CREATE INDEX IF NOT EXISTS idx_templates_user ON letter_templates(user_id)")
+        # ── Push-Subscriptions ──
+        db.execute("""
+            CREATE TABLE IF NOT EXISTS push_subscriptions (
+                id         INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id    INTEGER NOT NULL,
+                endpoint   TEXT NOT NULL,
+                keys       TEXT NOT NULL,
+                created_at TEXT DEFAULT (datetime('now')),
+                FOREIGN KEY (user_id) REFERENCES users(id)
+            )
+        """)
+        db.execute("CREATE INDEX IF NOT EXISTS idx_push_user ON push_subscriptions(user_id)")
 
     # Bootstrap: promote ADMIN_USER from env if set
     if ADMIN_USER:
@@ -1336,6 +1355,7 @@ def admin_delete_user(uid):
     if uid == session["user_id"]:
         return jsonify({"error": "Du kannst dich nicht selbst löschen"}), 400
     with get_db() as db:
+        db.execute("DELETE FROM push_subscriptions WHERE user_id = ?", [uid])
         db.execute("DELETE FROM cvs WHERE user_id = ?", [uid])
         db.execute("DELETE FROM letter_templates WHERE user_id = ?", [uid])
         db.execute("DELETE FROM alert_jobs WHERE search_id IN (SELECT id FROM saved_searches WHERE user_id = ?)", [uid])
@@ -1769,6 +1789,7 @@ def _send_alert_notification(user_id, search_name, new_jobs):
         print(f"[Alert] E-Mail an {user['username']} ({len(new_jobs)} Jobs für „{search_name}\")", flush=True)
     except Exception as e:
         print(f"[Alert] E-Mail-Fehler: {e}", flush=True)
+    _send_push(user_id, f"🔔 {len(new_jobs)} neue Treffer", f"Alert „{search_name}\" hat neue Stellen gefunden.", "/")
 
 
 def _run_alert_checks():
@@ -2280,6 +2301,73 @@ def templates_delete(tid):
             return jsonify({"error": "Nicht gefunden"}), 404
         db.execute("DELETE FROM letter_templates WHERE id = ?", [tid])
     return jsonify({"ok": True})
+
+
+# ══════════════════════════════════════════════════════════════════
+# Web Push
+# ══════════════════════════════════════════════════════════════════
+
+@app.route("/push/vapid-public-key")
+def push_vapid_key():
+    return jsonify({"key": VAPID_PUBLIC_KEY})
+
+
+@app.route("/push/subscribe", methods=["POST", "OPTIONS"])
+@login_required
+def push_subscribe():
+    data = request.get_json(force=True) or {}
+    endpoint = data.get("endpoint", "")
+    keys     = data.get("keys", {})
+    if not endpoint:
+        return jsonify({"error": "endpoint fehlt"}), 400
+    with get_db() as db:
+        db.execute("DELETE FROM push_subscriptions WHERE endpoint = ?", [endpoint])
+        db.execute(
+            "INSERT INTO push_subscriptions (user_id, endpoint, keys) VALUES (?, ?, ?)",
+            [session["user_id"], endpoint, json.dumps(keys)]
+        )
+    return jsonify({"ok": True})
+
+
+@app.route("/push/unsubscribe", methods=["POST", "OPTIONS"])
+@login_required
+def push_unsubscribe():
+    data = request.get_json(force=True) or {}
+    endpoint = data.get("endpoint", "")
+    with get_db() as db:
+        db.execute("DELETE FROM push_subscriptions WHERE endpoint = ? AND user_id = ?",
+                   [endpoint, session["user_id"]])
+    return jsonify({"ok": True})
+
+
+def _send_push(user_id, title, body, url="/"):
+    """Sendet Web-Push an alle Subscriptions eines Users. Silent-Fail wenn pywebpush fehlt oder keine VAPID-Keys."""
+    if not VAPID_PRIVATE_KEY or not VAPID_PUBLIC_KEY:
+        return
+    try:
+        from pywebpush import webpush, WebPushException
+    except ImportError:
+        return
+    with get_db() as db:
+        subs = [dict(r) for r in db.execute(
+            "SELECT id, endpoint, keys FROM push_subscriptions WHERE user_id = ?", [user_id]
+        ).fetchall()]
+    payload = json.dumps({"title": title, "body": body, "url": url})
+    for s in subs:
+        try:
+            webpush(
+                subscription_info={"endpoint": s["endpoint"], "keys": json.loads(s["keys"])},
+                data=payload,
+                vapid_private_key=VAPID_PRIVATE_KEY,
+                vapid_claims={"sub": VAPID_SUBJECT}
+            )
+        except Exception as e:
+            # Verfallene Subscription entfernen
+            msg = str(e)
+            if "410" in msg or "404" in msg:
+                with get_db() as db:
+                    db.execute("DELETE FROM push_subscriptions WHERE id = ?", [s["id"]])
+            print(f"[Push] Fehler für Sub {s['id']}: {e}", flush=True)
 
 
 # ── Legal Meta ────────────────────────────────────────────────────

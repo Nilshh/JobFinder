@@ -2977,6 +2977,105 @@ async function doLogout(){
   showTab("search");
 }
 
+// ══════════════════════════════════════════════════════════════════
+// PWA: Service Worker + Web Push
+// ══════════════════════════════════════════════════════════════════
+
+async function registerSW(){
+  if(!("serviceWorker" in navigator)) return;
+  try {
+    const reg = await navigator.serviceWorker.register("/sw.js");
+    console.log("[SW] registered", reg.scope);
+  } catch(e){ console.log("[SW] registration failed", e); }
+}
+
+async function enablePushNotifications(){
+  if(!("serviceWorker" in navigator) || !("PushManager" in window)){
+    alert("Dein Browser unterstützt keine Push-Benachrichtigungen.");
+    return;
+  }
+  const perm = await Notification.requestPermission();
+  if(perm !== "granted"){
+    alert("Benachrichtigungen wurden nicht erlaubt.");
+    return;
+  }
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    // VAPID-Key vom Server holen
+    const keyRes = await fetch("/push/vapid-public-key");
+    if(!keyRes.ok){ alert("Server unterstützt noch keine Push-Keys."); return; }
+    const {key} = await keyRes.json();
+    if(!key){ alert("Kein Push-Key konfiguriert."); return; }
+    const sub = await reg.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: urlBase64ToUint8Array(key)
+    });
+    await fetch("/push/subscribe", {
+      method:"POST", credentials:"include",
+      headers:{"Content-Type":"application/json"},
+      body: JSON.stringify(sub)
+    });
+    alert("✓ Browser-Benachrichtigungen aktiviert.");
+  } catch(e){
+    alert("⚠️ Fehler: "+e.message);
+  }
+}
+
+function urlBase64ToUint8Array(base64){
+  const padding = "=".repeat((4 - base64.length % 4) % 4);
+  const b64 = (base64 + padding).replace(/-/g, "+").replace(/_/g, "/");
+  const raw = atob(b64);
+  return Uint8Array.from([...raw].map(c => c.charCodeAt(0)));
+}
+
+// ══════════════════════════════════════════════════════════════════
+// Swipe-Gesten (Mobile)
+// ══════════════════════════════════════════════════════════════════
+
+function enableSwipeOnJobList(){
+  const list = document.getElementById("joblist");
+  if(!list) return;
+  let startX = 0, startY = 0, card = null, tx = 0;
+  list.addEventListener("touchstart", e => {
+    card = e.target.closest(".jcard");
+    if(!card) return;
+    startX = e.touches[0].clientX;
+    startY = e.touches[0].clientY;
+    tx = 0;
+  }, {passive:true});
+  list.addEventListener("touchmove", e => {
+    if(!card) return;
+    const dx = e.touches[0].clientX - startX;
+    const dy = e.touches[0].clientY - startY;
+    if(Math.abs(dy) > Math.abs(dx)) return;  // vertikales Scrollen nicht blockieren
+    tx = dx;
+    card.style.transform = `translateX(${dx}px) rotate(${dx*0.05}deg)`;
+    card.style.opacity = 1 - Math.min(Math.abs(dx)/300, 0.6);
+  }, {passive:true});
+  list.addEventListener("touchend", () => {
+    if(!card) return;
+    card.style.transition = "all .25s";
+    if(tx > 100){
+      // nach rechts gewischt → speichern
+      const btn = card.querySelector(".savebtn");
+      if(btn) btn.click();
+    } else if(tx < -100){
+      // nach links gewischt → ignorieren
+      const btn = card.querySelector(".skipbtn");
+      if(btn) btn.click();
+    } else {
+      card.style.transform = "";
+      card.style.opacity = "";
+    }
+    setTimeout(() => {
+      if(card){ card.style.transition = ""; card.style.transform = ""; card.style.opacity = ""; }
+      card = null;
+    }, 260);
+  });
+}
+
 // ── Init ──────────────────────────────────────────────────────────
 checkAuth();
 renderSearchHistory();
+registerSW();
+enableSwipeOnJobList();

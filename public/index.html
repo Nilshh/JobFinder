@@ -5,6 +5,10 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>JobPipeline</title>
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#1a0425">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -604,6 +608,7 @@
     </div>
     <div id="notifyStatus" class="mstatus"></div>
     <div class="mactions" style="justify-content:flex-end;">
+      <button type="button" class="mcancelbtn" onclick="enablePushNotifications()" style="border-color:rgba(0,189,253,.3);color:#00bdfd;">🔔 Browser-Push aktivieren</button>
       <button type="button" class="msavebtn" style="background:linear-gradient(135deg,#ff4d6d,#c9184a);" onclick="saveNotifySettings()">💾 Speichern</button>
     </div>
   </div>

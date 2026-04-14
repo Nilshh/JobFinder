@@ -1,0 +1,20 @@
+{
+  "name": "JobPipeline",
+  "short_name": "JobPipeline",
+  "description": "Intelligente Jobsuche mit Dashboard, Karriere-Monitor und Search-Alerts",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#1a0425",
+  "theme_color": "#ca98ff",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["productivity", "business"],
+  "lang": "de"
+}
