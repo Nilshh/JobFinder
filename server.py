@@ -15,8 +15,16 @@ import re
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 import hashlib
+import logging
 from datetime import datetime, timedelta, timezone
 from functools import wraps
+
+# Strukturiertes Logging
+logging.basicConfig(
+    level=os.environ.get("LOG_LEVEL", "INFO"),
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+)
+log = logging.getLogger("jobpipeline")
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "dev-secret-change-in-production")
@@ -2483,6 +2491,31 @@ und ende mit „Mit freundlichen Grüßen". Keine Meta-Kommentare, nur den Brief
         return jsonify({"error": f"KI-API-Fehler: HTTP {e.response.status_code}"}), 500
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+
+# ── Health & Metrics ─────────────────────────────────────────────
+
+@app.route("/health")
+def health_check():
+    """Health-Check für Monitoring: DB + Scheduler-Status."""
+    try:
+        with get_db() as db:
+            db.execute("SELECT 1").fetchone()
+        db_ok = True
+    except Exception as e:
+        db_ok = False
+        log.error(f"health: DB fail: {e}")
+    # Aktive Hintergrund-Threads zählen
+    active_threads = [t.name for t in threading.enumerate() if t.daemon and t.name in
+                      ("daily-backup", "watch-checker", "digest-mailer", "alert-checker",
+                       "board-checker", "weekly-report")]
+    return jsonify({
+        "status": "ok" if db_ok else "degraded",
+        "db": db_ok,
+        "schedulers": active_threads,
+        "cache_size": len(_api_cache),
+        "time": datetime.now(timezone.utc).isoformat(),
+    }), 200 if db_ok else 503
 
 
 # ── Legal Meta ────────────────────────────────────────────────────
