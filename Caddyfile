@@ -1,5 +1,5 @@
 {$APP_DOMAIN} {
-    @api path /jobs /jobs/* /jira/* /auth/* /user/* /admin/* /watch/* /meta/*
+    @api path /jobs /jobs/* /jira/* /auth/* /user/* /admin/* /watch/* /meta/* /search/* /boards /boards/* /ai/* /push/* /health
     handle @api {
         reverse_proxy api:5500
     }
