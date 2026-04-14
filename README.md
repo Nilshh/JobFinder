@@ -1,15 +1,28 @@
 # JobPipeline
 
-> Intelligente Jobsuche mit Auto-Discovery, Search-Alerts, Company-Boards, Bewerbungs-Dashboard, Karriere-Monitor, E-Mail-Benachrichtigungen, Jira-Integration und Mehrbenutzer-Unterstützung
+> Vollständige Bewerbungs-Plattform mit Auto-Discovery, Search-Alerts, Company-Boards, KI-Anschreiben, Kanban-Pipeline, Karriere-Monitor, PWA, Web-Push, Jira-Integration und Mehrbenutzer-Unterstützung
 
-JobPipeline ist eine Single-Page-App für die strukturierte Jobsuche. Sie durchsucht **fünf Jobquellen** (Adzuna, Bundesagentur für Arbeit, Jobicy, RemoteOK, The Muse) parallel nach mehreren Jobtiteln – inklusive automatischer **Synonym-Expansion** –, filtert bereits gespeicherte oder ignorierte Stellen automatisch heraus und verlinkt direkt auf **45+ Jobportale**. Gespeicherte Stellen lassen sich mit Status und Notizen tracken und per Knopfdruck als Jira-Ticket exportieren.
+JobPipeline ist eine installierbare Web-App (PWA) für die strukturierte Jobsuche und Bewerbungsverwaltung. Sie durchsucht **fünf Jobquellen** (Adzuna, Bundesagentur für Arbeit, Jobicy, RemoteOK, The Muse) parallel – inklusive automatischer **Synonym-Expansion** –, filtert bereits gespeicherte oder ignorierte Stellen automatisch heraus und verlinkt direkt auf **45+ Jobportale**.
 
 **Drei automatisierte Such-Mechanismen im Hintergrund:**
-- **Search-Alerts** führen deine Suchen regelmäßig aus und melden neue Treffer per E-Mail.
+- **Search-Alerts** führen deine Suchen regelmäßig aus und melden neue Treffer per E-Mail + Web-Push.
 - **Karriere-Monitor** (Playwright) überwacht beliebige Unternehmens-Karriereseiten auf Keyword-Matches.
 - **Company-Boards** (Greenhouse, Lever) holen strukturierte Job-Daten von Scale-ups wie Airbnb, Stripe oder Shopify.
 
-Das **Bewerbungs-Dashboard** zeigt Kennzahlen, Status-Verteilung und Trends auf einen Blick.
+**Vollständiger Bewerbungs-Workflow:**
+- **Kanban-Pipeline** mit Drag&Drop für die Bewerbungsphasen
+- **CV-Manager + Anschreiben-Vorlagen** mit Platzhaltern
+- **KI-generierte Anschreiben** (Anthropic) basierend auf Job + Profil
+- **Match-Score** je Job basierend auf deinem Profil
+- **Interview-Termine** mit ICS-Export für den Kalender
+- **Follow-up-Hinweise** für überfällige Bewerbungen
+
+**Insights & Benachrichtigungen:**
+- **Bewerbungs-Dashboard** mit Kennzahlen, Status-Verteilung, Top-Unternehmen
+- **Salary-Insights** und **Skills-Heatmap** aus deinen Daten
+- **Wöchentlicher Markt-Report** per E-Mail (Sonntags)
+- **Web-Push-Benachrichtigungen** zusätzlich zu E-Mail
+- **Jira-Export** mit einem Klick
 
 ---
 
@@ -87,6 +100,39 @@ Automatische Überwachung von Unternehmens-Karriereseiten auf neue passende Stel
 - **Auf Merkzettel** — Gefundene Stellen per 💾-Button direkt ins Merkzettel übernehmen
 - **Rate-Limiting** — Konfigurierbare Pause zwischen Scrapes (`WATCH_SCRAPE_DELAY`), korrekter Bot-User-Agent
 - **Pro-Nutzer** — Jeder Benutzer verwaltet seine eigene Watchlist
+
+### Bewerbungs-Pipeline (Kanban)
+- **Drag & Drop** zwischen 5 Status-Spalten (Neu / Interessant / Beworben / Abgelehnt / Angebot)
+- **Follow-up-Erinnerung** in der Karte: zeigt an, wenn eine Bewerbung 7+ Tage ohne Reaktion ist
+- **Interview-Termine** setzen → **ICS-Download** für Google Calendar / Apple Calendar / Outlook
+- **Anschreiben-Button** je Karte: öffnet Vorlage → Platzhalter werden gefüllt → KI-Verfeinerung optional
+- **Reine Frontend-Implementierung** (HTML5 Drag & Drop, kein zusätzliches Library)
+
+### CV-Manager & Anschreiben-Vorlagen
+- **Mehrere CV-Versionen** im Profil verwalten (Markdown, eine als Standard markierbar)
+- **Anschreiben-Vorlagen** mit Platzhaltern: `{{company}}`, `{{role}}`, `{{location}}`, `{{date}}`, `{{my_name}}`
+- **Letter-Editor** im Pipeline-Tab: Vorlage wählen → Platzhalter werden gefüllt → bearbeiten → kopieren
+
+### KI-Integration (optional)
+Wenn `AI_API_KEY` in der `.env` gesetzt ist, stehen folgende KI-Features zur Verfügung:
+- **Profil-Zusammenfassung** im Profil-Tab (Freitext: Erfahrung, Skills, Wunschposition)
+- **🤖 Mit KI generieren** im Anschreiben-Editor: nutzt Profil + Job-Daten für ein vollständiges Anschreiben (Anthropic Claude)
+- **Match-Score** (`/ai/match`-Endpoint): Keyword-basierte Übereinstimmung Profil ↔ Job
+- **Modell konfigurierbar** via `AI_MODEL` (Standard: `claude-haiku-4-5`)
+- **Graceful Degradation**: ohne API-Key bleiben nur Vorlagen + Match-Score (Keyword) verfügbar
+
+### PWA & Web-Push
+- **Installierbar** auf iOS, Android und Desktop (Add to Home Screen)
+- **Service Worker** (sw.js): Cache-First für Assets, Network-First für API → funktioniert teilweise offline
+- **Web-Push-Benachrichtigungen** (zusätzlich zu E-Mail) für Watch- und Alert-Treffer
+- **Touch-Swipe-Gesten** in Job-Cards: → speichern, ← ignorieren
+- **Mobile-optimiertes Theme** (Theme-Color, Status-Bar)
+- **VAPID-Schlüssel** in `.env`: `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT`
+
+### Insights & Markt-Daten
+- **Salary-Insights** im Dashboard: Min-Max-Spannen + Median pro Jobtitel (aus gespeicherten Jobs mit Gehaltsangabe)
+- **Skills-Heatmap**: Erkennt 40+ Tech-Skills und C-Level-Rollen in deinen gespeicherten Jobs, visualisiert nach Häufigkeit
+- **Wöchentlicher Markt-Report** (Sonntags 09:00 UTC): E-Mail mit Zusammenfassung neuer Watch/Alert/Board-Treffer der letzten 7 Tage
 
 ### Datensicherung
 - **Manueller Backup** — Kompletten Datenstand als JSON herunterladen (inkl. Watch-Daten)
@@ -207,6 +253,20 @@ cp .env.example .env
 | `WATCH_INTERVAL_MINUTES` | Wie oft der Scheduler fällige Watches prüft, in Minuten (Standard: `60`) | optional |
 | `WATCH_SCRAPE_DELAY` | Wartezeit in Sekunden zwischen zwei aufeinanderfolgenden Scrapes (Standard: `5`) | optional |
 | `WATCH_MAX_PAGES` | Maximale Seitenanzahl pro Karriereseite bei Pagination (Standard: `10`) | optional |
+| `VAPID_PUBLIC_KEY` | Public Key für Web-Push-Benachrichtigungen | für Web-Push |
+| `VAPID_PRIVATE_KEY` | Private Key für Web-Push-Benachrichtigungen | für Web-Push |
+| `VAPID_SUBJECT` | Kontakt-URL für Web-Push (z. B. `mailto:admin@example.com`) | für Web-Push |
+| `AI_API_KEY` | Anthropic API Key für KI-Anschreiben | für KI |
+| `AI_MODEL` | Claude-Modell (Standard: `claude-haiku-4-5`) | optional |
+| `LOG_LEVEL` | Log-Level: DEBUG / INFO / WARNING / ERROR (Standard: `INFO`) | optional |
+
+**VAPID-Keys generieren** (für Web-Push):
+```bash
+pip install py-vapid
+vapid --gen
+```
+
+**Anthropic API Key** (für KI-Anschreiben): unter [console.anthropic.com](https://console.anthropic.com/) erstellen.
 
 Sicheren `SECRET_KEY` generieren:
 ```bash
@@ -265,16 +325,24 @@ Internet
         │     ├─► /jira/fields   Feldliste → Jira REST API
         │     ├─► /watch/*       Karriere-Monitor (Unternehmen, Jobs, globale Keywords)
         │     ├─► /search/alerts/*   Search-Alerts: gespeicherte Suchen (pro User)
-        │     └─► /boards/*      Company Boards: Greenhouse/Lever (pro User)
+        │     ├─► /boards/*      Company Boards: Greenhouse/Lever (pro User)
+        │     ├─► /user/cvs      CV-Manager (pro User)
+        │     ├─► /user/templates    Anschreiben-Vorlagen (pro User)
+        │     ├─► /user/profile-summary    KI-Profil (pro User)
+        │     ├─► /push/*        Web-Push: VAPID-Key, subscribe, unsubscribe
+        │     ├─► /ai/match      Match-Score Profil ↔ Job
+        │     ├─► /ai/coverletter   KI-Anschreiben (Anthropic)
+        │     └─► /health        Health-Check (DB, Scheduler, Cache)
         │
-        └─► /* (alle anderen Pfade)  →  public/ (statische SPA: index.html, style.css, app.js)
+        └─► /* (alle anderen Pfade)  →  public/ (SPA + manifest.json + sw.js)
 
 Hintergrund-Threads:
   ├─► Tägliches Backup (02:00 UTC)
   ├─► Watch-Scheduler (prüft fällige Karriereseiten alle 60 Min.)
   ├─► Alert-Scheduler (prüft fällige Search-Alerts alle 60 Min.)
   ├─► Board-Scheduler (prüft fällige Greenhouse/Lever-Boards alle 60 Min.)
-  └─► Digest-Mailer (prüft stündlich auf ausstehende tägliche/wöchentliche E-Mails)
+  ├─► Digest-Mailer (prüft stündlich auf ausstehende tägliche/wöchentliche E-Mails)
+  └─► Weekly-Report (Sonntags 09:00 UTC)
 ```
 
 ### Dateien
@@ -308,6 +376,9 @@ Benutzerdaten werden serverseitig in einer **SQLite-Datenbank** gespeichert (per
 | `alert_jobs` | Search-Alerts: gefundene Stellen pro Alert (Titel, Unternehmen, Quelle, Zeitstempel) |
 | `company_boards` | Company-Boards: Greenhouse/Lever-Slugs pro Benutzer (Provider, Slug, Intervall) |
 | `board_jobs` | Company-Boards: gefundene Stellen pro Board (Titel, URL, Standort, Zeitstempel) |
+| `cvs` | Lebensläufe pro Benutzer (Name, Markdown-Inhalt, Standard-Flag) |
+| `letter_templates` | Anschreiben-Vorlagen pro Benutzer (Name, Body mit Platzhaltern) |
+| `push_subscriptions` | Web-Push-Subscriptions pro Benutzer (Endpoint, Keys) |
 
 ---
 
@@ -491,14 +562,19 @@ open http://localhost:5500
 |---|---|
 | Frontend | Vanilla HTML / CSS / JavaScript (kein Framework, kein Build) |
 | Design | Nova Design System (Space Grotesk + Inter, Glassmorphism, CSS Custom Properties) |
-| Backend | Python 3.12 · Flask · Requests |
+| PWA | Service Worker (Cache + Push) · Web App Manifest |
+| Backend | Python 3.12 · Flask · Requests · pywebpush |
 | Datenbank | SQLite (serverseitig, Docker Volume) |
 | Caching | In-Memory TTL-Cache (API-Antworten, 5 Min) |
 | Authentifizierung | Session-Cookies · Werkzeug Password Hashing |
-| E-Mail | SMTP (Benachrichtigungen + Passwort-Reset) |
+| Push | Web Push (VAPID) via pywebpush |
+| E-Mail | SMTP (Benachrichtigungen + Passwort-Reset + Wochenreport) |
 | Reverse Proxy / HTTPS | Caddy (automatisches Let's Encrypt) |
-| Jobdaten | [Adzuna Jobs API](https://developer.adzuna.com/) · [Bundesagentur für Arbeit](https://jobsuche.api.bund.dev/) · [Jobicy](https://jobicy.com/jobs-rss-feed) |
+| Jobdaten | [Adzuna](https://developer.adzuna.com/) · [Bundesagentur](https://jobsuche.api.bund.dev/) · [Jobicy](https://jobicy.com/) · [RemoteOK](https://remoteok.com/) · [The Muse](https://www.themuse.com/developers) |
+| Company-Boards | [Greenhouse](https://developers.greenhouse.io/job-board.html) · [Lever](https://github.com/lever/postings-api) |
+| KI | [Anthropic Claude API](https://docs.anthropic.com/) (optional) |
 | Container | Docker Compose |
 | Jira | Atlassian REST API v3 · ADF |
 | Karriere-Monitor | Playwright (headless Chromium) · BeautifulSoup4 |
+| Tests | pytest (21 Tests, GitHub Actions CI) |
 | Deployment | deploy.sh (Git Pull + Rebuild) · update.sh (System + App) |
