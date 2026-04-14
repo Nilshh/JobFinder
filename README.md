@@ -1,8 +1,15 @@
 # JobPipeline
 
-> Intelligente Jobsuche mit Bewerbungs-Dashboard, Karriere-Monitor, E-Mail-Benachrichtigungen, Jira-Integration und Mehrbenutzer-Unterstützung
+> Intelligente Jobsuche mit Auto-Discovery, Search-Alerts, Company-Boards, Bewerbungs-Dashboard, Karriere-Monitor, E-Mail-Benachrichtigungen, Jira-Integration und Mehrbenutzer-Unterstützung
 
-JobPipeline ist eine schlanke Single-Page-App für die strukturierte Jobsuche. Sie durchsucht die **Adzuna-API**, die **Bundesagentur für Arbeit** und **Jobicy** parallel nach mehreren Jobtiteln, filtert bereits gespeicherte oder ignorierte Stellen automatisch heraus und verlinkt direkt auf **45+ Jobportale**. Gespeicherte Stellen lassen sich mit Status und Notizen tracken und per Knopfdruck als Jira-Ticket exportieren. Der integrierte **Karriere-Monitor** überwacht Unternehmens-Karriereseiten automatisch und benachrichtigt per E-Mail über neue passende Stellen. Das **Bewerbungs-Dashboard** zeigt Kennzahlen, Status-Verteilung und Trends auf einen Blick.
+JobPipeline ist eine Single-Page-App für die strukturierte Jobsuche. Sie durchsucht **fünf Jobquellen** (Adzuna, Bundesagentur für Arbeit, Jobicy, RemoteOK, The Muse) parallel nach mehreren Jobtiteln – inklusive automatischer **Synonym-Expansion** –, filtert bereits gespeicherte oder ignorierte Stellen automatisch heraus und verlinkt direkt auf **45+ Jobportale**. Gespeicherte Stellen lassen sich mit Status und Notizen tracken und per Knopfdruck als Jira-Ticket exportieren.
+
+**Drei automatisierte Such-Mechanismen im Hintergrund:**
+- **Search-Alerts** führen deine Suchen regelmäßig aus und melden neue Treffer per E-Mail.
+- **Karriere-Monitor** (Playwright) überwacht beliebige Unternehmens-Karriereseiten auf Keyword-Matches.
+- **Company-Boards** (Greenhouse, Lever) holen strukturierte Job-Daten von Scale-ups wie Airbnb, Stripe oder Shopify.
+
+Das **Bewerbungs-Dashboard** zeigt Kennzahlen, Status-Verteilung und Trends auf einen Blick.
 
 ---
 
@@ -10,11 +17,13 @@ JobPipeline ist eine schlanke Single-Page-App für die strukturierte Jobsuche. S
 
 ### Jobsuche
 - **Mehrfach-Titelsuche** — Vordefinierte Chips (CTO, CIO, CDO, Head of IT, Leiter IT u. a.) + eigene Titel
-- **Parallele Suche** — Alle gewählten Jobtitel werden gleichzeitig abgefragt (Adzuna + BA + Jobicy)
-- **Remote-Filter** — Nur Remote-Jobs anzeigen (Jobicy + Adzuna mit Remote-Keyword)
+- **Parallele Suche** — Alle gewählten Jobtitel werden gleichzeitig an fünf Quellen abgefragt (Adzuna + BA + Jobicy + RemoteOK + The Muse)
+- **Keyword-Synonyme** — Automatische Erweiterung um verwandte Begriffe (z. B. CTO → VP Engineering, Chief Technology Officer); per Toggle abschaltbar
+- **Remote-Filter** — Nur Remote-Jobs anzeigen (Jobicy + RemoteOK + Adzuna-Remote-Filter)
 - **Standort-Filter** — Ort, PLZ und Umkreis (10 / 25 / 50 / 100 / 150 km); optional bei Remote
 - **Zeitfilter** — Letzte Woche / 2 Wochen / Monat / alle
 - **Suchverlauf** — Letzte 15 Suchen werden gespeichert; Ein-Klick-Wiederholung mit allen Filtern
+- **Suche abonnieren** — Jede Suche kann als wiederkehrender **Search-Alert** gespeichert werden (siehe unten)
 - **Seitennavigation** — Ergebnisse seitenweise blättern (20 je Seite)
 - **API-Caching** — Identische Suchen werden 5 Minuten gecacht (spart API-Quota, konfigurierbar)
 - **DACH-Support** — Automatische Länder-Erkennung (DE / AT / CH)
@@ -38,6 +47,28 @@ Visueller Überblick über den Bewerbungsprozess:
 - **Timeline** — Gespeicherte Jobs pro Woche (letzte 8 Wochen)
 - **Top-Unternehmen** — Die 5 Firmen mit den meisten gespeicherten Stellen
 - **Rein clientseitig** — Keine zusätzlichen Abhängigkeiten, berechnet aus vorhandenen Daten
+
+### Search-Alerts (gespeicherte Suchen)
+Deine Suchen werden im Hintergrund automatisch wiederholt und melden neue Treffer:
+- **Aus jeder Suche erstellbar** — Button **"🔔 Suche abonnieren"** im Ergebnis-Header
+- **Einstellbares Intervall** — Stündlich / alle 6 Stunden / täglich / wöchentlich
+- **E-Mail-Benachrichtigung** optional pro Alert — Throttle max. 1× pro Stunde
+- **Alerts-Tab mit Badge** — Gesamtanzahl neuer Treffer über alle Alerts auf einen Blick
+- **Treffer-Feed pro Alert** — Aufklappbare Liste mit "💾 Speichern" und "✕ Entfernen"
+- **Synonym-Expansion serverseitig** — läuft automatisch bei jedem Alert-Durchlauf
+- **CRUD** — Alerts pausieren, E-Mail togglen, löschen, "Jetzt prüfen"
+- **Nutzt alle Quellen** — Adzuna + Bundesagentur für Arbeit für maximale Abdeckung
+
+### Company-Boards (Greenhouse / Lever)
+Strukturierte APIs vieler Scale-ups — schneller und zuverlässiger als Karriereseiten-Scraping:
+- **Greenhouse** — z. B. Airbnb, Stripe, Shopify, GitLab, Dropbox
+- **Lever** — z. B. Netflix, Figma, Eventbrite, KPMG
+- **Zero-Config** — Nur Provider + Slug eingeben (z. B. `greenhouse/airbnb`)
+- **Automatische Prüfung** — Einstellbares Intervall pro Board (Standard: 24h)
+- **Initial-Check** sofort beim Hinzufügen
+- **Sub-Tab im Karriere-Monitor** — **"📡 Company Boards"** neben "Unternehmen" und "Gefundene Stellen"
+- **Treffer-Feed pro Board** — aufklappbar, mit Merkzettel-Integration
+- **Neu-Badge** — Neufunde werden farblich hervorgehoben
 
 ### Karriere-Monitor
 Automatische Überwachung von Unternehmens-Karriereseiten auf neue passende Stellen:
@@ -223,6 +254,8 @@ Internet
         │     ├─► /jobs          Adzuna-Proxy (mit 5-Min-Cache)
         │     ├─► /jobs/ba       Bundesagentur-Proxy (mit 5-Min-Cache)
         │     ├─► /jobs/jobicy   Jobicy-Proxy (mit 5-Min-Cache)
+        │     ├─► /jobs/remoteok RemoteOK-Proxy (mit 5-Min-Cache, nur Remote-Modus)
+        │     ├─► /jobs/muse     The Muse-Proxy (mit 5-Min-Cache)
         │     ├─► /auth/*        Registrierung, Login, Logout, Passwort-Reset
         │     ├─► /user/data     Gespeicherte Jobs & Jira-Config (pro User)
         │     ├─► /user/notifications   Benachrichtigungs-Einstellungen (pro User)
@@ -230,15 +263,17 @@ Internet
         │     ├─► /jira/test     Verbindungstest → Jira REST API
         │     ├─► /jira/issue    Ticket erstellen → Jira REST API
         │     ├─► /jira/fields   Feldliste → Jira REST API
-        │     ├─► /watch/companies   Karriere-Monitor: Unternehmen verwalten (pro User)
-        │     ├─► /watch/jobs        Karriere-Monitor: gefundene Stellen (pro User)
-        │     └─► /watch/keywords    Karriere-Monitor: globale Suchbegriffe (pro User)
+        │     ├─► /watch/*       Karriere-Monitor (Unternehmen, Jobs, globale Keywords)
+        │     ├─► /search/alerts/*   Search-Alerts: gespeicherte Suchen (pro User)
+        │     └─► /boards/*      Company Boards: Greenhouse/Lever (pro User)
         │
         └─► /* (alle anderen Pfade)  →  public/ (statische SPA: index.html, style.css, app.js)
 
 Hintergrund-Threads:
   ├─► Tägliches Backup (02:00 UTC)
-  ├─► Watch-Scheduler (prüft fällige Watches alle 60 Min.)
+  ├─► Watch-Scheduler (prüft fällige Karriereseiten alle 60 Min.)
+  ├─► Alert-Scheduler (prüft fällige Search-Alerts alle 60 Min.)
+  ├─► Board-Scheduler (prüft fällige Greenhouse/Lever-Boards alle 60 Min.)
   └─► Digest-Mailer (prüft stündlich auf ausstehende tägliche/wöchentliche E-Mails)
 ```
 
@@ -269,6 +304,10 @@ Benutzerdaten werden serverseitig in einer **SQLite-Datenbank** gespeichert (per
 | `password_reset_tokens` | Temporäre Reset-Tokens (1 Stunde gültig) |
 | `company_watches` | Karriere-Monitor: überwachte Unternehmen pro Benutzer (URL, Keywords, Intervall, Status) |
 | `watch_jobs` | Karriere-Monitor: gefundene Stellenanzeigen (Titel, URL, Neu-Flag, Zeitstempel) |
+| `saved_searches` | Search-Alerts: gespeicherte Suchen pro Benutzer (Titel, Filter, Intervall, Status) |
+| `alert_jobs` | Search-Alerts: gefundene Stellen pro Alert (Titel, Unternehmen, Quelle, Zeitstempel) |
+| `company_boards` | Company-Boards: Greenhouse/Lever-Slugs pro Benutzer (Provider, Slug, Intervall) |
+| `board_jobs` | Company-Boards: gefundene Stellen pro Board (Titel, URL, Standort, Zeitstempel) |
 
 ---
 
