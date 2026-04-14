@@ -591,6 +591,23 @@ body{
 @media(max-width:500px){.dash-kpis{grid-template-columns:repeat(2,1fr);}.dash-comp-name{min-width:80px;max-width:100px;}}
 
 /* ══════════════════════════════════════════════════════════════════
+   Insights: Salary + Skills
+   ══════════════════════════════════════════════════════════════════ */
+.sal-row{display:grid;grid-template-columns:160px 1fr 90px;gap:12px;align-items:center;margin-bottom:8px;}
+.sal-title{font-size:12px;font-weight:600;color:var(--on-surface);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.sal-cnt{color:var(--on-surface-variant);font-weight:400;font-size:10px;}
+.sal-bar-wrap{position:relative;height:12px;background:rgba(89,62,99,.15);border-radius:6px;}
+.sal-bar{position:absolute;top:0;bottom:0;background:linear-gradient(90deg,var(--secondary),var(--primary));border-radius:6px;}
+.sal-med{position:absolute;top:-3px;bottom:-3px;width:3px;background:var(--warning);border-radius:2px;box-shadow:0 0 6px rgba(255,209,102,.4);}
+.sal-val{font-size:11px;color:var(--secondary);font-weight:700;text-align:right;}
+@media(max-width:600px){.sal-row{grid-template-columns:100px 1fr 70px;}}
+
+.skill-grid{display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center;line-height:1.6;}
+.skill-chip{display:inline-flex;align-items:center;gap:4px;padding:4px 10px;background:rgba(156,66,244,.08);border:1px solid rgba(156,66,244,.2);border-radius:100px;color:var(--primary);font-weight:600;transition:opacity .2s;}
+.skill-chip:hover{opacity:1!important;}
+.skill-cnt{background:rgba(156,66,244,.25);border-radius:20px;padding:0 6px;font-size:10px;}
+
+/* ══════════════════════════════════════════════════════════════════
    Kanban-Board (Pipeline)
    ══════════════════════════════════════════════════════════════════ */
 .kanban{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;}

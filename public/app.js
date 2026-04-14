@@ -2034,7 +2034,95 @@ function renderDashboard(){
         + '<div class="dash-comp-cnt">'+cnt+'</div>'
         + '</div>'
       ).join("") : '<div style="color:#555570;font-size:13px;">Keine Daten</div>')
-    + '</div>';
+    + '</div>'
+
+    // Salary-Insights
+    + renderSalaryInsights(all)
+
+    // Skills-Heatmap
+    + renderSkillsHeatmap(all);
+}
+
+function renderSalaryInsights(jobs){
+  // Gruppiert nach Jobtitel, berechnet Median/P25/P75 aus salary_min/max
+  const withSalary = jobs.filter(j => j.salary_min || j.salary_max);
+  if(withSalary.length < 3) return '<div class="dash-card"><div class="dash-card-title">💰 Gehalt</div><div style="color:#896b93;font-size:13px;">Zu wenig Daten (benötigt 3+ Jobs mit Gehaltsangabe).</div></div>';
+
+  const byTitle = {};
+  withSalary.forEach(j => {
+    const t = j.searchedAs || j.title || "Sonstige";
+    if(!byTitle[t]) byTitle[t] = [];
+    const mid = j.salary_min && j.salary_max ? (j.salary_min + j.salary_max)/2 : (j.salary_min || j.salary_max);
+    if(mid) byTitle[t].push(mid);
+  });
+
+  const percentile = (arr, p) => {
+    const sorted = [...arr].sort((a,b) => a-b);
+    const idx = Math.floor(sorted.length * p);
+    return sorted[Math.min(idx, sorted.length-1)];
+  };
+
+  const rows = Object.entries(byTitle)
+    .filter(([,vals]) => vals.length >= 2)
+    .map(([title, vals]) => ({
+      title, count: vals.length,
+      min: Math.min(...vals), max: Math.max(...vals),
+      p25: percentile(vals, 0.25), median: percentile(vals, 0.5), p75: percentile(vals, 0.75)
+    }))
+    .sort((a,b) => b.median - a.median)
+    .slice(0, 8);
+
+  if(!rows.length) return '<div class="dash-card"><div class="dash-card-title">💰 Gehalt</div><div style="color:#896b93;font-size:13px;">Zu wenig strukturierte Daten.</div></div>';
+
+  const globalMax = Math.max(...rows.map(r => r.max));
+  const fmt = n => new Intl.NumberFormat("de-DE", {style:"currency", currency:"EUR", maximumFractionDigits:0}).format(n);
+
+  return '<div class="dash-card"><div class="dash-card-title">💰 Gehälter im Überblick</div>'
+    + rows.map(r => {
+      const minPct = (r.min / globalMax) * 100;
+      const medPct = (r.median / globalMax) * 100;
+      const maxPct = (r.max / globalMax) * 100;
+      return `<div class="sal-row">
+        <div class="sal-title">${esc(r.title)} <span class="sal-cnt">(${r.count})</span></div>
+        <div class="sal-bar-wrap">
+          <div class="sal-bar" style="left:${minPct}%;width:${maxPct-minPct}%;"></div>
+          <div class="sal-med" style="left:${medPct}%;"></div>
+        </div>
+        <div class="sal-val">Ø ${fmt(r.median)}</div>
+      </div>`;
+    }).join("")
+    + '<div style="font-size:10px;color:#896b93;margin-top:10px;">Balken = Spanne (Min–Max) · Punkt = Median pro Jobtitel</div></div>';
+}
+
+function renderSkillsHeatmap(jobs){
+  // Einfache Skill-Extraktion aus Titeln und Company-Feldern (keyword-based)
+  const SKILL_KEYWORDS = [
+    "Python","Java","JavaScript","TypeScript","Go","Rust","Kotlin","Swift","PHP","Ruby","C++","C#",
+    "React","Vue","Angular","Node.js","Next.js","Django","Flask","Spring","Rails",
+    "AWS","Azure","GCP","Kubernetes","Docker","Terraform","Ansible","Jenkins","GitLab",
+    "SQL","PostgreSQL","MySQL","MongoDB","Redis","Elasticsearch",
+    "Machine Learning","AI","Data Science","DevOps","Security","Agile","Scrum","Leadership",
+    "CTO","CIO","CDO","Head of IT","VP"
+  ];
+  const counts = {};
+  jobs.forEach(j => {
+    const text = ((j.title||"") + " " + (j.company||"") + " " + (j.searchedAs||"") + " " + (j.note||"")).toLowerCase();
+    SKILL_KEYWORDS.forEach(skill => {
+      if(text.includes(skill.toLowerCase())) counts[skill] = (counts[skill]||0) + 1;
+    });
+  });
+  const rows = Object.entries(counts).sort((a,b) => b[1]-a[1]).slice(0, 20);
+  if(!rows.length) return '<div class="dash-card"><div class="dash-card-title">🎯 Skills-Heatmap</div><div style="color:#896b93;font-size:13px;">Keine bekannten Skills in deinen Jobs gefunden.</div></div>';
+  const maxC = rows[0][1];
+  return '<div class="dash-card"><div class="dash-card-title">🎯 Skills-Heatmap</div>'
+    + '<div class="skill-grid">'
+    + rows.map(([skill, cnt]) => {
+      const intensity = cnt / maxC;
+      const size = 11 + Math.round(intensity * 6);
+      const opacity = 0.35 + intensity * 0.65;
+      return `<span class="skill-chip" style="font-size:${size}px;opacity:${opacity};">${esc(skill)} <span class="skill-cnt">${cnt}</span></span>`;
+    }).join("")
+    + '</div></div>';
 }
 
 // ── Platforms ──

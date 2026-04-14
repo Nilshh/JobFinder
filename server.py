@@ -2405,6 +2405,82 @@ def _schedule_board_checks():
 
 _schedule_board_checks()
 
+
+# ══════════════════════════════════════════════════════════════════
+# Wöchentlicher Markt-Report (Sonntags 09:00 UTC)
+# ══════════════════════════════════════════════════════════════════
+
+def _send_weekly_report():
+    """Sendet jedem User mit E-Mail eine Wochenzusammenfassung (neue Watch/Alert/Board-Jobs)."""
+    if not SMTP_HOST or not SMTP_USER:
+        return
+    since = (datetime.now(timezone.utc) - timedelta(days=7)).isoformat()
+    with get_db() as db:
+        users = [dict(r) for r in db.execute(
+            "SELECT id, username, email FROM users WHERE email IS NOT NULL AND email != '' AND watch_notify_enabled = 1"
+        ).fetchall()]
+    for u in users:
+        with get_db() as db:
+            watch_n = db.execute(
+                "SELECT COUNT(*) AS n FROM watch_jobs j JOIN company_watches w ON w.id=j.company_id WHERE w.user_id=? AND j.found_at>=?",
+                [u["id"], since]
+            ).fetchone()["n"]
+            alert_n = db.execute(
+                "SELECT COUNT(*) AS n FROM alert_jobs j JOIN saved_searches s ON s.id=j.search_id WHERE s.user_id=? AND j.found_at>=?",
+                [u["id"], since]
+            ).fetchone()["n"]
+            board_n = db.execute(
+                "SELECT COUNT(*) AS n FROM board_jobs j JOIN company_boards b ON b.id=j.board_id WHERE b.user_id=? AND j.found_at>=?",
+                [u["id"], since]
+            ).fetchone()["n"]
+        total = watch_n + alert_n + board_n
+        if total == 0:
+            continue
+        body = f"""
+<div style="font-family:'Inter',sans-serif;max-width:520px;margin:0 auto;background:#1a0425;color:#f9dcff;border-radius:14px;padding:32px 28px;">
+  <div style="font-size:22px;font-weight:900;margin-bottom:4px;background:linear-gradient(135deg,#ca98ff,#00bdfd);-webkit-background-clip:text;-webkit-text-fill-color:transparent;">JobPipeline</div>
+  <h3 style="margin:0 0 16px;color:#f9dcff;font-size:18px;">📊 Deine Woche in Zahlen</h3>
+  <p style="color:#c1a0cb;line-height:1.6;margin-bottom:20px;">In den letzten 7 Tagen wurden <strong style="color:#ca98ff">{total} neue Stellen</strong> für dich gefunden:</p>
+  <table style="width:100%;border-collapse:collapse;background:#290c36;border-radius:10px;overflow:hidden;margin-bottom:20px;">
+    <tr><td style="padding:10px 14px;border-bottom:1px solid #1e1e30;">🔔 Search-Alerts</td><td style="padding:10px 14px;border-bottom:1px solid #1e1e30;text-align:right;font-weight:700;color:#ca98ff">{alert_n}</td></tr>
+    <tr><td style="padding:10px 14px;border-bottom:1px solid #1e1e30;">👁 Karriere-Monitor</td><td style="padding:10px 14px;border-bottom:1px solid #1e1e30;text-align:right;font-weight:700;color:#00bdfd">{watch_n}</td></tr>
+    <tr><td style="padding:10px 14px;">📡 Company-Boards</td><td style="padding:10px 14px;text-align:right;font-weight:700;color:#ff8b9a">{board_n}</td></tr>
+  </table>
+  <div style="text-align:center;margin:24px 0 16px;">
+    <a href="{APP_URL}" style="background:linear-gradient(135deg,#9c42f4,#00bdfd);color:#fff;padding:13px 28px;border-radius:10px;text-decoration:none;font-weight:700;font-size:15px;display:inline-block;">Alle ansehen</a>
+  </div>
+</div>"""
+        try:
+            msg = MIMEMultipart("alternative")
+            msg["Subject"] = f"JobPipeline – {total} neue Stellen diese Woche"
+            msg["From"]    = SMTP_FROM
+            msg["To"]      = u["email"]
+            msg.attach(MIMEText(body, "html"))
+            with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as smtp:
+                smtp.ehlo(); smtp.starttls(); smtp.login(SMTP_USER, SMTP_PASS)
+                smtp.sendmail(SMTP_FROM, u["email"], msg.as_string())
+            print(f"[Weekly] Report an {u['username']}", flush=True)
+        except Exception as e:
+            print(f"[Weekly] Fehler: {e}", flush=True)
+
+
+def _schedule_weekly_report():
+    """Prüft stündlich, ob es Sonntag 09:xx UTC ist → sendet Report."""
+    def _loop():
+        last_run_date = None
+        while True:
+            time.sleep(3600)  # stündlich
+            now = datetime.now(timezone.utc)
+            if now.weekday() == 6 and now.hour == 9 and now.date() != last_run_date:
+                try:
+                    _send_weekly_report()
+                    last_run_date = now.date()
+                except Exception as e:
+                    print(f"[Weekly] Scheduler-Fehler: {e}", flush=True)
+    threading.Thread(target=_loop, daemon=True, name="weekly-report").start()
+
+_schedule_weekly_report()
+
 if __name__ == "__main__":
     print("✅ JobPipeline Server läuft auf http://localhost:5500")
     app.run(host="0.0.0.0", port=5500, debug=False)
