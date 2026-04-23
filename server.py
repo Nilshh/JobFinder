@@ -201,8 +201,10 @@ def _find_load_more_btn(pw_page):
     # 1. CSS-Klassen-Selektoren (typische Load-More-Patterns)
     for sel in [
         'button[class*="load-more"]', 'a[class*="load-more"]', '[class*="load-more"] button',
+        'button[class*="load_more"]', 'a[class*="load_more"]', '[class*="load_more"] button',
         'button[class*="loadMore"]',  'a[class*="loadMore"]',
         'button[class*="show-more"]', 'a[class*="show-more"]', '[class*="show-more"] button',
+        'button[class*="show_more"]', 'a[class*="show_more"]',
         '[class*="moreResults"]',     '[class*="more-results"]',
         '[data-load-more]',           '[data-action*="loadMore"]', '[data-action*="load-more"]',
     ]:
@@ -258,6 +260,14 @@ def _scrape_career_page(url, keywords):
         )
         page = ctx.new_page()
         page.goto(url, wait_until="networkidle", timeout=30000)
+        # Auf AJAX-geladene Jobs warten (z.B. WP Job Manager rendert Listings erst per JS)
+        try:
+            page.wait_for_selector(
+                "ul.job_listings li, .job-listing, [class*='job_listing'], [class*='job-listing']",
+                timeout=8000, state="visible"
+            )
+        except Exception:
+            pass
         page.wait_for_timeout(1500)
 
         used_load_more = False
