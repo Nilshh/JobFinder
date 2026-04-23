@@ -260,11 +260,25 @@ def _scrape_career_page(url, keywords):
         )
         page = ctx.new_page()
         page.goto(url, wait_until="networkidle", timeout=30000)
-        # Auf AJAX-geladene Jobs warten (z.B. WP Job Manager rendert Listings erst per JS)
+
+        # User-Interaktion simulieren, um "Delay JavaScript Execution"-Plugins
+        # (z.B. WP Rocket) zu entfesseln, die Scripts erst nach mousemove/scroll/keydown laden.
+        try:
+            page.mouse.move(20, 20)
+            page.mouse.move(200, 200)
+            page.mouse.wheel(0, 400)
+            page.keyboard.press("PageDown")
+            page.wait_for_load_state("networkidle", timeout=10000)
+        except Exception:
+            pass
+
+        # Auf tatsächliche Job-Einträge (LI/Item) warten, nicht nur auf den leeren Container.
+        # WP Job Manager rendert Listings per AJAX in initial leeres <ul class="job_listings">.
         try:
             page.wait_for_selector(
-                "ul.job_listings li, .job-listing, [class*='job_listing'], [class*='job-listing']",
-                timeout=8000, state="visible"
+                "ul.job_listings li, li.job_listing, li[class*='job_listing'], "
+                ".job-listing-item, [class*='job-listing-item']",
+                timeout=10000, state="visible"
             )
         except Exception:
             pass
