@@ -1,7 +1,7 @@
 from flask import Flask, request, jsonify, session, send_file
 from werkzeug.security import generate_password_hash, check_password_hash
 from bs4 import BeautifulSoup
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlparse
 import requests
 import os
 import json
@@ -243,11 +243,105 @@ def _find_load_more_btn(pw_page):
     return None
 
 
+def _extract_wpjm_jobs(html_fragment, base_url, kw_lower, found, seen):
+    """Extrahiert Jobs aus WP-Job-Manager-AJAX-HTML (saubere title+url-Paarung pro <li>)."""
+    soup = BeautifulSoup(html_fragment, "html.parser")
+    for li in soup.find_all("li", class_=lambda c: c and "job_listing" in c):
+        a = li.find("a", href=True)
+        h = li.find(["h1", "h2", "h3", "h4"])
+        if not (a and h):
+            continue
+        title = h.get_text(strip=True)
+        href = a["href"]
+        if not href.startswith("http"):
+            href = urljoin(base_url, href)
+        if not title or href in seen:
+            continue
+        if kw_lower and not any(kw in title.lower() for kw in kw_lower):
+            continue
+        seen.add(href)
+        found.append({"title": title, "url": href})
+
+
+def _try_wp_job_manager(url, kw_lower, found, seen):
+    """Nutzt die WP-Job-Manager-AJAX-Route (admin-ajax.php) statt Playwright-Rendering.
+    Umgeht WP-Rocket-Delay-JS und initial leere Job-Container.
+    Gibt True zurück, wenn WPJM erkannt wurde (unabhängig von Trefferzahl)."""
+    try:
+        r = requests.get(
+            url, timeout=15,
+            headers={
+                "User-Agent": "Mozilla/5.0 (compatible; JobPipeline-CareerMonitor/1.0)",
+                "Accept-Language": "de-DE,de;q=0.9,en;q=0.8",
+            },
+        )
+        if r.status_code != 200:
+            return False
+        html = r.text
+    except Exception:
+        return False
+
+    if not re.search(r'load_more_jobs|wp-job-manager|type-job_listing', html):
+        return False
+
+    m = re.search(r'"ajax_url"\s*:\s*"([^"]+admin-ajax\.php)"', html)
+    if m:
+        ajax_url = m.group(1).replace("\\/", "/")
+    else:
+        p = urlparse(url)
+        ajax_url = f"{p.scheme}://{p.netloc}/wp-admin/admin-ajax.php"
+
+    print(f"[Watch] WP Job Manager erkannt → AJAX {ajax_url}", flush=True)
+
+    per_page = 25
+    for page_num in range(1, WATCH_MAX_PAGES + 1):
+        try:
+            resp = requests.post(
+                ajax_url,
+                data={
+                    "action":          "job_manager_get_listings",
+                    "per_page":        per_page,
+                    "page":            page_num,
+                    "show_pagination": "false",
+                    "form_data":       "search_keywords=&search_location=&search_categories=&search_job_types=",
+                },
+                headers={
+                    "User-Agent":       "Mozilla/5.0 (compatible; JobPipeline-CareerMonitor/1.0)",
+                    "X-Requested-With": "XMLHttpRequest",
+                    "Referer":          url,
+                },
+                timeout=20,
+            )
+            data = resp.json()
+        except Exception as e:
+            print(f"[Watch] WP-JM-AJAX-Fehler Seite {page_num}: {e}", flush=True)
+            break
+
+        items_html = data.get("html", "") or ""
+        if not items_html.strip():
+            break
+        prev = len(found)
+        _extract_wpjm_jobs(items_html, url, kw_lower, found, seen)
+        print(f"[Watch] WP-JM Seite {page_num}: {len(found) - prev} neue Treffer ({len(found)} gesamt)", flush=True)
+
+        max_pages = int(data.get("max_num_pages", 1) or 1)
+        if page_num >= max_pages:
+            break
+        time.sleep(max(1, WATCH_SCRAPE_DELAY // 3))
+
+    return True
+
+
 def _scrape_career_page(url, keywords):
     """Rendert Karriereseiten mit Playwright inkl. Pagination + Load-More und extrahiert Treffer."""
-    from playwright.sync_api import sync_playwright
     kw_lower = [k.strip().lower() for k in keywords if k.strip()]
     found, seen = [], set()
+
+    # Schnellpfad: WP Job Manager direkt über admin-ajax.php auslesen (kein Browser nötig)
+    if _try_wp_job_manager(url, kw_lower, found, seen):
+        return found
+
+    from playwright.sync_api import sync_playwright
 
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True, args=["--no-sandbox", "--disable-dev-shm-usage"])
