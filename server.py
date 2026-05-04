@@ -3053,22 +3053,33 @@ PROJECT_ADAPTERS = {
 
 
 def _aggregate_projects(query, portals):
-    """Ruft alle gewählten Adapter auf, merged Ergebnisse, dedupliziert über url."""
+    """Ruft alle gewählten Adapter auf, merged Ergebnisse, dedupliziert über url.
+    Gibt (results, status_per_portal) zurück. status_per_portal[name] = {count, ok, error?}."""
     results, seen = [], set()
+    status = {}
     for portal in portals:
         adapter = PROJECT_ADAPTERS.get(portal)
         if not adapter:
+            status[portal] = {"count": 0, "ok": False, "error": "unknown portal"}
             continue
-        for j in adapter(query):
+        try:
+            jobs = adapter(query)
+        except Exception as e:
+            status[portal] = {"count": 0, "ok": False, "error": f"{type(e).__name__}: {str(e)[:200]}"}
+            print(f"[Projects] {portal} hard-error: {e}", flush=True)
+            continue
+        added = 0
+        for j in jobs:
             key = j.get("url") or (j.get("title", "") + "|" + j.get("portal", ""))
             if key in seen:
                 continue
             seen.add(key)
-            # Nachfilter Tagessatz / Laufzeit
             if query.get("rate_min") and j.get("rate_min") and j["rate_min"] < query["rate_min"]:
                 continue
             results.append(j)
-    return results
+            added += 1
+        status[portal] = {"count": len(jobs), "added": added, "ok": True}
+    return results, status
 
 
 # ── Projekte: Routen ─────────────────────────────────────────────
@@ -3088,8 +3099,13 @@ def projects_search():
         "duration_min": int(request.args.get("duration_min")) if (request.args.get("duration_min") or "").isdigit() else None,
     }
     try:
-        results = _aggregate_projects(query, portals)
-        return jsonify({"results": results, "count": len(results), "portals": portals})
+        results, status = _aggregate_projects(query, portals)
+        return jsonify({
+            "results":       results,
+            "count":         len(results),
+            "portals":       portals,
+            "portal_status": status,
+        })
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 

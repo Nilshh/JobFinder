@@ -3352,7 +3352,15 @@ async function doProjectSearch(){
     if(!r.ok) throw new Error(data.error || ("HTTP "+r.status));
     _projResults = data.results || [];
     hdr.style.display = "block";
-    hdr.innerHTML = `<span class="rc">${_projResults.length}</span> Projekte <span style="color:#6b6b80;">aus ${(data.portals||[]).map(p => _PROJ_PORTAL_LABEL[p]||p).join(", ")}</span>`;
+    // Per-Portal-Status: Treffer-Counts pro Quelle, mit roter Markierung bei Fehler
+    const ps = data.portal_status || {};
+    const breakdown = (data.portals || []).map(p => {
+      const s = ps[p] || {};
+      const lbl = _PROJ_PORTAL_LABEL[p] || p;
+      if (s.error) return `<span style="color:#ff8b9a;" title="${esc(s.error)}">${esc(lbl)}: ⚠</span>`;
+      return `<span style="color:${(s.count||0) ? "#9b5bff" : "#6b6b80"};">${esc(lbl)}: ${s.count||0}</span>`;
+    }).join(" · ");
+    hdr.innerHTML = `<span class="rc">${_projResults.length}</span> Projekte <span style="color:#6b6b80;font-size:12px;">${breakdown}</span>`;
     if(!_projResults.length){
       noRes.style.display = "block";
     } else {
