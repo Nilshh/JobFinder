@@ -54,6 +54,7 @@
     <button type="button" class="nbtn" id="nb4" onclick="showTab('watch')">👁 Beobachten<span class="badge" id="watchBadge" style="display:none">0</span></button>
     <button type="button" class="nbtn" id="nb6" onclick="showTab('alerts')">🔔 Alerts<span class="badge" id="alertBadge" style="display:none">0</span></button>
     <button type="button" class="nbtn" id="nb7" onclick="showTab('pipeline')">📊 Pipeline</button>
+    <button type="button" class="nbtn" id="nb8" onclick="showTab('projects')">💼 Projekte<span class="badge" id="projectsBadge" style="display:none">0</span></button>
     <div id="userBar" style="display:none;align-items:center;gap:6px;">
       <button type="button" class="cfgbtn" id="profileBtn" onclick="showTab('profile')" title="Mein Profil">👤 <span id="uname"></span></button>
       <button type="button" class="cfgbtn" id="adminBtn" style="display:none" onclick="showTab('admin')" title="Benutzerverwaltung">⚙️ Admin</button>
@@ -292,6 +293,76 @@
     <div id="boardsEmpty" class="savempty" style="display:none">
       Noch keine Boards hinzugefügt.<br>
       <span style="font-size:13px;">Slug aus der Karriereseite-URL: <code style="color:#ca98ff">boards.greenhouse.io/<b>airbnb</b></code> oder <code style="color:#ca98ff">jobs.lever.co/<b>shopify</b></code></span>
+    </div>
+  </div>
+</div>
+
+<!-- PROJECTS TAB -->
+<div id="tabProjects" style="display:none">
+  <div class="watch-subtabbar">
+    <div class="watch-stabs">
+      <button class="wstab wstab-active" id="pst1" onclick="switchProjectSubTab('search')">🔍 Suchen</button>
+      <button class="wstab" id="pst2" onclick="switchProjectSubTab('saved')">📌 Merkzettel<span id="projectsSavedCount" style="color:#555570;font-weight:400;margin-left:3px;"></span></button>
+    </div>
+  </div>
+
+  <!-- Pane: Suchen -->
+  <div id="projectsPaneSearch">
+    <div class="card">
+      <div class="card-stripe"></div>
+      <div class="lbl">🌐 Quellen</div>
+      <div class="project-portals" id="prPortals">
+        <label><input type="checkbox" value="freelancermap" checked> Freelancermap</label>
+        <label><input type="checkbox" value="etengo" checked> Etengo</label>
+        <label><input type="checkbox" value="hays" checked> Hays</label>
+        <label><input type="checkbox" value="gulp" disabled title="SPA – Anbindung in Arbeit"> GULP <span style="color:#6b6b80;font-size:11px;">(in Arbeit)</span></label>
+        <label><input type="checkbox" value="solcom" disabled title="Bot-Schutz aktiv"> Solcom <span style="color:#6b6b80;font-size:11px;">(blockiert)</span></label>
+      </div>
+
+      <div class="lbl" style="margin-top:14px;">🎯 Skill / Rolle</div>
+      <div class="ftrow">
+        <input type="text" class="inp" id="prInpKw" placeholder="z.B. Interim CFO, Python, SAP Berater">
+      </div>
+
+      <div class="lbl">📍 Ort (optional)</div>
+      <div class="row2" style="margin-bottom:14px;">
+        <input type="text" class="inp" id="prInpLoc" placeholder="z.B. Berlin, München, Remote">
+        <input type="number" class="inp" id="prInpRate" placeholder="Tagessatz min (€)">
+      </div>
+
+      <div class="rrow" style="margin-bottom:14px;">
+        <button type="button" class="rbtn" id="prRemoteToggle">🌐 Nur Remote</button>
+      </div>
+
+      <button type="button" class="gobtn" id="prGoBtn">🔍 Projekte suchen</button>
+    </div>
+
+    <div id="prErrBox" style="display:none" class="errbx"></div>
+    <div id="prLoadBox" style="display:none"><div class="spinner"></div><div class="stxt">Suche läuft…</div></div>
+    <div id="prResHdr" style="display:none" class="reshdr"></div>
+    <div id="prJoblist"></div>
+    <div id="prNoRes" style="display:none" class="nores">😕 Keine Treffer. Anderen Skill probieren oder Quellen erweitern.</div>
+  </div>
+
+  <!-- Pane: Merkzettel -->
+  <div id="projectsPaneSaved" style="display:none">
+    <div class="saved-hdr">
+      <div class="savtitle">💼 Projekt-Merkzettel <span id="projSavCntTitle">0</span></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+        <div class="sfrow" id="prSfrow">
+          <button type="button" class="sfbtn on" data-s="all">Alle</button>
+          <button type="button" class="sfbtn" data-s="neu">🔵 Neu</button>
+          <button type="button" class="sfbtn" data-s="interessant">⭐ Interessant</button>
+          <button type="button" class="sfbtn" data-s="beworben">✅ Beworben</button>
+          <button type="button" class="sfbtn" data-s="abgelehnt">❌ Abgelehnt</button>
+          <button type="button" class="sfbtn" data-s="angebot">🎉 Angebot</button>
+        </div>
+      </div>
+    </div>
+    <div id="projectsSavedList"></div>
+    <div id="projectsSavedEmpty" class="savempty" style="display:none">
+      Noch keine Projekte gemerkt.<br>
+      <span style="font-size:13px;">Suche links und klicke auf 💾, um Projekte zu merken.</span>
     </div>
   </div>
 </div>

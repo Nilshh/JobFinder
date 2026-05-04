@@ -69,10 +69,10 @@ function refreshBadge(){
 
 // ── Tabs ──
 function showTab(t){
-  const GATED = ["saved", "dashboard", "portals", "watch", "alerts", "pipeline"];
+  const GATED = ["saved", "dashboard", "portals", "watch", "alerts", "pipeline", "projects"];
   if(GATED.includes(t) && !AUTH.user){
     _pendingAction = () => showTab(t);
-    const hints = { saved:"den Merkzettel", dashboard:"das Dashboard", portals:"die Portale", watch:"den Karriere-Monitor", alerts:"die Alerts", pipeline:"die Pipeline" };
+    const hints = { saved:"den Merkzettel", dashboard:"das Dashboard", portals:"die Portale", watch:"den Karriere-Monitor", alerts:"die Alerts", pipeline:"die Pipeline", projects:"den Projekte-Tab" };
     openAuthModal("Für " + hints[t] + " ist ein Account erforderlich.");
     return;
   }
@@ -83,6 +83,7 @@ function showTab(t){
   document.getElementById("tabWatch").style.display     = t==="watch"     ?"block":"none";
   document.getElementById("tabAlerts").style.display    = t==="alerts"    ?"block":"none";
   document.getElementById("tabPipeline").style.display  = t==="pipeline"  ?"block":"none";
+  document.getElementById("tabProjects").style.display  = t==="projects"  ?"block":"none";
   document.getElementById("tabAdmin").style.display     = t==="admin"     ?"block":"none";
   document.getElementById("tabProfile").style.display   = t==="profile"   ?"block":"none";
   document.getElementById("nb1").classList.toggle("on", t==="search");
@@ -92,6 +93,7 @@ function showTab(t){
   document.getElementById("nb4").classList.toggle("on", t==="watch");
   document.getElementById("nb6").classList.toggle("on", t==="alerts");
   document.getElementById("nb7").classList.toggle("on", t==="pipeline");
+  document.getElementById("nb8").classList.toggle("on", t==="projects");
   const ab = document.getElementById("adminBtn");
   if(ab) ab.classList.toggle("active", t==="admin");
   if(t==="saved")     renderSaved();
@@ -100,6 +102,7 @@ function showTab(t){
   if(t==="watch")     loadWatchTab();
   if(t==="alerts")    loadAlertsTab();
   if(t==="pipeline")  renderPipeline();
+  if(t==="projects")  loadProjectsTab();
   if(t==="admin")     { loadAdminUsers(); loadBackupList(); }
   if(t==="profile")   loadProfileTab();
 }
@@ -3270,8 +3273,320 @@ function enableSwipeOnJobList(){
   });
 }
 
+// ── Projekte / Interim Management ─────────────────────────────────
+
+const PROJ = {
+  saved:    () => { try { return JSON.parse(localStorage.getItem("jf2_saved_projects")||"{}"); } catch(e) { return {}; } },
+  setSaved: d => { localStorage.setItem("jf2_saved_projects", JSON.stringify(d)); refreshProjectsBadge(); syncUserData(); },
+};
+
+let _projSubTab    = "search";
+let _projResults   = [];     // letzte Suchergebnisse
+let _projSavedFilter = "all";
+const _projMap     = {};     // id → result für saveProject
+
+const _PROJ_PORTAL_LABEL = {
+  freelancermap: "Freelancermap",
+  etengo:        "Etengo",
+  hays:          "Hays",
+  gulp:          "GULP",
+  solcom:        "Solcom",
+};
+
+function loadProjectsTab(){
+  refreshProjectsBadge();
+  switchProjectSubTab(_projSubTab);
+}
+
+function switchProjectSubTab(tab){
+  _projSubTab = tab;
+  document.getElementById("projectsPaneSearch").style.display = tab === "search" ? "" : "none";
+  document.getElementById("projectsPaneSaved").style.display  = tab === "saved"  ? "" : "none";
+  document.getElementById("pst1").classList.toggle("wstab-active", tab === "search");
+  document.getElementById("pst2").classList.toggle("wstab-active", tab === "saved");
+  if(tab === "saved") renderProjectsSaved();
+}
+
+async function doProjectSearch(){
+  const portals = Array.from(document.querySelectorAll('#prPortals input[type="checkbox"]:checked'))
+    .map(el => el.value);
+  if(!portals.length){ alert("Bitte mindestens eine Quelle auswählen."); return; }
+  const kw       = (document.getElementById("prInpKw").value || "").trim();
+  const loc      = (document.getElementById("prInpLoc").value || "").trim();
+  const rateMin  = (document.getElementById("prInpRate").value || "").trim();
+  const remote   = document.getElementById("prRemoteToggle").classList.contains("on");
+
+  const errBox  = document.getElementById("prErrBox");
+  const loadBox = document.getElementById("prLoadBox");
+  const hdr     = document.getElementById("prResHdr");
+  const list    = document.getElementById("prJoblist");
+  const noRes   = document.getElementById("prNoRes");
+  errBox.style.display = "none";
+  hdr.style.display = "none";
+  noRes.style.display = "none";
+  list.innerHTML = "";
+  loadBox.style.display = "block";
+
+  const params = new URLSearchParams();
+  params.set("portals", portals.join(","));
+  if(kw)      params.set("kw", kw);
+  if(loc)     params.set("loc", loc);
+  if(rateMin) params.set("rate_min", rateMin);
+  if(remote)  params.set("remote", "1");
+
+  try {
+    const r = await fetch("/projects/search?" + params.toString(), { credentials: "include" });
+    const data = await r.json();
+    if(!r.ok) throw new Error(data.error || ("HTTP "+r.status));
+    _projResults = data.results || [];
+    hdr.style.display = "block";
+    hdr.innerHTML = `<span class="rc">${_projResults.length}</span> Projekte <span style="color:#6b6b80;">aus ${(data.portals||[]).map(p => _PROJ_PORTAL_LABEL[p]||p).join(", ")}</span>`;
+    if(!_projResults.length){
+      noRes.style.display = "block";
+    } else {
+      renderProjectResults(_projResults);
+    }
+  } catch(e) {
+    errBox.style.display = "block";
+    errBox.textContent = "Fehler: " + e.message;
+  } finally {
+    loadBox.style.display = "none";
+  }
+}
+
+function _projKey(j){ return (j.url || (j.portal+":"+j.title)).slice(0, 200); }
+
+function _projRateBadge(j){
+  if(j.rate_min || j.rate_max){
+    const u = j.rate_unit === "hour" ? "€/h" : "€/Tag";
+    if(j.rate_min && j.rate_max && j.rate_min !== j.rate_max)
+      return `<span class="pcard-rate">${j.rate_min}–${j.rate_max} ${u}</span>`;
+    return `<span class="pcard-rate">${j.rate_min || j.rate_max} ${u}</span>`;
+  }
+  return "";
+}
+
+function renderProjectResults(jobs){
+  const list = document.getElementById("prJoblist");
+  const saved = PROJ.saved();
+  list.innerHTML = "";
+  Object.keys(_projMap).forEach(k => delete _projMap[k]);
+  jobs.forEach((j, idx) => {
+    const id = "p"+idx;
+    _projMap[id] = j;
+    const key = _projKey(j);
+    const isSaved = !!saved[key];
+    const remote = (typeof j.remote === "number") ? `<span class="jmi">🏠 ${j.remote}% Remote</span>` : "";
+    const dur    = j.duration  ? `<span class="jmi">⏱ ${esc(j.duration)}</span>`  : "";
+    const start  = j.start_date ? `<span class="jmi">📅 ${esc(j.start_date)}</span>` : "";
+    const loc    = j.location  ? `<span class="jmi">📍 ${esc(j.location)}</span>`  : "";
+    const card = document.createElement("div");
+    card.className = "pcard";
+    card.innerHTML =
+      '<div class="jcard-top">' +
+        '<div class="jtitle"><a href="'+esc(j.url)+'" target="_blank" rel="noopener">'+esc(j.title)+'</a></div>' +
+        '<div class="jco">'+esc(j.company||"")+'</div>' +
+        '<div class="jmeta">' + loc + remote + dur + start +
+          '<span class="jbadge">'+esc(_PROJ_PORTAL_LABEL[j.portal]||j.portal)+'</span>' +
+          _projRateBadge(j) +
+        '</div>' +
+      '</div>' +
+      '<div class="jactions">' +
+        '<button type="button" class="savebtn'+(isSaved?" saved":"")+'" data-id="'+id+'"'+(isSaved?" disabled":"")+'>'+(isSaved?"✓ Gemerkt":"💾 Merken")+'</button>' +
+      '</div>';
+    list.appendChild(card);
+  });
+  list.querySelectorAll(".savebtn").forEach(btn => {
+    btn.addEventListener("click", () => saveProject(btn.dataset.id, btn));
+  });
+}
+
+function saveProject(id, btn){
+  requireAuth("Bitte anmelden, um Projekte zu speichern.", () => {
+    const j = _projMap[id];
+    if(!j) return;
+    const key = _projKey(j);
+    const saved = PROJ.saved();
+    if(!saved[key]){
+      saved[key] = {
+        key, portal: j.portal, title: j.title, company: j.company || "",
+        location: j.location || "", url: j.url || "",
+        remote: j.remote, rate_min: j.rate_min, rate_max: j.rate_max, rate_unit: j.rate_unit,
+        start_date: j.start_date || "", duration: j.duration || "",
+        description: j.description || "",
+        searchedAs: (document.getElementById("prInpKw").value || "").trim(),
+        savedAt: new Date().toISOString(),
+        status: "neu", note: "", jiraKey: undefined,
+      };
+      PROJ.setSaved(saved);
+    }
+    if(btn){ btn.disabled = true; btn.classList.add("saved"); btn.textContent = "✓ Gemerkt"; }
+  });
+}
+
+function refreshProjectsBadge(){
+  const n = Object.keys(PROJ.saved()).length;
+  const b = document.getElementById("projectsBadge");
+  if(b){ b.textContent = n; b.style.display = n ? "" : "none"; }
+  const t = document.getElementById("projectsSavedCount");
+  if(t) t.textContent = n ? ` (${n})` : "";
+}
+
+function renderProjectsSaved(){
+  const box = document.getElementById("projectsSavedList");
+  const empty = document.getElementById("projectsSavedEmpty");
+  const titleCnt = document.getElementById("projSavCntTitle");
+  const all = Object.values(PROJ.saved()).sort((a,b) => (b.savedAt||"").localeCompare(a.savedAt||""));
+  const filtered = _projSavedFilter === "all" ? all : all.filter(p => (p.status||"neu") === _projSavedFilter);
+  if(titleCnt) titleCnt.textContent = "(" + all.length + ")";
+  if(!filtered.length){
+    box.innerHTML = "";
+    empty.style.display = "block";
+    return;
+  }
+  empty.style.display = "none";
+  const STATUS = { neu:"🔵 Neu", interessant:"⭐ Interessant", beworben:"✅ Beworben", abgelehnt:"❌ Abgelehnt", angebot:"🎉 Angebot" };
+  box.innerHTML = filtered.map(p => {
+    const remote = (typeof p.remote === "number") ? `<span class="jmi">🏠 ${p.remote}% Remote</span>` : "";
+    const dur    = p.duration  ? `<span class="jmi">⏱ ${esc(p.duration)}</span>`  : "";
+    const start  = p.start_date ? `<span class="jmi">📅 ${esc(p.start_date)}</span>` : "";
+    const loc    = p.location  ? `<span class="jmi">📍 ${esc(p.location)}</span>`  : "";
+    const jiraBtn = p.jiraKey
+      ? `<a class="jirabtn ok" href="https://${esc((JIRA.get().domain)||"")}/browse/${esc(p.jiraKey)}" target="_blank" rel="noopener">✓ ${esc(p.jiraKey)}</a>`
+      : `<button type="button" class="jirabtn" onclick="exportProjectToJira('${esc(p.key)}', this)">An Jira senden</button>`;
+    const opts = Object.keys(STATUS).map(s => `<option value="${s}"${(p.status||"neu")===s?" selected":""}>${STATUS[s]}</option>`).join("");
+    return `<div class="pcard saved-pcard">
+      <div class="jcard-top">
+        <div class="jtitle"><a href="${esc(p.url)}" target="_blank" rel="noopener">${esc(p.title)}</a></div>
+        <div class="jco">${esc(p.company||"")}</div>
+        <div class="jmeta">${loc}${remote}${dur}${start}<span class="jbadge">${esc(_PROJ_PORTAL_LABEL[p.portal]||p.portal)}</span>${_projRateBadge(p)}</div>
+      </div>
+      <div class="jactions" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+        <select class="ssel" onchange="setProjectStatus('${esc(p.key)}', this.value)">${opts}</select>
+        ${jiraBtn}
+        <button type="button" class="skipbtn" onclick="dismissProject('${esc(p.key)}')">🗑 Entfernen</button>
+      </div>
+    </div>`;
+  }).join("");
+}
+
+function setProjectStatus(key, status){
+  const saved = PROJ.saved();
+  if(!saved[key]) return;
+  saved[key].status = status;
+  PROJ.setSaved(saved);
+}
+
+function dismissProject(key){
+  const saved = PROJ.saved();
+  if(!saved[key]) return;
+  if(!confirm("Projekt aus dem Merkzettel entfernen?")) return;
+  delete saved[key];
+  PROJ.setSaved(saved);
+  renderProjectsSaved();
+}
+
+async function exportProjectToJira(key, btn){
+  const cfg = JIRA.get();
+  if(!cfg.domain || !cfg.email || !cfg.token || !cfg.project){ openJiraSettings(); return; }
+  const saved = PROJ.saved();
+  const p = saved[key];
+  if(!p) return;
+  if(btn){ btn.disabled = true; btn.textContent = "⏳ Exportiere…"; }
+
+  const auth    = btoa(cfg.email + ":" + cfg.token);
+  const summary = (p.title || "Projekt") + " @ " + (p.company || "");
+
+  const para = (parts) => ({ type:"paragraph", content:parts });
+  const bold = (t) => ({ type:"text", text:t, marks:[{type:"strong"}] });
+  const text = (t) => ({ type:"text", text:t });
+  const link = (t,u) => ({ type:"text", text:t, marks:[{type:"link",attrs:{href:u}}] });
+
+  const rows = [];
+  rows.push(para([bold("Projekt: "),     text(p.title || "–")]));
+  rows.push(para([bold("Vermittler: "),  text(p.company || "–")]));
+  if(p.location)   rows.push(para([bold("Standort: "),   text(p.location)]));
+  if(typeof p.remote === "number") rows.push(para([bold("Remote: "), text(p.remote + "%")]));
+  if(p.duration)   rows.push(para([bold("Laufzeit: "),   text(p.duration)]));
+  if(p.start_date) rows.push(para([bold("Start: "),      text(p.start_date)]));
+  if(p.rate_min || p.rate_max){
+    const u = p.rate_unit === "hour" ? "€/h" : "€/Tag";
+    const r = (p.rate_min && p.rate_max && p.rate_min !== p.rate_max)
+      ? `${p.rate_min}–${p.rate_max} ${u}` : `${p.rate_min || p.rate_max} ${u}`;
+    rows.push(para([bold("Tagessatz: "), text(r)]));
+  }
+  if(p.url)        rows.push(para([bold("Quelle: "),     link(p.url, p.url)]));
+  if(p.portal)     rows.push(para([bold("Portal: "),     text(_PROJ_PORTAL_LABEL[p.portal] || p.portal)]));
+  if(p.searchedAs) rows.push(para([bold("Gesucht als: "), text(p.searchedAs)]));
+  if(p.note){
+    rows.push({ type:"rule" });
+    rows.push(para([bold("Notizen:")]));
+    rows.push(para([text(p.note)]));
+  }
+
+  const fields = {
+    project:     { key: cfg.project },
+    summary:     summary,
+    description: { type:"doc", version:1, content:rows },
+    issuetype:   { name: cfg.issueType || "Task" },
+  };
+  if(cfg.urlField     && p.url)     fields[cfg.urlField]     = p.url;
+  if(cfg.companyField && p.company) fields[cfg.companyField] = p.company;
+
+  const useProxy = cfg.useProxy !== false;
+  const apiUrl   = useProxy ? "/jira/issue" : "https://" + cfg.domain + "/rest/api/3/issue";
+  const hdrs = { "Authorization":"Basic " + auth, "Content-Type":"application/json", "Accept":"application/json" };
+  if(useProxy) hdrs["X-Jira-Domain"] = cfg.domain;
+
+  try {
+    let resp = await fetch(apiUrl, { method:"POST", headers:hdrs, body:JSON.stringify({fields}) });
+    if(resp.status === 400 && (cfg.urlField || cfg.companyField)){
+      const f2 = { ...fields };
+      delete f2[cfg.urlField]; delete f2[cfg.companyField];
+      resp = await fetch(apiUrl, { method:"POST", headers:hdrs, body:JSON.stringify({fields:f2}) });
+    }
+    const data = await resp.json();
+    if(!resp.ok){
+      const msg = (data.errors && Object.entries(data.errors).map(([k,v])=>k+": "+v).join(" | "))
+                  || (data.errorMessages && data.errorMessages[0])
+                  || ("HTTP " + resp.status);
+      throw new Error(msg);
+    }
+    const sv = PROJ.saved();
+    if(sv[key]){ sv[key].jiraKey = data.key; PROJ.setSaved(sv); }
+    if(btn){
+      const url = "https://" + cfg.domain + "/browse/" + data.key;
+      const a = document.createElement("a");
+      a.href = url; a.target = "_blank"; a.rel = "noopener";
+      a.className = "jirabtn ok"; a.textContent = "✓ " + data.key;
+      btn.replaceWith(a);
+    }
+  } catch(e){
+    if(btn){ btn.disabled = false; btn.textContent = "An Jira senden"; }
+    alert("Jira-Fehler: " + e.message);
+  }
+}
+
+// Click-Handler für Suche-Button und Filter-Buttons
+document.addEventListener("click", (ev) => {
+  const t = ev.target;
+  if(t && t.id === "prGoBtn") doProjectSearch();
+  if(t && t.id === "prRemoteToggle") t.classList.toggle("on");
+  if(t && t.matches && t.matches("#prSfrow .sfbtn")){
+    document.querySelectorAll("#prSfrow .sfbtn").forEach(b => b.classList.toggle("on", b === t));
+    _projSavedFilter = t.dataset.s || "all";
+    renderProjectsSaved();
+  }
+});
+
+// Enter im Skill-Feld → Suche
+document.addEventListener("keydown", (ev) => {
+  if(ev.target && ev.target.id === "prInpKw" && ev.key === "Enter") doProjectSearch();
+});
+
 // ── Init ──────────────────────────────────────────────────────────
 checkAuth();
 renderSearchHistory();
 registerSW();
 enableSwipeOnJobList();
+refreshProjectsBadge();

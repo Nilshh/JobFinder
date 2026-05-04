@@ -785,6 +785,47 @@ def init_db():
                 FOREIGN KEY (board_id) REFERENCES company_boards(id)
             )
         """)
+        # ── Projekte / Interim Management (Tab "Projekte") ──
+        db.execute("""
+            CREATE TABLE IF NOT EXISTS project_searches (
+                id                   INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id              INTEGER NOT NULL,
+                name                 TEXT NOT NULL,
+                keywords             TEXT NOT NULL DEFAULT '[]',
+                portals              TEXT NOT NULL DEFAULT '[]',
+                location             TEXT,
+                remote_only          INTEGER NOT NULL DEFAULT 0,
+                rate_min             INTEGER,
+                duration_min_months  INTEGER,
+                active               INTEGER NOT NULL DEFAULT 1,
+                check_interval_hours INTEGER NOT NULL DEFAULT 24,
+                last_run_at          TEXT,
+                last_run_status      TEXT,
+                created_at           TEXT DEFAULT (datetime('now')),
+                FOREIGN KEY (user_id) REFERENCES users(id)
+            )
+        """)
+        db.execute("""
+            CREATE TABLE IF NOT EXISTS project_jobs (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                search_id   INTEGER NOT NULL,
+                portal      TEXT NOT NULL,
+                title       TEXT NOT NULL,
+                company     TEXT,
+                url         TEXT NOT NULL,
+                location    TEXT,
+                remote      INTEGER,
+                rate_min    INTEGER,
+                rate_max    INTEGER,
+                rate_unit   TEXT,
+                start_date  TEXT,
+                duration    TEXT,
+                description TEXT,
+                found_at    TEXT DEFAULT (datetime('now')),
+                is_new      INTEGER NOT NULL DEFAULT 1,
+                FOREIGN KEY (search_id) REFERENCES project_searches(id)
+            )
+        """)
         # Indexes
         db.execute("CREATE INDEX IF NOT EXISTS idx_users_email ON users(email)")
         db.execute("CREATE INDEX IF NOT EXISTS idx_reset_tokens_user ON password_reset_tokens(user_id)")
@@ -795,6 +836,8 @@ def init_db():
         db.execute("CREATE INDEX IF NOT EXISTS idx_alert_jobs_search ON alert_jobs(search_id)")
         db.execute("CREATE INDEX IF NOT EXISTS idx_boards_user ON company_boards(user_id)")
         db.execute("CREATE INDEX IF NOT EXISTS idx_board_jobs_board ON board_jobs(board_id)")
+        db.execute("CREATE INDEX IF NOT EXISTS idx_project_searches_user ON project_searches(user_id)")
+        db.execute("CREATE INDEX IF NOT EXISTS idx_project_jobs_search ON project_jobs(search_id)")
         # ── Bewerbungs-Workflow (CVs + Templates) ──
         db.execute("""
             CREATE TABLE IF NOT EXISTS cvs (
@@ -2609,6 +2652,284 @@ und ende mit „Mit freundlichen Grüßen". Keine Meta-Kommentare, nur den Brief
         return jsonify({"error": f"KI-API-Fehler: HTTP {e.response.status_code}"}), 500
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+
+# ── Projekte / Interim Management: Portal-Adapter ────────────────
+# Jeder Adapter nimmt query-Dict und liefert Liste mit einheitlichem Schema:
+# {portal, title, company, url, location, remote, rate_min, rate_max, rate_unit,
+#  start_date, duration, description}
+
+_PROJ_UA = (
+    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) "
+    "Chrome/120.0.0.0 Safari/537.36"
+)
+_PROJ_HEADERS = {
+    "User-Agent": _PROJ_UA,
+    "Accept-Language": "de-DE,de;q=0.9,en;q=0.8",
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+}
+
+
+def _proj_match_kw(text, kw_lower):
+    """True wenn text ein Keyword enthält (oder keine Keywords gegeben)."""
+    if not kw_lower:
+        return True
+    t = (text or "").lower()
+    return any(kw in t for kw in kw_lower)
+
+
+def _parse_rate(text):
+    """Extrahiert Tagessatz/Stundensatz aus Text. Gibt (rate_min, rate_max, unit) zurück."""
+    if not text:
+        return (None, None, None)
+    t = text.replace(".", "").replace(",", ".")
+    m = re.search(r"(\d{2,5})\s*[-–bis]+\s*(\d{2,5})", t)
+    if m:
+        a, b = int(m.group(1)), int(m.group(2))
+        unit = "hour" if "stunde" in text.lower() or "/h" in text.lower() else "day"
+        return (min(a, b), max(a, b), unit)
+    m = re.search(r"(\d{2,5})", t)
+    if m:
+        v = int(m.group(1))
+        unit = "hour" if "stunde" in text.lower() or "/h" in text.lower() else "day"
+        return (v, v, unit)
+    return (None, None, None)
+
+
+def _fetch_projects_freelancermap(query):
+    """Freelancermap-Adapter: HTML-Suche unter /projekte, .project-card Selektoren."""
+    kw       = " ".join(query.get("keywords", []))
+    kw_lower = [k.lower() for k in query.get("keywords", []) if k]
+    location = query.get("location", "")
+    out      = []
+    base     = "https://www.freelancermap.de/projekte"
+    # countries[0]=1 → Deutschland; sort=1 → neueste zuerst
+    params   = {"query": kw, "pagenr": 1, "sort": 1, "countries[0]": 1}
+    if location:
+        params["city"] = location
+    if query.get("remote_only"):
+        params["remoteInPercent"] = "100"
+    try:
+        r = requests.get(base, params=params, headers=_PROJ_HEADERS, timeout=15)
+        if r.status_code != 200:
+            return out
+        soup = BeautifulSoup(r.text, "html.parser")
+        for card in soup.select(".project-card"):
+            a = card.select_one('a[data-id="project-card-title"]')
+            if not a:
+                continue
+            title = a.get_text(strip=True)
+            href  = a.get("href", "")
+            url   = href if href.startswith("http") else urljoin("https://www.freelancermap.de", href)
+            company_div = card.select_one(".project-info > div:first-child")
+            company     = company_div.get_text(strip=True) if company_div else ""
+            city_a      = card.select_one('a[data-id="project-card-city"]')
+            country_a   = card.select_one('a[data-id="project-card-country"]')
+            loc_parts   = [x.get_text(strip=True).rstrip(",") for x in (city_a, country_a) if x]
+            loc         = ", ".join(p for p in loc_parts if p)
+            remote_el   = card.select_one('[data-testid="remoteInPercent"]')
+            remote_pct  = None
+            if remote_el:
+                m = re.search(r"(\d+)\s*%", remote_el.get_text(" ", strip=True))
+                if m:
+                    remote_pct = int(m.group(1))
+            duration_el = card.select_one('[data-testid="duration"]')
+            duration    = duration_el.get_text(strip=True) if duration_el else ""
+            start_el    = card.select_one('[data-testid="beginningText"]')
+            start_txt   = start_el.get_text(strip=True) if start_el else ""
+            # Freelancermap mischt 'Top-Projekt'-Anzeigen ohne KW-Bezug rein → lokal nachfiltern
+            card_text = card.get_text(" ", strip=True)
+            if not _proj_match_kw(card_text, kw_lower):
+                continue
+            out.append({
+                "portal":     "freelancermap",
+                "title":      title,
+                "company":    company,
+                "url":        url,
+                "location":   loc,
+                "remote":     remote_pct,
+                "rate_min":   None,
+                "rate_max":   None,
+                "rate_unit":  None,
+                "start_date": start_txt,
+                "duration":   duration,
+                "description": "",
+            })
+    except Exception as e:
+        print(f"[Projects] freelancermap error: {e}", flush=True)
+    return out
+
+
+def _fetch_projects_etengo(query):
+    """Etengo-Adapter: HTML-Suche, .card-project Selektoren."""
+    kw       = " ".join(query.get("keywords", []))
+    kw_lower = [k.lower() for k in query.get("keywords", []) if k]
+    out      = []
+    base     = "https://www.etengo.de/it-projektsuche/"
+    params   = {"search": kw} if kw else {}
+    try:
+        r = requests.get(base, params=params, headers=_PROJ_HEADERS, timeout=15)
+        if r.status_code != 200:
+            return out
+        soup = BeautifulSoup(r.text, "html.parser")
+        for card in soup.select(".card-project"):
+            a = card.select_one("h3 a")
+            if not a:
+                continue
+            title = a.get_text(strip=True)
+            url   = a.get("href", "")
+            if not url.startswith("http"):
+                url = urljoin(base, url)
+            data = {}
+            for box in card.select(".box"):
+                lab = box.select_one("small")
+                val = box.select_one("span")
+                if lab and val:
+                    data[lab.get_text(strip=True).lower()] = val.get_text(strip=True)
+            if not _proj_match_kw(card.get_text(" ", strip=True), kw_lower):
+                continue
+            out.append({
+                "portal":     "etengo",
+                "title":      title,
+                "company":    "Etengo (vermittelt)",
+                "url":        url,
+                "location":   data.get("plz", ""),
+                "remote":     None,
+                "rate_min":   None,
+                "rate_max":   None,
+                "rate_unit":  None,
+                "start_date": data.get("start", ""),
+                "duration":   data.get("laufzeit", ""),
+                "description": data.get("branche", ""),
+            })
+    except Exception as e:
+        print(f"[Projects] etengo error: {e}", flush=True)
+    return out
+
+
+def _fetch_projects_hays(query):
+    """Hays-Adapter: HTML-Suche mit Filter Freiberuflich/Interim, .search__result Selektoren."""
+    kw       = " ".join(query.get("keywords", []))
+    kw_lower = [k.lower() for k in query.get("keywords", []) if k]
+    out      = []
+    base     = "https://www.hays.de/jobsuche"
+    params   = {"searchTerm": kw, "jobtype": "Freiberuflich"}
+    try:
+        r = requests.get(base, params=params, headers=_PROJ_HEADERS, timeout=20)
+        if r.status_code != 200:
+            return out
+        soup = BeautifulSoup(r.text, "html.parser")
+        for card in soup.select(".search__result"):
+            link = card.select_one("a.search__result__link")
+            ttl  = card.select_one(".search__result__header__title")
+            if not (link and ttl):
+                continue
+            title = " ".join(ttl.get_text(" ", strip=True).split())
+            url   = link.get("href", "")
+            if not url.startswith("http"):
+                url = urljoin("https://www.hays.de", url)
+            attr_text = card.get_text(" ", strip=True)
+            location  = ""
+            for el in card.select(".search__result__job__attributes *"):
+                txt = el.get_text(strip=True)
+                if txt and any(w in txt.lower() for w in ["berlin","münchen","hamburg","frankfurt","köln","stuttgart","düsseldorf","leipzig"]):
+                    location = txt
+                    break
+            if not _proj_match_kw(title + " " + attr_text, kw_lower):
+                continue
+            out.append({
+                "portal":     "hays",
+                "title":      title,
+                "company":    "Hays (vermittelt)",
+                "url":        url,
+                "location":   location,
+                "remote":     None,
+                "rate_min":   None,
+                "rate_max":   None,
+                "rate_unit":  None,
+                "start_date": "",
+                "duration":   "",
+                "description": "",
+            })
+    except Exception as e:
+        print(f"[Projects] hays error: {e}", flush=True)
+    return out
+
+
+def _fetch_projects_gulp(query):
+    """GULP ist eine Angular-SPA – ohne offizielle API/Reverse-Engineering hier nicht erreichbar.
+    Stub: liefert leere Liste, schreibt Hinweis ins Log. Wird in einem späteren Schritt nachgezogen."""
+    print("[Projects] gulp: SPA – noch nicht implementiert", flush=True)
+    return []
+
+
+def _fetch_projects_solcom(query):
+    """Solcom blockt automatisierte Anfragen (HTTP 403). Stub bis Bot-Schutz umgangen werden kann."""
+    print("[Projects] solcom: 403 (Bot-Schutz) – noch nicht implementiert", flush=True)
+    return []
+
+
+PROJECT_ADAPTERS = {
+    "freelancermap": _fetch_projects_freelancermap,
+    "etengo":        _fetch_projects_etengo,
+    "hays":          _fetch_projects_hays,
+    "gulp":          _fetch_projects_gulp,
+    "solcom":        _fetch_projects_solcom,
+}
+
+
+def _aggregate_projects(query, portals):
+    """Ruft alle gewählten Adapter auf, merged Ergebnisse, dedupliziert über url."""
+    results, seen = [], set()
+    for portal in portals:
+        adapter = PROJECT_ADAPTERS.get(portal)
+        if not adapter:
+            continue
+        for j in adapter(query):
+            key = j.get("url") or (j.get("title", "") + "|" + j.get("portal", ""))
+            if key in seen:
+                continue
+            seen.add(key)
+            # Nachfilter Tagessatz / Laufzeit
+            if query.get("rate_min") and j.get("rate_min") and j["rate_min"] < query["rate_min"]:
+                continue
+            results.append(j)
+    return results
+
+
+# ── Projekte: Routen ─────────────────────────────────────────────
+
+@app.route("/projects/search", methods=["GET", "OPTIONS"])
+@login_required
+def projects_search():
+    """On-demand Suche über alle gewählten Portale (kein DB-Persist, nur Live-Fetch)."""
+    portals = [p.strip().lower() for p in (request.args.get("portals", "") or "freelancermap").split(",") if p.strip()]
+    portals = [p for p in portals if p in PROJECT_ADAPTERS]
+    kw      = (request.args.get("kw") or "").strip()
+    query = {
+        "keywords":    [k.strip() for k in re.split(r"[,;\s]+", kw) if k.strip()],
+        "location":    (request.args.get("loc") or "").strip(),
+        "remote_only": request.args.get("remote") == "1",
+        "rate_min":    int(request.args.get("rate_min")) if (request.args.get("rate_min") or "").isdigit() else None,
+        "duration_min": int(request.args.get("duration_min")) if (request.args.get("duration_min") or "").isdigit() else None,
+    }
+    try:
+        results = _aggregate_projects(query, portals)
+        return jsonify({"results": results, "count": len(results), "portals": portals})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/projects/portals", methods=["GET", "OPTIONS"])
+def projects_portals():
+    """Liste der verfügbaren Portale + Status (für UI)."""
+    return jsonify([
+        {"slug": "freelancermap", "name": "Freelancermap", "status": "ok"},
+        {"slug": "etengo",        "name": "Etengo",        "status": "ok"},
+        {"slug": "hays",          "name": "Hays",          "status": "ok"},
+        {"slug": "gulp",          "name": "GULP",          "status": "wip", "note": "SPA – Anbindung in Arbeit"},
+        {"slug": "solcom",        "name": "Solcom",        "status": "blocked", "note": "Bot-Schutz aktiv"},
+    ])
 
 
 # ── Health & Metrics ─────────────────────────────────────────────

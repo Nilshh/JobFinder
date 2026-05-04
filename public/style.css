@@ -668,3 +668,29 @@ body{
 .sh-del{background:none;border:none;color:var(--on-surface-variant);cursor:pointer;font-size:16px;padding:2px 6px;border-radius:6px;transition:color .15s;}
 .sh-del:hover{color:var(--tertiary);}
 @media(max-width:600px){.sh-meta{display:none;}}
+
+/* ── Projekte / Interim Management ───────────────────────────── */
+.project-portals{display:flex;flex-wrap:wrap;gap:14px;margin:6px 0 4px;}
+.project-portals label{display:inline-flex;align-items:center;gap:6px;font-size:13px;color:var(--on-surface);cursor:pointer;}
+.project-portals input[type=checkbox]{accent-color:var(--primary);}
+.project-portals label:has(input:disabled){color:var(--on-surface-variant);cursor:not-allowed;}
+.pcard{
+  backdrop-filter:blur(12px);background:rgba(33,7,45,.55);
+  border:1px solid rgba(89,62,99,.18);
+  border-radius:16px;margin-bottom:10px;padding:20px 22px;
+  transition:all .3s ease;
+}
+.pcard:hover{border-color:rgba(0,189,253,.2);box-shadow:0 8px 32px rgba(0,0,0,.3);transform:translateY(-1px);}
+.pcard .jtitle a{color:var(--on-surface);text-decoration:none;}
+.pcard .jtitle a:hover{color:var(--primary);}
+.pcard-rate{
+  background:rgba(34,197,94,.12);border:1px solid rgba(34,197,94,.28);
+  border-radius:8px;color:var(--success);font-size:11px;font-weight:700;padding:3px 9px;
+  font-family:'Space Grotesk',sans-serif;
+}
+.savebtn.saved{background:rgba(34,197,94,.2);color:var(--on-surface);cursor:default;}
+.saved-pcard .ssel{
+  background:var(--surface-container-highest);border:1px solid rgba(89,62,99,.25);
+  border-radius:10px;color:var(--on-surface);font-size:12px;padding:6px 10px;
+  font-family:inherit;cursor:pointer;
+}
