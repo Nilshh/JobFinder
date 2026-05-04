@@ -3336,7 +3336,16 @@ async function doProjectSearch(){
 
   try {
     const r = await fetch("/projects/search?" + params.toString(), { credentials: "include" });
-    const data = await r.json();
+    const ct = (r.headers.get("content-type") || "").toLowerCase();
+    let data;
+    if (ct.includes("application/json")) {
+      data = await r.json();
+    } else {
+      const txt = await r.text();
+      if (r.status === 404) throw new Error("Endpunkt /projects/search nicht gefunden – Backend evtl. nicht neu gebaut. (docker compose up --build -d)");
+      if (r.status === 401) throw new Error("Nicht angemeldet – bitte erneut einloggen.");
+      throw new Error(`Server lieferte kein JSON (HTTP ${r.status}). Antwort: ${txt.slice(0, 200)}`);
+    }
     if(!r.ok) throw new Error(data.error || ("HTTP "+r.status));
     _projResults = data.results || [];
     hdr.style.display = "block";
