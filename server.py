@@ -2696,67 +2696,84 @@ def _parse_rate(text):
     return (None, None, None)
 
 
+_PROJ_MAX_PAGES = int(os.environ.get("PROJ_MAX_PAGES", "3"))
+
+
 def _fetch_projects_freelancermap(query):
-    """Freelancermap-Adapter: HTML-Suche unter /projekte, .project-card Selektoren."""
+    """Freelancermap-Adapter: HTML-Suche unter /projekte, paginiert über mehrere Seiten."""
     kw       = " ".join(query.get("keywords", []))
     kw_lower = [k.lower() for k in query.get("keywords", []) if k]
     location = query.get("location", "")
     out      = []
+    seen_urls = set()
     base     = "https://www.freelancermap.de/projekte"
-    # countries[0]=1 → Deutschland; sort=1 → neueste zuerst
-    params   = {"query": kw, "pagenr": 1, "sort": 1, "countries[0]": 1}
-    if location:
-        params["city"] = location
-    if query.get("remote_only"):
-        params["remoteInPercent"] = "100"
-    try:
-        r = requests.get(base, params=params, headers=_PROJ_HEADERS, timeout=15)
-        if r.status_code != 200:
-            return out
-        soup = BeautifulSoup(r.text, "html.parser")
-        for card in soup.select(".project-card"):
-            a = card.select_one('a[data-id="project-card-title"]')
-            if not a:
-                continue
-            title = a.get_text(strip=True)
-            href  = a.get("href", "")
-            url   = href if href.startswith("http") else urljoin("https://www.freelancermap.de", href)
-            company_div = card.select_one(".project-info > div:first-child")
-            company     = company_div.get_text(strip=True) if company_div else ""
-            city_a      = card.select_one('a[data-id="project-card-city"]')
-            country_a   = card.select_one('a[data-id="project-card-country"]')
-            loc_parts   = [x.get_text(strip=True).rstrip(",") for x in (city_a, country_a) if x]
-            loc         = ", ".join(p for p in loc_parts if p)
-            remote_el   = card.select_one('[data-testid="remoteInPercent"]')
-            remote_pct  = None
-            if remote_el:
-                m = re.search(r"(\d+)\s*%", remote_el.get_text(" ", strip=True))
-                if m:
-                    remote_pct = int(m.group(1))
-            duration_el = card.select_one('[data-testid="duration"]')
-            duration    = duration_el.get_text(strip=True) if duration_el else ""
-            start_el    = card.select_one('[data-testid="beginningText"]')
-            start_txt   = start_el.get_text(strip=True) if start_el else ""
-            # Freelancermap mischt 'Top-Projekt'-Anzeigen ohne KW-Bezug rein → lokal nachfiltern
-            card_text = card.get_text(" ", strip=True)
-            if not _proj_match_kw(card_text, kw_lower):
-                continue
-            out.append({
-                "portal":     "freelancermap",
-                "title":      title,
-                "company":    company,
-                "url":        url,
-                "location":   loc,
-                "remote":     remote_pct,
-                "rate_min":   None,
-                "rate_max":   None,
-                "rate_unit":  None,
-                "start_date": start_txt,
-                "duration":   duration,
-                "description": "",
-            })
-    except Exception as e:
-        print(f"[Projects] freelancermap error: {e}", flush=True)
+    for pagenr in range(1, _PROJ_MAX_PAGES + 1):
+        # countries[0]=1 → Deutschland; sort=1 → neueste zuerst
+        params = {"query": kw, "pagenr": pagenr, "sort": 1, "countries[0]": 1}
+        if location:
+            params["city"] = location
+        if query.get("remote_only"):
+            params["remoteInPercent"] = "100"
+        try:
+            r = requests.get(base, params=params, headers=_PROJ_HEADERS, timeout=15)
+            if r.status_code != 200:
+                break
+            soup = BeautifulSoup(r.text, "html.parser")
+            cards = soup.select(".project-card")
+            if not cards:
+                break
+            page_added = 0
+            for card in cards:
+                a = card.select_one('a[data-id="project-card-title"]')
+                if not a:
+                    continue
+                title = a.get_text(strip=True)
+                href  = a.get("href", "")
+                url   = href if href.startswith("http") else urljoin("https://www.freelancermap.de", href)
+                if url in seen_urls:
+                    continue
+                seen_urls.add(url)
+                company_div = card.select_one(".project-info > div:first-child")
+                company     = company_div.get_text(strip=True) if company_div else ""
+                city_a      = card.select_one('a[data-id="project-card-city"]')
+                country_a   = card.select_one('a[data-id="project-card-country"]')
+                loc_parts   = [x.get_text(strip=True).rstrip(",") for x in (city_a, country_a) if x]
+                loc         = ", ".join(p for p in loc_parts if p)
+                remote_el   = card.select_one('[data-testid="remoteInPercent"]')
+                remote_pct  = None
+                if remote_el:
+                    m = re.search(r"(\d+)\s*%", remote_el.get_text(" ", strip=True))
+                    if m:
+                        remote_pct = int(m.group(1))
+                duration_el = card.select_one('[data-testid="duration"]')
+                duration    = duration_el.get_text(strip=True) if duration_el else ""
+                start_el    = card.select_one('[data-testid="beginningText"]')
+                start_txt   = start_el.get_text(strip=True) if start_el else ""
+                # Freelancermap mischt 'Top-Projekt'-Anzeigen ohne KW-Bezug rein → lokal nachfiltern
+                card_text = card.get_text(" ", strip=True)
+                if not _proj_match_kw(card_text, kw_lower):
+                    continue
+                out.append({
+                    "portal":     "freelancermap",
+                    "title":      title,
+                    "company":    company,
+                    "url":        url,
+                    "location":   loc,
+                    "remote":     remote_pct,
+                    "rate_min":   None,
+                    "rate_max":   None,
+                    "rate_unit":  None,
+                    "start_date": start_txt,
+                    "duration":   duration,
+                    "description": "",
+                })
+                page_added += 1
+            # Stoppe wenn diese Seite nichts Neues lieferte (Top-Projekt-Wiederholungen am Listenende)
+            if page_added == 0:
+                break
+        except Exception as e:
+            print(f"[Projects] freelancermap p{pagenr} error: {e}", flush=True)
+            break
     return out
 
 
@@ -2856,6 +2873,57 @@ def _fetch_projects_hays(query):
     return out
 
 
+def _fetch_projects_adzuna(query):
+    """Adzuna mit contract_type=contract – Freelance/Vertrags-Stellen aus dem bestehenden API-Key."""
+    if not (APP_ID and APP_KEY):
+        return []
+    kw       = " ".join(query.get("keywords", []))
+    location = query.get("location", "")
+    out      = []
+    params = {
+        "app_id":           APP_ID,
+        "app_key":          APP_KEY,
+        "results_per_page": 30,
+        "what":             kw or "",
+        "contract_type":    "contract",
+        "content-type":     "application/json",
+    }
+    if location:
+        params["where"] = location
+    url = "https://api.adzuna.com/v1/api/jobs/de/search/1"
+    try:
+        data, status = _cached_api_get("adzuna_proj", url, params)
+        if status >= 400:
+            return out
+        for j in data.get("results", []):
+            title    = j.get("title", "")
+            company  = (j.get("company") or {}).get("display_name", "")
+            loc      = (j.get("location") or {}).get("display_name", "")
+            ad_url   = j.get("redirect_url", "")
+            sal_min  = j.get("salary_min")
+            sal_max  = j.get("salary_max")
+            # Adzuna gibt Jahresgehälter; Tagessatz daraus grob abschätzen ÷ 220 Arbeitstage
+            rate_min = int(sal_min / 220) if sal_min else None
+            rate_max = int(sal_max / 220) if sal_max else None
+            out.append({
+                "portal":     "adzuna",
+                "title":      title,
+                "company":    company,
+                "url":        ad_url,
+                "location":   loc,
+                "remote":     None,
+                "rate_min":   rate_min,
+                "rate_max":   rate_max,
+                "rate_unit":  "day" if rate_min else None,
+                "start_date": "",
+                "duration":   "",
+                "description": (j.get("description") or "")[:300],
+            })
+    except Exception as e:
+        print(f"[Projects] adzuna error: {e}", flush=True)
+    return out
+
+
 def _fetch_projects_gulp(query):
     """GULP ist eine Angular-SPA – ohne offizielle API/Reverse-Engineering hier nicht erreichbar.
     Stub: liefert leere Liste, schreibt Hinweis ins Log. Wird in einem späteren Schritt nachgezogen."""
@@ -2873,6 +2941,7 @@ PROJECT_ADAPTERS = {
     "freelancermap": _fetch_projects_freelancermap,
     "etengo":        _fetch_projects_etengo,
     "hays":          _fetch_projects_hays,
+    "adzuna":        _fetch_projects_adzuna,
     "gulp":          _fetch_projects_gulp,
     "solcom":        _fetch_projects_solcom,
 }
@@ -2924,11 +2993,12 @@ def projects_search():
 def projects_portals():
     """Liste der verfügbaren Portale + Status (für UI)."""
     return jsonify([
-        {"slug": "freelancermap", "name": "Freelancermap", "status": "ok"},
-        {"slug": "etengo",        "name": "Etengo",        "status": "ok"},
-        {"slug": "hays",          "name": "Hays",          "status": "ok"},
-        {"slug": "gulp",          "name": "GULP",          "status": "wip", "note": "SPA – Anbindung in Arbeit"},
-        {"slug": "solcom",        "name": "Solcom",        "status": "blocked", "note": "Bot-Schutz aktiv"},
+        {"slug": "freelancermap", "name": "Freelancermap",  "status": "ok"},
+        {"slug": "etengo",        "name": "Etengo",         "status": "ok"},
+        {"slug": "hays",          "name": "Hays",           "status": "ok"},
+        {"slug": "adzuna",        "name": "Adzuna",         "status": "ok",  "note": "Contract-Stellen via Adzuna-API"},
+        {"slug": "gulp",          "name": "GULP",           "status": "wip", "note": "SPA – Anbindung in Arbeit"},
+        {"slug": "solcom",        "name": "Solcom",         "status": "blocked", "note": "Bot-Schutz aktiv"},
     ])
 
 

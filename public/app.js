@@ -3289,6 +3289,7 @@ const _PROJ_PORTAL_LABEL = {
   freelancermap: "Freelancermap",
   etengo:        "Etengo",
   hays:          "Hays",
+  adzuna:        "Adzuna",
   gulp:          "GULP",
   solcom:        "Solcom",
 };
