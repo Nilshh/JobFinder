@@ -3292,6 +3292,8 @@ const _PROJ_PORTAL_LABEL = {
   adzuna:        "Adzuna",
   gulp:          "GULP",
   solcom:        "Solcom",
+  malt:          "Malt",
+  freelance_de:  "freelance.de",
 };
 
 function loadProjectsTab(){

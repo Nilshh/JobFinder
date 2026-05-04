@@ -2925,15 +2925,118 @@ def _fetch_projects_adzuna(query):
 
 
 def _fetch_projects_gulp(query):
-    """GULP ist eine Angular-SPA – ohne offizielle API/Reverse-Engineering hier nicht erreichbar.
-    Stub: liefert leere Liste, schreibt Hinweis ins Log. Wird in einem späteren Schritt nachgezogen."""
-    print("[Projects] gulp: SPA – noch nicht implementiert", flush=True)
-    return []
+    """GULP-Adapter: Angular-SPA, daher Playwright statt requests.
+    Sucht via ?query=KEYWORDS auf /gulp2/g/projekte und parst .project-item-Karten."""
+    kw       = " ".join(query.get("keywords", []))
+    location = query.get("location", "")
+    out      = []
+    try:
+        from playwright.sync_api import sync_playwright
+    except Exception:
+        print("[Projects] gulp: playwright nicht installiert", flush=True)
+        return out
+    try:
+        with sync_playwright() as p:
+            browser = p.chromium.launch(
+                headless=True,
+                args=["--no-sandbox", "--disable-dev-shm-usage"],
+            )
+            try:
+                ctx = browser.new_context(
+                    user_agent=_PROJ_UA,
+                    extra_http_headers={"Accept-Language": "de-DE,de;q=0.9,en;q=0.8"},
+                )
+                page = ctx.new_page()
+                base_params = []
+                if kw:       base_params.append(("query", kw))
+                if location: base_params.append(("city",  location))
+                qs = "&".join(f"{k}={v}" for k, v in base_params)
+                url = "https://www.gulp.de/gulp2/g/projekte" + (("?" + qs) if qs else "")
+                page.goto(url, wait_until="networkidle", timeout=30000)
+                page.wait_for_timeout(1500)
+                # Cookie-Banner wegklicken
+                for txt in ("Akzeptieren", "Alle akzeptieren", "Zustimmen"):
+                    try:
+                        btn = page.query_selector(f'button:has-text("{txt}")')
+                        if btn and btn.is_visible():
+                            btn.click()
+                            page.wait_for_timeout(1500)
+                            break
+                    except Exception:
+                        pass
+                # Lazy-Scroll für mehr Treffer
+                page.mouse.wheel(0, 1500)
+                page.wait_for_timeout(1500)
+                soup = BeautifulSoup(page.content(), "html.parser")
+            finally:
+                browser.close()
+        for card in soup.select(".project-item, .list-result-item .project-item"):
+            a = card.select_one("h1 a, h2 a, h3 a")
+            if not a:
+                continue
+            title = a.get_text(strip=True)
+            href  = a.get("href", "")
+            if not href:
+                continue
+            url_full = href if href.startswith("http") else urljoin("https://www.gulp.de", href)
+            text = card.get_text(" ", strip=True)
+            # Location aus Info-Liste extrahieren
+            loc = ""
+            m = re.search(r"Location:\s*([^\n]+?)(?:\s+(?:Remote|Vertragsart|Start|Beginn|Dauer|Werkvertrag|$))", text)
+            if m:
+                loc = m.group(1).strip().rstrip(",")
+            # Remote-%
+            remote_pct = None
+            m = re.search(r"(\d{1,3})\s*%\s*Remote", text, re.I)
+            if m:
+                remote_pct = int(m.group(1))
+            # Tagessatz – falls in Karte sichtbar
+            rate_min, rate_max, rate_unit = _parse_rate(text)
+            # Start-Datum
+            start_date = ""
+            m = re.search(r"(?:Start|Beginn)[:\s]+([0-9]{1,2}[./][0-9]{1,2}[./][0-9]{2,4}|sofort|asap|baldm[öo]glich)", text, re.I)
+            if m:
+                start_date = m.group(1)
+            # Dauer
+            duration = ""
+            m = re.search(r"(?:Dauer|Laufzeit)[:\s]+([0-9]+\s*Monat[e]?|[0-9]+\s*Tag[e]?|[0-9]+\s*Wochen?)", text, re.I)
+            if m:
+                duration = m.group(1).strip()
+            out.append({
+                "portal":     "gulp",
+                "title":      title,
+                "company":    "GULP (vermittelt)",
+                "url":        url_full,
+                "location":   loc,
+                "remote":     remote_pct,
+                "rate_min":   rate_min,
+                "rate_max":   rate_max,
+                "rate_unit":  rate_unit,
+                "start_date": start_date,
+                "duration":   duration,
+                "description": "",
+            })
+    except Exception as e:
+        print(f"[Projects] gulp error: {e}", flush=True)
+    return out
 
 
 def _fetch_projects_solcom(query):
     """Solcom blockt automatisierte Anfragen (HTTP 403). Stub bis Bot-Schutz umgangen werden kann."""
     print("[Projects] solcom: 403 (Bot-Schutz) – noch nicht implementiert", flush=True)
+    return []
+
+
+def _fetch_projects_malt(query):
+    """Malt ist ein Freelancer-Marktplatz (Talent-Search), kein Projekt-Board.
+    Öffentlich sichtbar sind nur Freelancer-Profile, Projekte nur eingeloggt."""
+    print("[Projects] malt: Freelancer-Marktplatz – keine öffentlichen Projekt-Listings", flush=True)
+    return []
+
+
+def _fetch_projects_freelance_de(query):
+    """freelance.de hat eine Login-Wall – die /projekte-URL liefert ohne Account nur Kategorien-Index."""
+    print("[Projects] freelance.de: Login-Wall – ohne Account-Session keine Listings", flush=True)
     return []
 
 
@@ -2944,6 +3047,8 @@ PROJECT_ADAPTERS = {
     "adzuna":        _fetch_projects_adzuna,
     "gulp":          _fetch_projects_gulp,
     "solcom":        _fetch_projects_solcom,
+    "malt":          _fetch_projects_malt,
+    "freelance_de":  _fetch_projects_freelance_de,
 }
 
 
@@ -2997,8 +3102,10 @@ def projects_portals():
         {"slug": "etengo",        "name": "Etengo",         "status": "ok"},
         {"slug": "hays",          "name": "Hays",           "status": "ok"},
         {"slug": "adzuna",        "name": "Adzuna",         "status": "ok",  "note": "Contract-Stellen via Adzuna-API"},
-        {"slug": "gulp",          "name": "GULP",           "status": "wip", "note": "SPA – Anbindung in Arbeit"},
+        {"slug": "gulp",          "name": "GULP",           "status": "ok",  "note": "via Browser-Rendering – langsamer"},
         {"slug": "solcom",        "name": "Solcom",         "status": "blocked", "note": "Bot-Schutz aktiv"},
+        {"slug": "malt",          "name": "Malt",           "status": "blocked", "note": "Freelancer-Marktplatz, keine öffentlichen Projekt-Listings"},
+        {"slug": "freelance_de",  "name": "freelance.de",   "status": "blocked", "note": "Login-Wall – Listings nur mit Account"},
     ])
 
 
