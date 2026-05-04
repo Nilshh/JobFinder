@@ -1250,7 +1250,10 @@ async function alertReadAll(sid){
 let _watchEditId    = null;
 let _watchSelectMode = false;
 let _watchSubTab     = "companies";
-let _watchJobsMap    = {};   // id → job-Objekt für saveWatchJob
+let _watchJobsMap        = {};   // id → job-Objekt für saveWatchJob
+let _watchCompanyFilter  = "all"; // "all" oder company_id für Filter im Pane "Gefundene Stellen"
+let _watchJobsCache      = [];
+let _watchCompaniesCache = [];
 const _watchSelected = new Set();
 
 function openWatchModal(prefill){
@@ -1614,16 +1617,52 @@ function renderWatchCompanies(list){
 }
 
 function renderWatchJobs(jobs, companies){
+  _watchJobsCache = jobs;
+  _watchCompaniesCache = companies;
   const box = document.getElementById("watchJobFeed");
   _watchJobsMap = {};
-  if(!jobs.length){ box.innerHTML = '<div class="savempty" style="padding:50px 0">Noch keine Stellen gefunden.<br><span style="font-size:13px;">Prüfe Unternehmen manuell oder warte auf die automatische Prüfung.</span></div>'; return; }
-  companies.forEach(c => { /* byCompany nicht mehr nötig, company_name steckt im Job */ });
-  jobs.forEach(j => _watchJobsMap[j.id] = j);
+
+  // Filter zurücksetzen, wenn das gewählte Unternehmen weg ist
+  if (_watchCompanyFilter !== "all" && !companies.some(c => String(c.id) === String(_watchCompanyFilter))) {
+    _watchCompanyFilter = "all";
+  }
+
+  // Treffer pro Unternehmen für Dropdown-Optionen
+  const counts = {};
+  jobs.forEach(j => { counts[j.company_id] = (counts[j.company_id] || 0) + 1; });
+
+  const opts = [`<option value="all"${_watchCompanyFilter==="all"?" selected":""}>Alle Unternehmen (${jobs.length})</option>`]
+    .concat(companies
+      .filter(c => counts[c.id])
+      .sort((a, b) => (counts[b.id] || 0) - (counts[a.id] || 0))
+      .map(c => `<option value="${c.id}"${String(_watchCompanyFilter)===String(c.id)?" selected":""}>${esc(c.name)} (${counts[c.id]})</option>`)
+    ).join("");
+
+  const filterHtml = `<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:0 0 14px;">
+    <label style="font-size:12px;color:#6b6b80;text-transform:uppercase;letter-spacing:.06em;font-weight:600;">Filter:</label>
+    <select class="inp" style="max-width:340px;min-width:200px;cursor:pointer;padding:6px 10px;" onchange="setWatchCompanyFilter(this.value)">${opts}</select>
+  </div>`;
+
+  // Jobs nach gewähltem Unternehmen filtern
+  const filtered = _watchCompanyFilter === "all"
+    ? jobs
+    : jobs.filter(j => String(j.company_id) === String(_watchCompanyFilter));
+
+  if (!filtered.length) {
+    box.innerHTML = filterHtml + `<div class="savempty" style="padding:50px 0">${
+      _watchCompanyFilter === "all"
+        ? 'Noch keine Stellen gefunden.<br><span style="font-size:13px;">Prüfe Unternehmen manuell oder warte auf die automatische Prüfung.</span>'
+        : 'Keine Stellen für dieses Unternehmen.<br><span style="font-size:13px;">Wähle ein anderes Unternehmen oder "Alle Unternehmen".</span>'
+    }</div>`;
+    return;
+  }
+
+  filtered.forEach(j => _watchJobsMap[j.id] = j);
   const saved = LS.saved();
-  box.innerHTML = `<div style="font-size:12px;font-weight:600;color:#6b6b80;text-transform:uppercase;letter-spacing:.06em;margin:0 0 12px;">
-      Gefundene Stellen <span style="color:#444;font-weight:400">(${jobs.length})</span>
+  box.innerHTML = filterHtml + `<div style="font-size:12px;font-weight:600;color:#6b6b80;text-transform:uppercase;letter-spacing:.06em;margin:0 0 12px;">
+      Gefundene Stellen <span style="color:#444;font-weight:400">(${filtered.length}${_watchCompanyFilter!=="all"?` von ${jobs.length}`:""})</span>
     </div>`
-    + jobs.map(j => {
+    + filtered.map(j => {
     const age = j.found_at
       ? new Date(j.found_at+"Z").toLocaleString("de-DE",{dateStyle:"short",timeStyle:"short"})
       : "";
@@ -1643,6 +1682,11 @@ function renderWatchJobs(jobs, companies){
       </div>
     </div>`;
   }).join("");
+}
+
+function setWatchCompanyFilter(value){
+  _watchCompanyFilter = value || "all";
+  renderWatchJobs(_watchJobsCache, _watchCompaniesCache);
 }
 
 function saveWatchJob(id){
