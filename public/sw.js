@@ -1,5 +1,5 @@
 // JobPipeline Service Worker
-const CACHE_NAME = "jobpipeline-v2";
+const CACHE_NAME = "jobpipeline-v3";
 const STATIC_ASSETS = ["/", "/index.html", "/style.css", "/app.js", "/favicon.svg", "/manifest.json"];
 const API_PREFIXES = ["/jobs", "/user", "/auth", "/admin", "/watch", "/search", "/boards", "/jira", "/ai", "/push", "/health", "/meta"];
 
@@ -28,15 +28,16 @@ self.addEventListener("fetch", event => {
   if (req.method !== "GET") return;
   if (API_PREFIXES.some(p => url.pathname.startsWith(p))) return;
 
-  // Nur GET auf statische Assets: Cache-first
+  // Network-first für statische Assets: frisches Asset holen, bei Offline auf Cache zurückfallen.
+  // Vorher Cache-first → neue app.js/style.css wurden nie ausgeliefert, bis CACHE_NAME stieg.
   event.respondWith(
-    caches.match(req).then(cached => cached || fetch(req).then(res => {
+    fetch(req).then(res => {
       if (res && res.status === 200 && url.origin === self.location.origin) {
         const clone = res.clone();
         caches.open(CACHE_NAME).then(cache => cache.put(req, clone));
       }
       return res;
-    }).catch(() => cached))
+    }).catch(() => caches.match(req))
   );
 });
 
