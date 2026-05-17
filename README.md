@@ -2,12 +2,13 @@
 
 > Vollständige Bewerbungs-Plattform mit Auto-Discovery, Search-Alerts, Company-Boards, KI-Anschreiben, Kanban-Pipeline, Karriere-Monitor, PWA, Web-Push, Jira-Integration und Mehrbenutzer-Unterstützung
 
-JobPipeline ist eine installierbare Web-App (PWA) für die strukturierte Jobsuche und Bewerbungsverwaltung. Sie durchsucht **fünf Jobquellen** (Adzuna, Bundesagentur für Arbeit, Jobicy, RemoteOK, The Muse) parallel – inklusive automatischer **Synonym-Expansion** –, filtert bereits gespeicherte oder ignorierte Stellen automatisch heraus und verlinkt direkt auf **45+ Jobportale**.
+JobPipeline ist eine installierbare Web-App (PWA) für die strukturierte Jobsuche und Bewerbungsverwaltung. Sie durchsucht **sechs Jobquellen** (Adzuna, Bundesagentur für Arbeit, Jobicy, RemoteOK, The Muse, Arbeitnow) parallel – inklusive automatischer **Synonym-Expansion** –, filtert bereits gespeicherte oder ignorierte Stellen automatisch heraus und verlinkt direkt auf **45+ Jobportale**.
 
-**Drei automatisierte Such-Mechanismen im Hintergrund:**
+**Vier automatisierte Such-Mechanismen im Hintergrund:**
 - **Search-Alerts** führen deine Suchen regelmäßig aus und melden neue Treffer per E-Mail + Web-Push.
 - **Karriere-Monitor** (Playwright) überwacht beliebige Unternehmens-Karriereseiten auf Keyword-Matches.
-- **Company-Boards** (Greenhouse, Lever) holen strukturierte Job-Daten von Scale-ups wie Airbnb, Stripe oder Shopify.
+- **Company-Boards** (Greenhouse, Lever, **Ashby**, **Personio**) holen strukturierte Job-Daten von Scale-ups (Airbnb, Stripe, Notion, Linear) und DACH-Mittelständlern (Trade Republic, Celonis u. v. m.).
+- **Verdeckter Stellenmarkt** (Funding/News-Watcher) liest RSS-Feeds (deutsche-startups, EU-Startups, tech.eu) auf Funding-, Standort- und Wachstumssignale — Firmen, die gerade Kapital aufgenommen haben, stellen 4-8 Wochen später ein.
 
 **Vollständiger Bewerbungs-Workflow:**
 - **Kanban-Pipeline** mit Drag&Drop für die Bewerbungsphasen
@@ -30,7 +31,7 @@ JobPipeline ist eine installierbare Web-App (PWA) für die strukturierte Jobsuch
 
 ### Jobsuche
 - **Mehrfach-Titelsuche** — Vordefinierte Chips (CTO, CIO, CDO, Head of IT, Leiter IT u. a.) + eigene Titel
-- **Parallele Suche** — Alle gewählten Jobtitel werden gleichzeitig an fünf Quellen abgefragt (Adzuna + BA + Jobicy + RemoteOK + The Muse)
+- **Parallele Suche** — Alle gewählten Jobtitel werden gleichzeitig an sechs Quellen abgefragt (Adzuna + BA + Jobicy + RemoteOK + The Muse + Arbeitnow)
 - **Keyword-Synonyme** — Automatische Erweiterung um verwandte Begriffe (z. B. CTO → VP Engineering, Chief Technology Officer); per Toggle abschaltbar
 - **Remote-Filter** — Nur Remote-Jobs anzeigen (Jobicy + RemoteOK + Adzuna-Remote-Filter)
 - **Standort-Filter** — Ort, PLZ und Umkreis (10 / 25 / 50 / 100 / 150 km); optional bei Remote
@@ -72,16 +73,28 @@ Deine Suchen werden im Hintergrund automatisch wiederholt und melden neue Treffe
 - **CRUD** — Alerts pausieren, E-Mail togglen, löschen, "Jetzt prüfen"
 - **Nutzt alle Quellen** — Adzuna + Bundesagentur für Arbeit für maximale Abdeckung
 
-### Company-Boards (Greenhouse / Lever)
-Strukturierte APIs vieler Scale-ups — schneller und zuverlässiger als Karriereseiten-Scraping:
+### Company-Boards (Greenhouse / Lever / Ashby / Personio)
+Strukturierte APIs vieler Scale-ups und DACH-Mittelständler — schneller und zuverlässiger als Karriereseiten-Scraping:
 - **Greenhouse** — z. B. Airbnb, Stripe, Shopify, GitLab, Dropbox
 - **Lever** — z. B. Netflix, Figma, Eventbrite, KPMG
-- **Zero-Config** — Nur Provider + Slug eingeben (z. B. `greenhouse/airbnb`)
+- **Ashby** — z. B. Notion, Linear, Vercel, Ramp, Posthog (Slug aus `jobs.ashbyhq.com/<slug>`)
+- **Personio** — DACH-Standard für KMU und Mittelstand, z. B. Celonis (Slug = Subdomain von `<slug>.jobs.personio.de`)
+- **Zero-Config** — Nur Provider + Slug eingeben (z. B. `ashby/notion`)
 - **Automatische Prüfung** — Einstellbares Intervall pro Board (Standard: 24h)
 - **Initial-Check** sofort beim Hinzufügen
 - **Sub-Tab im Karriere-Monitor** — **"📡 Company Boards"** neben "Unternehmen" und "Gefundene Stellen"
 - **Treffer-Feed pro Board** — aufklappbar, mit Merkzettel-Integration
 - **Neu-Badge** — Neufunde werden farblich hervorgehoben
+
+### Verdeckter Stellenmarkt (Funding/News-Watcher)
+Firmen, die gerade eine Finanzierungsrunde closen, Standorte eröffnen oder ein Executive verlieren, stellen meist 4-8 Wochen später ein. Der Funding-Watcher liest stündlich RSS-Feeds und filtert auf Wachstumssignale:
+- **Quellen** — deutsche-startups.de, EU-Startups, tech.eu
+- **Filter** — Series A-D · Seed/Pre-Seed · Mio. Euro / Million Euro · raises / secures / sammelt / erhält / schließt Runde · Expansion / neuer Standort / eröffnet Büro
+- **Firmenname-Heuristik** — Aus dem Titel extrahiert (z. B. „Berlin-based Elephant raises €5M…" → `Elephant`)
+- **Übernehmen in Watch** — Per 👁-Button direkt zum Karriere-Monitor mit vorbefülltem Firmennamen
+- **Sub-Tab** — **"💎 Verdeckter Markt"** im Karriere-Monitor-Tab
+- **Manueller Refresh** — Button „🔄 Jetzt aktualisieren" stößt alle Feeds sofort an
+- **Intervall** — `FUNDING_INTERVAL_HOURS` in `.env` (Standard: 6h)
 
 ### Karriere-Monitor
 Automatische Überwachung von Unternehmens-Karriereseiten auf neue passende Stellen:
@@ -253,6 +266,7 @@ cp .env.example .env
 | `WATCH_INTERVAL_MINUTES` | Wie oft der Scheduler fällige Watches prüft, in Minuten (Standard: `60`) | optional |
 | `WATCH_SCRAPE_DELAY` | Wartezeit in Sekunden zwischen zwei aufeinanderfolgenden Scrapes (Standard: `5`) | optional |
 | `WATCH_MAX_PAGES` | Maximale Seitenanzahl pro Karriereseite bei Pagination (Standard: `10`) | optional |
+| `FUNDING_INTERVAL_HOURS` | RSS-Polling-Intervall für den Funding/News-Watcher (Standard: `6`) | optional |
 | `VAPID_PUBLIC_KEY` | Public Key für Web-Push-Benachrichtigungen | für Web-Push |
 | `VAPID_PRIVATE_KEY` | Private Key für Web-Push-Benachrichtigungen | für Web-Push |
 | `VAPID_SUBJECT` | Kontakt-URL für Web-Push (z. B. `mailto:admin@example.com`) | für Web-Push |
@@ -316,6 +330,7 @@ Internet
         │     ├─► /jobs/jobicy   Jobicy-Proxy (mit 5-Min-Cache)
         │     ├─► /jobs/remoteok RemoteOK-Proxy (mit 5-Min-Cache, nur Remote-Modus)
         │     ├─► /jobs/muse     The Muse-Proxy (mit 5-Min-Cache)
+        │     ├─► /jobs/arbeitnow Arbeitnow-Proxy (mit 5-Min-Cache, DACH/EU Tech)
         │     ├─► /auth/*        Registrierung, Login, Logout, Passwort-Reset
         │     ├─► /user/data     Gespeicherte Jobs & Jira-Config (pro User)
         │     ├─► /user/notifications   Benachrichtigungs-Einstellungen (pro User)
@@ -325,7 +340,8 @@ Internet
         │     ├─► /jira/fields   Feldliste → Jira REST API
         │     ├─► /watch/*       Karriere-Monitor (Unternehmen, Jobs, globale Keywords)
         │     ├─► /search/alerts/*   Search-Alerts: gespeicherte Suchen (pro User)
-        │     ├─► /boards/*      Company Boards: Greenhouse/Lever (pro User)
+        │     ├─► /boards/*      Company Boards: Greenhouse/Lever/Ashby/Personio (pro User)
+        │     ├─► /funding/*     Verdeckter Markt: Funding/News-Signale (global)
         │     ├─► /user/cvs      CV-Manager (pro User)
         │     ├─► /user/templates    Anschreiben-Vorlagen (pro User)
         │     ├─► /user/profile-summary    KI-Profil (pro User)
@@ -340,7 +356,8 @@ Hintergrund-Threads:
   ├─► Tägliches Backup (02:00 UTC)
   ├─► Watch-Scheduler (prüft fällige Karriereseiten alle 60 Min.)
   ├─► Alert-Scheduler (prüft fällige Search-Alerts alle 60 Min.)
-  ├─► Board-Scheduler (prüft fällige Greenhouse/Lever-Boards alle 60 Min.)
+  ├─► Board-Scheduler (prüft fällige Greenhouse/Lever/Ashby/Personio-Boards alle 60 Min.)
+  ├─► Funding-Watcher (poll RSS-Feeds alle 6h, filtert auf Funding/Wachstumssignale)
   ├─► Digest-Mailer (prüft stündlich auf ausstehende tägliche/wöchentliche E-Mails)
   └─► Weekly-Report (Sonntags 09:00 UTC)
 ```
@@ -376,6 +393,7 @@ Benutzerdaten werden serverseitig in einer **SQLite-Datenbank** gespeichert (per
 | `alert_jobs` | Search-Alerts: gefundene Stellen pro Alert (Titel, Unternehmen, Quelle, Zeitstempel) |
 | `company_boards` | Company-Boards: Greenhouse/Lever-Slugs pro Benutzer (Provider, Slug, Intervall) |
 | `board_jobs` | Company-Boards: gefundene Stellen pro Board (Titel, URL, Standort, Zeitstempel) |
+| `funding_signals` | Verdeckter Markt: Funding/News-Signale aus RSS-Feeds (Quelle, Titel, URL, Firma, Datum) |
 | `cvs` | Lebensläufe pro Benutzer (Name, Markdown-Inhalt, Standard-Flag) |
 | `letter_templates` | Anschreiben-Vorlagen pro Benutzer (Name, Body mit Platzhaltern) |
 | `push_subscriptions` | Web-Push-Subscriptions pro Benutzer (Endpoint, Keys) |
@@ -570,8 +588,9 @@ open http://localhost:5500
 | Push | Web Push (VAPID) via pywebpush |
 | E-Mail | SMTP (Benachrichtigungen + Passwort-Reset + Wochenreport) |
 | Reverse Proxy / HTTPS | Caddy (automatisches Let's Encrypt) |
-| Jobdaten | [Adzuna](https://developer.adzuna.com/) · [Bundesagentur](https://jobsuche.api.bund.dev/) · [Jobicy](https://jobicy.com/) · [RemoteOK](https://remoteok.com/) · [The Muse](https://www.themuse.com/developers) |
-| Company-Boards | [Greenhouse](https://developers.greenhouse.io/job-board.html) · [Lever](https://github.com/lever/postings-api) |
+| Jobdaten | [Adzuna](https://developer.adzuna.com/) · [Bundesagentur](https://jobsuche.api.bund.dev/) · [Jobicy](https://jobicy.com/) · [RemoteOK](https://remoteok.com/) · [The Muse](https://www.themuse.com/developers) · [Arbeitnow](https://documenter.getpostman.com/view/18545278/UVJbJdKh) |
+| Company-Boards | [Greenhouse](https://developers.greenhouse.io/job-board.html) · [Lever](https://github.com/lever/postings-api) · [Ashby](https://developers.ashbyhq.com/reference/public-job-board-api) · [Personio XML-Feed](https://support.personio.de/hc/en-us/articles/360001005280) |
+| Funding-Signale | RSS: [deutsche-startups.de](https://www.deutsche-startups.de/feed/) · [EU-Startups](https://www.eu-startups.com/feed/) · [tech.eu](https://tech.eu/feed/) |
 | KI | [Anthropic Claude API](https://docs.anthropic.com/) (optional) |
 | Container | Docker Compose |
 | Jira | Atlassian REST API v3 · ADF |

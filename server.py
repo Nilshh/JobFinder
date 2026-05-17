@@ -49,6 +49,7 @@ BACKUP_HOUR = int(os.environ.get("BACKUP_HOUR", "2"))   # UTC-Stunde für tägli
 WATCH_INTERVAL_MINUTES = int(os.environ.get("WATCH_INTERVAL_MINUTES", "60"))  # Prüfintervall
 WATCH_SCRAPE_DELAY     = int(os.environ.get("WATCH_SCRAPE_DELAY", "5"))       # Sekunden zwischen zwei Scrapes
 WATCH_MAX_PAGES        = int(os.environ.get("WATCH_MAX_PAGES",    "10"))      # Max. Seiten pro Karriereseite
+FUNDING_INTERVAL_HOURS = int(os.environ.get("FUNDING_INTERVAL_HOURS", "6"))    # RSS-Polling-Intervall für Funding/News
 
 # Web Push (VAPID) — optional. Ohne Keys bleibt Push deaktiviert.
 VAPID_PUBLIC_KEY  = os.environ.get("VAPID_PUBLIC_KEY", "")
@@ -876,6 +877,20 @@ def init_db():
             )
         """)
         db.execute("CREATE INDEX IF NOT EXISTS idx_push_user ON push_subscriptions(user_id)")
+        # ── Funding/News-Signale (verdeckter Stellenmarkt) ──
+        db.execute("""
+            CREATE TABLE IF NOT EXISTS funding_signals (
+                id           INTEGER PRIMARY KEY AUTOINCREMENT,
+                source       TEXT NOT NULL,
+                title        TEXT NOT NULL,
+                url          TEXT NOT NULL UNIQUE,
+                company      TEXT,
+                summary      TEXT,
+                published_at TEXT,
+                fetched_at   TEXT DEFAULT (datetime('now'))
+            )
+        """)
+        db.execute("CREATE INDEX IF NOT EXISTS idx_funding_published ON funding_signals(published_at)")
 
     # Bootstrap: promote ADMIN_USER from env if set
     if ADMIN_USER:
@@ -1353,6 +1368,25 @@ def jobs_jobicy():
         return jsonify(data), status
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+
+# ── Jobs (Arbeitnow proxy – DACH / EU Tech) ─────────────────────
+
+@app.route("/jobs/arbeitnow")
+def jobs_arbeitnow():
+    """Arbeitnow Job-Board API — kostenlos, DACH/EU-Fokus, vor allem Tech-Jobs.
+    API liefert eine Seite à 100 Jobs unter https://www.arbeitnow.com/api/job-board-api
+    Filterung nach Titel passiert clientseitig (analog RemoteOK/Muse)."""
+    try:
+        data, status = _cached_api_get(
+            "arbeitnow",
+            "https://www.arbeitnow.com/api/job-board-api",
+            {}
+        )
+        jobs = (data or {}).get("data", []) if isinstance(data, dict) else []
+        return jsonify({"jobs": jobs, "count": len(jobs)}), status
+    except Exception as e:
+        return jsonify({"error": str(e), "jobs": [], "count": 0}), 500
 
 
 # ── Jobs (RemoteOK proxy – Remote Jobs) ─────────────────────────
@@ -2162,6 +2196,47 @@ def _fetch_lever_jobs(slug):
     } for j in (data or [])]
 
 
+def _fetch_ashby_jobs(slug):
+    """Lädt Jobs von Ashby-Board (z. B. Notion, Linear, Vercel, Ramp)."""
+    url = f"https://api.ashbyhq.com/posting-api/job-board/{slug}"
+    r = requests.get(url, params={"includeCompensation": "true"}, timeout=15)
+    r.raise_for_status()
+    data = r.json()
+    out = []
+    for j in (data.get("jobs") or []):
+        loc = j.get("location") or ""
+        if not loc and j.get("isRemote"):
+            loc = "Remote"
+        out.append({
+            "title":    j.get("title", ""),
+            "url":      j.get("jobUrl") or j.get("applyUrl", ""),
+            "location": loc,
+        })
+    return out
+
+
+def _fetch_personio_jobs(slug):
+    """Lädt Jobs vom Personio-Karriere-Feed (XML). Slug = Subdomain.
+    Beispiel: 'trade-republic' → https://trade-republic.jobs.personio.de/xml"""
+    import xml.etree.ElementTree as ET
+    url = f"https://{slug}.jobs.personio.de/xml"
+    r = requests.get(url, timeout=15, headers={"User-Agent": "JobPipeline/1.0"})
+    r.raise_for_status()
+    root = ET.fromstring(r.content)
+    out = []
+    for pos in root.iter("position"):
+        def _t(tag):
+            el = pos.find(tag)
+            return (el.text or "").strip() if el is not None and el.text else ""
+        pid    = _t("id")
+        name   = _t("name")
+        office = _t("office")
+        job_url = f"https://{slug}.jobs.personio.de/job/{pid}" if pid else f"https://{slug}.jobs.personio.de/"
+        if name:
+            out.append({"title": name, "url": job_url, "location": office})
+    return out
+
+
 def _save_board_results(board_id, jobs):
     now = datetime.now(timezone.utc).isoformat()
     with get_db() as db:
@@ -2188,14 +2263,19 @@ def _save_board_results(board_id, jobs):
     return new_count
 
 
+BOARD_PROVIDERS = {
+    "greenhouse": _fetch_greenhouse_jobs,
+    "lever":      _fetch_lever_jobs,
+    "ashby":      _fetch_ashby_jobs,
+    "personio":   _fetch_personio_jobs,
+}
+
 def _check_board(board):
     """Lädt Jobs für ein Board, speichert neue. Gibt new_count zurück."""
-    if board["provider"] == "greenhouse":
-        jobs = _fetch_greenhouse_jobs(board["slug"])
-    elif board["provider"] == "lever":
-        jobs = _fetch_lever_jobs(board["slug"])
-    else:
+    fetcher = BOARD_PROVIDERS.get(board["provider"])
+    if not fetcher:
         raise ValueError(f"Unbekannter Provider: {board['provider']}")
+    jobs = fetcher(board["slug"])
     return _save_board_results(board["id"], jobs), len(jobs)
 
 
@@ -2245,8 +2325,8 @@ def boards_create():
     provider = (data.get("provider") or "").strip().lower()
     slug     = (data.get("slug") or "").strip()
     name     = (data.get("name") or slug).strip()
-    if provider not in ("greenhouse", "lever"):
-        return jsonify({"error": "Provider muss greenhouse oder lever sein"}), 400
+    if provider not in BOARD_PROVIDERS:
+        return jsonify({"error": "Provider muss greenhouse, lever, ashby oder personio sein"}), 400
     if not slug:
         return jsonify({"error": "Slug ist Pflicht"}), 400
     interval = int(data.get("check_interval_hours", 24))
@@ -3184,6 +3264,186 @@ def _schedule_board_checks():
     threading.Thread(target=_loop, daemon=True, name="board-checker").start()
 
 _schedule_board_checks()
+
+
+# ══════════════════════════════════════════════════════════════════
+# Funding/News-Watcher — verdeckter Stellenmarkt
+# ══════════════════════════════════════════════════════════════════
+# Idee: Firmen, die gerade eine Runde closen, Standorte eröffnen oder ein
+# Executive verlieren, stellen meist 4-8 Wochen später ein. Wir polln RSS-
+# Feeds, filtern auf Funding-/Wachstums-Signale und zeigen die Treffer als
+# Kandidaten für Watches/Boards/Initiativbewerbungen.
+
+FUNDING_FEEDS = [
+    ("deutsche-startups",  "https://www.deutsche-startups.de/feed/"),
+    ("eu-startups",        "https://www.eu-startups.com/feed/"),
+    ("tech.eu",            "https://tech.eu/feed/"),
+]
+
+# Signale, die in einem Titel oder Teaser auf Funding/Wachstum hinweisen.
+# Die Liste ist bewusst breit (DE + EN), um sowohl Series-Runden als auch
+# Standort-/Team-Expansion zu erfassen.
+_FUNDING_RE = re.compile(
+    r"\b("
+    r"series\s*[a-d]\b|seed\s*round|pre-?seed|funding round|raises?|raised|"
+    r"secures?|fundraising|sammelt|holt|erhält|schliesst|schließt|"
+    r"finanzierungsrunde|kapitalrunde|investment|invest(?:iert|ment runde)?|"
+    r"mio\.?\s*(?:€|euro)|million euro|m€|€\s*\d+m|"
+    r"expansion|neuer standort|eröffnet büro|opens office|grows team|wachstum"
+    r")\b",
+    re.IGNORECASE,
+)
+
+# Heuristik: erstes Wort/Phrase vor "raises|secures|erhält|holt|sammelt|schließt"
+_COMPANY_RE = re.compile(
+    r"^\s*([A-ZÄÖÜ][\wÄÖÜäöüß.&'-]*(?:\s+[A-ZÄÖÜ0-9][\wÄÖÜäöüß.&'-]*){0,3})"
+    r"\s+(?:raises?|secures?|erhält|holt|sammelt|schliesst|schließt|raised)",
+    re.IGNORECASE,
+)
+
+
+def _extract_company(title):
+    """Heuristische Firmenname-Extraktion aus Titel. Leerstring wenn unklar."""
+    m = _COMPANY_RE.match(title or "")
+    return m.group(1).strip() if m else ""
+
+
+def _fetch_funding_feed(source, url):
+    """Liest einen RSS/Atom-Feed, filtert auf Funding-Signale, gibt Liste von Dicts zurück."""
+    import xml.etree.ElementTree as ET
+    r = requests.get(url, timeout=20, headers={"User-Agent": "JobPipeline/1.0"})
+    r.raise_for_status()
+    root = ET.fromstring(r.content)
+
+    def _strip_ns(tag):
+        return tag.split("}", 1)[-1] if "}" in tag else tag
+
+    def _child_text(el, *names):
+        for name in names:
+            for child in el:
+                if _strip_ns(child.tag) == name and child.text:
+                    return child.text.strip()
+        return ""
+
+    def _child_link(el):
+        # RSS: <link>https://…</link>  · Atom: <link href="https://…"/>
+        for child in el:
+            if _strip_ns(child.tag) == "link":
+                if child.text and child.text.strip():
+                    return child.text.strip()
+                href = child.get("href")
+                if href:
+                    return href.strip()
+        return ""
+
+    items = []
+    for el in root.iter():
+        if _strip_ns(el.tag) in ("item", "entry"):
+            items.append(el)
+
+    out = []
+    for item in items:
+        title = _child_text(item, "title")
+        link  = _child_link(item)
+        desc  = _child_text(item, "description", "summary", "content", "encoded")
+        pub   = _child_text(item, "pubDate", "published", "updated", "date")
+        if not title or not link:
+            continue
+        if not (_FUNDING_RE.search(title) or _FUNDING_RE.search(desc)):
+            continue
+        clean_desc = BeautifulSoup(desc, "html.parser").get_text(" ", strip=True)
+        out.append({
+            "source":       source,
+            "title":        title,
+            "url":          link,
+            "company":      _extract_company(title),
+            "summary":      clean_desc[:500],
+            "published_at": pub,
+        })
+    return out
+
+
+def _save_funding_signals(items):
+    """Speichert neue Signale (URL ist UNIQUE → IGNORE-Konflikte). Gibt new_count zurück."""
+    new = 0
+    with get_db() as db:
+        for it in items:
+            try:
+                cur = db.execute(
+                    "INSERT OR IGNORE INTO funding_signals (source, title, url, company, summary, published_at) "
+                    "VALUES (?, ?, ?, ?, ?, ?)",
+                    [it["source"], it["title"], it["url"], it["company"], it["summary"], it["published_at"]]
+                )
+                if cur.rowcount > 0:
+                    new += 1
+            except Exception as e:
+                print(f"[Funding] DB-Fehler bei {it['url']}: {e}", flush=True)
+    return new
+
+
+def _run_funding_checks():
+    """Holt alle Feeds und speichert neue Signale."""
+    total_new = 0
+    for source, url in FUNDING_FEEDS:
+        try:
+            items = _fetch_funding_feed(source, url)
+            n = _save_funding_signals(items)
+            total_new += n
+            print(f"[Funding] {source}: {len(items)} Signale ({n} neu)", flush=True)
+        except Exception as e:
+            print(f"[Funding] Fehler bei {source}: {e}", flush=True)
+    return total_new
+
+
+def _schedule_funding_checks():
+    def _loop():
+        # Initial-Run kurz nach Startup (60s), damit beim ersten App-Aufruf Daten da sind.
+        time.sleep(60)
+        try:
+            _run_funding_checks()
+        except Exception as e:
+            print(f"[Funding] Initial-Fehler: {e}", flush=True)
+        while True:
+            time.sleep(FUNDING_INTERVAL_HOURS * 3600)
+            try:
+                _run_funding_checks()
+            except Exception as e:
+                print(f"[Funding] Scheduler-Fehler: {e}", flush=True)
+    threading.Thread(target=_loop, daemon=True, name="funding-checker").start()
+
+_schedule_funding_checks()
+
+
+@app.route("/funding/signals", methods=["GET", "OPTIONS"])
+@login_required
+def funding_signals_list():
+    limit = min(int(request.args.get("limit", 100) or 100), 500)
+    with get_db() as db:
+        rows = db.execute(
+            "SELECT id, source, title, url, company, summary, published_at, fetched_at "
+            "FROM funding_signals ORDER BY COALESCE(published_at, fetched_at) DESC LIMIT ?",
+            [limit]
+        ).fetchall()
+    return jsonify([dict(r) for r in rows])
+
+
+@app.route("/funding/check", methods=["POST", "OPTIONS"])
+@login_required
+def funding_check_now():
+    """Manueller Trigger — sammelt sofort alle Feeds neu."""
+    try:
+        n = _run_funding_checks()
+        return jsonify({"ok": True, "new": n})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/funding/signals/<int:sid>", methods=["DELETE", "OPTIONS"])
+@login_required
+def funding_signal_delete(sid):
+    with get_db() as db:
+        db.execute("DELETE FROM funding_signals WHERE id = ?", [sid])
+    return jsonify({"ok": True})
 
 
 # ══════════════════════════════════════════════════════════════════

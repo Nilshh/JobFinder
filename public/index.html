@@ -241,6 +241,7 @@
       <button class="wstab wstab-active" id="wst1" onclick="switchWatchSubTab('companies')">🏢 Unternehmen</button>
       <button class="wstab" id="wst2" onclick="switchWatchSubTab('jobs')">🔍 Gefundene Stellen<span id="watchJobsTabCount" style="color:#555570;font-weight:400;margin-left:3px;"></span></button>
       <button class="wstab" id="wst3" onclick="switchWatchSubTab('boards')">📡 Company Boards</button>
+      <button class="wstab" id="wst4" onclick="switchWatchSubTab('funding')">💎 Verdeckter Markt</button>
     </div>
     <!-- Aktionsleiste: Unternehmen -->
     <div id="watchCompanyActions" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
@@ -276,14 +277,16 @@
   <!-- Pane: Company Boards -->
   <div id="watchPaneBoards" style="display:none">
     <div class="watch-gkw-card" style="margin-bottom:14px;">
-      <div class="wgkw-title">📡 Company Boards (Greenhouse / Lever)</div>
-      <div class="wgkw-sub" style="margin-bottom:10px;">Strukturierte APIs vieler Scale-ups (z.B. Airbnb, Stripe, Shopify) – schneller und zuverlässiger als Karriereseiten-Scraping.</div>
+      <div class="wgkw-title">📡 Company Boards (Greenhouse / Lever / Ashby / Personio)</div>
+      <div class="wgkw-sub" style="margin-bottom:10px;">Strukturierte APIs vieler Scale-ups & DACH-Mittelständler – schneller und zuverlässiger als Karriereseiten-Scraping.</div>
       <div style="display:grid;grid-template-columns:130px 1fr 130px auto;gap:8px;">
         <select class="inp" id="bdProvider" style="cursor:pointer;">
           <option value="greenhouse">Greenhouse</option>
           <option value="lever">Lever</option>
+          <option value="ashby">Ashby</option>
+          <option value="personio">Personio</option>
         </select>
-        <input type="text" class="inp" id="bdSlug" placeholder="Slug (z.B. airbnb, stripe, shopify)">
+        <input type="text" class="inp" id="bdSlug" placeholder="Slug (z.B. airbnb, stripe, notion, trade-republic)">
         <input type="text" class="inp" id="bdName" placeholder="Anzeigename (optional)">
         <button type="button" class="msavebtn" style="width:auto;padding:8px 18px;" onclick="addBoard()">+ Hinzufügen</button>
       </div>
@@ -292,7 +295,28 @@
     <div id="boardsList"></div>
     <div id="boardsEmpty" class="savempty" style="display:none">
       Noch keine Boards hinzugefügt.<br>
-      <span style="font-size:13px;">Slug aus der Karriereseite-URL: <code style="color:#ca98ff">boards.greenhouse.io/<b>airbnb</b></code> oder <code style="color:#ca98ff">jobs.lever.co/<b>shopify</b></code></span>
+      <span style="font-size:13px;">Slug aus der Karriereseite-URL:
+        <code style="color:#ca98ff">boards.greenhouse.io/<b>airbnb</b></code>,
+        <code style="color:#ca98ff">jobs.lever.co/<b>shopify</b></code>,
+        <code style="color:#ca98ff">jobs.ashbyhq.com/<b>notion</b></code> oder
+        <code style="color:#ca98ff"><b>trade-republic</b>.jobs.personio.de</code>
+      </span>
+    </div>
+  </div>
+  <!-- Pane: Verdeckter Markt (Funding/News) -->
+  <div id="watchPaneFunding" style="display:none">
+    <div class="watch-gkw-card" style="margin-bottom:14px;">
+      <div class="wgkw-title">💎 Verdeckter Stellenmarkt — Funding & Wachstumssignale</div>
+      <div class="wgkw-sub" style="margin-bottom:10px;">Firmen, die gerade eine Runde closen, Standorte eröffnen oder ein Executive verlieren, stellen meist 4-8 Wochen später ein. Quelle: deutsche-startups.de, EU-Startups, tech.eu.</div>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <button type="button" class="clrbtn" onclick="checkFundingNow()" style="background:rgba(38,132,255,.12);border-color:rgba(38,132,255,.35);color:#4da3ff;">🔄 Jetzt aktualisieren</button>
+        <span id="fundingStatus" class="mstatus" style="margin:0;"></span>
+      </div>
+    </div>
+    <div id="fundingList"></div>
+    <div id="fundingEmpty" class="savempty" style="display:none">
+      Noch keine Signale eingesammelt.<br>
+      <span style="font-size:13px;">Der Hintergrund-Scheduler prüft die Feeds alle <code style="color:#ca98ff">FUNDING_INTERVAL_HOURS</code> Stunden. Initial wenige Minuten nach Server-Start.</span>
     </div>
   </div>
 </div>

@@ -263,6 +263,24 @@ function normMuseJob(j, title){
   };
 }
 
+// ── Arbeitnow Job Normalizer (DACH/EU Tech) ──
+function normArbeitnowJob(j, title){
+  const loc = j.location || (j.remote ? "Remote" : "");
+  return {
+    title:         j.title || "",
+    company:       { display_name: j.company_name || "" },
+    location:      { display_name: loc },
+    redirect_url:  j.url || (j.slug ? "https://www.arbeitnow.com/jobs/"+j.slug : ""),
+    created:       j.created_at ? new Date(j.created_at*1000).toISOString() : "",
+    contract_type: (j.job_types || [])[0] || undefined,
+    salary_min:    undefined,
+    salary_max:    undefined,
+    description:   j.description || "",
+    _t:            title,
+    _source:       "Arbeitnow"
+  };
+}
+
 // ── Remote toggle ──
 document.getElementById("remoteToggle").addEventListener("click", () => {
   remoteOnly = !remoteOnly;
@@ -354,12 +372,30 @@ async function doSearch(){
         })
         .catch(()=>({ list:[], count:0 }));
 
-      const [az, ba, jobicy, remoteok, muse] = await Promise.all([azProm, baProm, jobicyProm, remoteokProm, museProm]);
-      // Im Remote-Modus: nur Remote-Quellen; BA immer ausgefiltert
+      // Arbeitnow: für alle Suchen, clientseitig nach Titel/Tags filtern
+      const arbeitnowProm = fetch("/jobs/arbeitnow")
+        .then(r=>r.json())
+        .then(d=>{
+          const tLower = title.toLowerCase();
+          const filtered = (d.jobs||[]).filter(j =>
+            (j.title||"").toLowerCase().includes(tLower) ||
+            (j.tags||[]).some(t => (t||"").toLowerCase().includes(tLower)) ||
+            (j.description||"").toLowerCase().includes(tLower)
+          );
+          return { list: filtered.map(j=>normArbeitnowJob(j,title)), count: filtered.length };
+        })
+        .catch(()=>({ list:[], count:0 }));
+
+      const [az, ba, jobicy, remoteok, muse, arbeitnow] = await Promise.all([azProm, baProm, jobicyProm, remoteokProm, museProm, arbeitnowProm]);
+      // Im Remote-Modus: nur Remote-Quellen; BA immer ausgefiltert.
+      // Arbeitnow im Remote-Modus nur Remote-Stellen, sonst alle.
+      const arbeitnowList = remoteOnly
+        ? arbeitnow.list.filter(j => /remote/i.test(j.location?.display_name||"") || /remote/i.test(j.title||""))
+        : arbeitnow.list;
       const list = remoteOnly
-        ? [...az.list.filter(j=>(j.title||"").toLowerCase().includes("remote")||(j.description||"").toLowerCase().includes("remote")||j._source==="Jobicy"), ...jobicy.list, ...remoteok.list, ...muse.list]
-        : [...az.list,...ba.list,...jobicy.list, ...muse.list];
-      return { title, list, count: az.count+ba.count+jobicy.count+remoteok.count+muse.count };
+        ? [...az.list.filter(j=>(j.title||"").toLowerCase().includes("remote")||(j.description||"").toLowerCase().includes("remote")||j._source==="Jobicy"), ...jobicy.list, ...remoteok.list, ...muse.list, ...arbeitnowList]
+        : [...az.list,...ba.list,...jobicy.list, ...muse.list, ...arbeitnowList];
+      return { title, list, count: az.count+ba.count+jobicy.count+remoteok.count+muse.count+arbeitnow.count };
     }));
 
     const saved = LS.saved(), ignSet = new Set(LS.ignored());
@@ -1344,12 +1380,96 @@ function switchWatchSubTab(tab){
   document.getElementById("watchPaneCompanies").style.display  = tab === "companies" ? "" : "none";
   document.getElementById("watchPaneJobs").style.display       = tab === "jobs"      ? "" : "none";
   document.getElementById("watchPaneBoards").style.display     = tab === "boards"    ? "" : "none";
+  document.getElementById("watchPaneFunding").style.display    = tab === "funding"   ? "" : "none";
   document.getElementById("watchCompanyActions").style.display = tab === "companies" ? "flex" : "none";
   document.getElementById("watchJobActions").style.display     = tab === "jobs"      ? "flex" : "none";
   document.getElementById("wst1").classList.toggle("wstab-active", tab === "companies");
   document.getElementById("wst2").classList.toggle("wstab-active", tab === "jobs");
   document.getElementById("wst3").classList.toggle("wstab-active", tab === "boards");
-  if(tab === "boards") loadBoards();
+  document.getElementById("wst4").classList.toggle("wstab-active", tab === "funding");
+  if(tab === "boards")  loadBoards();
+  if(tab === "funding") loadFundingSignals();
+}
+
+// ── Verdeckter Markt: Funding/News-Signale ──
+async function loadFundingSignals(){
+  if(!AUTH.user) return;
+  try {
+    const r = await fetch("/funding/signals?limit=100", {credentials:"include"});
+    const list = r.ok ? await r.json() : [];
+    renderFundingSignals(list);
+  } catch(e){
+    document.getElementById("fundingList").innerHTML = `<div class="savempty">⚠️ Fehler: ${e.message}</div>`;
+  }
+}
+
+function renderFundingSignals(list){
+  const box = document.getElementById("fundingList");
+  document.getElementById("fundingEmpty").style.display = list.length ? "none" : "block";
+  if(!list.length){ box.innerHTML = ""; return; }
+  box.innerHTML = list.map(s => {
+    const pub = s.published_at
+      ? new Date(s.published_at).toLocaleDateString("de-DE",{year:"numeric",month:"2-digit",day:"2-digit"})
+      : "";
+    const company = s.company ? `<strong style="color:#ca98ff">${esc(s.company)}</strong> · ` : "";
+    return `<div class="watch-company-card" style="display:flex;flex-direction:column;gap:4px;">
+      <div class="wc-header" style="align-items:flex-start;">
+        <div class="wc-title" style="line-height:1.35;">
+          <a href="${esc(s.url)}" target="_blank" rel="noopener" style="color:#f9dcff;text-decoration:none;">${esc(s.title)}</a>
+        </div>
+        <div class="wc-actions">
+          <button class="wc-btn" title="Watch hinzufügen — Karriereseite des Unternehmens überwachen" onclick="prefillWatchFromFunding('${esc(s.company||'').replace(/'/g,"\\'")}', this)">👁</button>
+          <button class="wc-btn wc-del" onclick="dismissFunding(${s.id})" title="Aus Liste entfernen">🗑</button>
+        </div>
+      </div>
+      <div class="wc-meta">${company}<span>${esc(s.source)}</span>${pub?` · <span>${pub}</span>`:""}</div>
+      ${s.summary ? `<div style="font-size:12px;color:#c1a0cb;line-height:1.4;margin-top:4px;">${esc(s.summary).slice(0,300)}${s.summary.length>300?"…":""}</div>` : ""}
+    </div>`;
+  }).join("");
+}
+
+async function checkFundingNow(){
+  const status = document.getElementById("fundingStatus");
+  status.style.color = "#c1a0cb";
+  status.textContent = "Hole Feeds…";
+  try {
+    const r = await fetch("/funding/check", {method:"POST", credentials:"include"});
+    const j = await r.json();
+    if(r.ok){
+      status.style.color = "#22c55e";
+      status.textContent = `✓ ${j.new} neue Signale`;
+      await loadFundingSignals();
+    } else {
+      status.style.color = "#ff8b9a";
+      status.textContent = "⚠️ " + (j.error || "Fehler");
+    }
+  } catch(e){
+    status.style.color = "#ff8b9a";
+    status.textContent = "⚠️ " + e.message;
+  }
+  setTimeout(()=>{ status.textContent = ""; }, 4000);
+}
+
+async function dismissFunding(id){
+  await fetch(`/funding/signals/${id}`, {method:"DELETE", credentials:"include"});
+  await loadFundingSignals();
+}
+
+// Hilft beim Übernehmen: Firmenname ins Watch-Form vorbefüllen und Tab wechseln.
+function prefillWatchFromFunding(company, btn){
+  if(!company){
+    if(btn){ btn.textContent="?"; setTimeout(()=>btn.textContent="👁",1500); }
+    return;
+  }
+  // Tab wechseln + Modal/Formular öffnen wenn vorhanden
+  switchWatchSubTab("companies");
+  const addBtn = document.getElementById("addWatchBtn");
+  if(addBtn) addBtn.click();
+  // Nach kurzer Verzögerung Firmenfeld vorbefüllen (Modal-Render abwarten)
+  setTimeout(()=>{
+    const nameField = document.querySelector('input[placeholder*="Unternehmen" i], input[placeholder*="Firma" i], #wcName, #watchCompanyName');
+    if(nameField){ nameField.value = company; nameField.focus(); }
+  }, 200);
 }
 
 // ── Company Boards (Greenhouse/Lever) ──
