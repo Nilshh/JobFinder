@@ -47,6 +47,16 @@ echo ""
 echo "🚀 Starte Container neu..."
 $COMPOSE up -d
 
+# 3b. Caddy-Reload (Bind-Mount auf Caddyfile triggert kein Recreate)
+echo ""
+echo "🔁 Lade Caddy-Konfiguration neu..."
+if $COMPOSE exec -T caddy caddy reload --config /etc/caddy/Caddyfile 2>/dev/null; then
+    echo "✅ Caddy reloaded"
+else
+    echo "⚠️  Caddy-Reload fehlgeschlagen — versuche Restart..."
+    $COMPOSE restart caddy && echo "✅ Caddy neu gestartet"
+fi
+
 # 4. Health Check
 echo ""
 echo "🩺 Health Check..."
