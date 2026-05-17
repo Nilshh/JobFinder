@@ -1408,9 +1408,14 @@ function renderFundingSignals(list){
   document.getElementById("fundingEmpty").style.display = list.length ? "none" : "block";
   if(!list.length){ box.innerHTML = ""; return; }
   box.innerHTML = list.map(s => {
-    const pub = s.published_at
-      ? new Date(s.published_at).toLocaleDateString("de-DE",{year:"numeric",month:"2-digit",day:"2-digit"})
-      : "";
+    let pub = "";
+    if(s.published_at){
+      const d = new Date(s.published_at);
+      if(!isNaN(d.getTime())){
+        try { pub = d.toLocaleDateString("de-DE",{year:"numeric",month:"2-digit",day:"2-digit"}); }
+        catch(_){ pub = ""; }
+      }
+    }
     const company = s.company ? `<strong style="color:#ca98ff">${esc(s.company)}</strong> · ` : "";
     return `<div class="watch-company-card" style="display:flex;flex-direction:column;gap:4px;">
       <div class="wc-header" style="align-items:flex-start;">
