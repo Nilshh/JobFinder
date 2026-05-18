@@ -561,10 +561,14 @@ function renderResults(jobs, total, arr, where){
       const desc= (j.description||"").replace(/<[^>]+>/g,"").replace(/\s+/g," ").trim().slice(0,200);
       const card = document.createElement("div");
       card.className="jcard"; card.id="jw"+id;
+      const url = j.redirect_url || "";
+      const titleHtml = url
+        ? '<a class="jtitle" href="'+esc(url)+'" target="_blank" rel="noopener" style="color:inherit;text-decoration:none;">'+esc(j.title||"")+'</a>'
+        : '<div class="jtitle">'+esc(j.title||"")+'</div>';
       card.innerHTML =
         '<div class="jcard-top">'+
           '<div>'+
-            '<div class="jtitle">'+esc(j.title||"")+'</div>'+
+            titleHtml+
             '<div class="jco">'+esc(j.company?.display_name||"")+'</div>'+
             '<div class="jmeta">'+
               (j.location?.display_name?'<span class="jmi">📍 '+esc(j.location.display_name)+'</span>':'')+
@@ -578,11 +582,11 @@ function renderResults(jobs, total, arr, where){
             (sal?'<span class="jsal">'+sal+'</span>':'')+
           '</div>'+
         '</div>'+
-        (desc?'<div class="jdesc">'+esc(desc)+'… <a class="jlink" href="'+esc(j.redirect_url||"")+'" target="_blank" rel="noopener">→ Öffnen</a></div>':'')+
+        (desc?'<div class="jdesc">'+esc(desc)+'…</div>':'')+
         '<div class="jactions">'+
+          (url?'<a class="jlink" href="'+esc(url)+'" target="_blank" rel="noopener">→ Stellenanzeige öffnen</a>':'<span class="jnote" style="color:#ff8b9a;">⚠️ Kein Link verfügbar</span>')+
           '<button type="button" class="savebtn" data-id="'+id+'">💾 Speichern</button>'+
           '<button type="button" class="skipbtn" data-id="'+id+'">🚫 Ignorieren</button>'+
-          '<span class="jnote">Wird bei nächster Suche ausgeblendet</span>'+
         '</div>';
       list.appendChild(card);
     });
