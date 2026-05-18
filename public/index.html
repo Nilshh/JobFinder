@@ -308,10 +308,11 @@
     <div class="watch-gkw-card" style="margin-bottom:14px;">
       <div class="wgkw-title">💎 Verdeckter Stellenmarkt — Funding & Wachstumssignale</div>
       <div class="wgkw-sub" style="margin-bottom:10px;">Firmen, die gerade eine Runde closen, Standorte eröffnen oder ein Executive verlieren, stellen meist 4-8 Wochen später ein. Quelle: deutsche-startups.de, EU-Startups, tech.eu.</div>
-      <div style="display:flex;gap:8px;align-items:center;">
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
         <button type="button" class="clrbtn" onclick="checkFundingNow()" style="background:rgba(38,132,255,.12);border-color:rgba(38,132,255,.35);color:#4da3ff;">🔄 Jetzt aktualisieren</button>
         <span id="fundingStatus" class="mstatus" style="margin:0;"></span>
       </div>
+      <div class="chips" id="fundingFilterChips" style="margin-top:10px;"></div>
     </div>
     <div id="fundingList"></div>
     <div id="fundingEmpty" class="savempty" style="display:none">

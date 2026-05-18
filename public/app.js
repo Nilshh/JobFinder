@@ -1392,15 +1392,65 @@ function switchWatchSubTab(tab){
 }
 
 // ── Verdeckter Markt: Funding/News-Signale ──
+// Aktuell ausgewählte Quellen (leere Menge = "alle"). Persistiert in localStorage.
+let _fundingSources = (function(){
+  try { return new Set(JSON.parse(localStorage.getItem("fundingSources") || "[]")); }
+  catch(_){ return new Set(); }
+})();
+
+function _persistFundingSources(){
+  localStorage.setItem("fundingSources", JSON.stringify([..._fundingSources]));
+}
+
 async function loadFundingSignals(){
   if(!AUTH.user) return;
+  // Filter-Chips beim ersten Aufruf rendern (oder bei Refresh aktualisieren).
+  await renderFundingFilterChips();
+  const qs = new URLSearchParams({limit: 100});
+  if(_fundingSources.size > 0) qs.set("source", [..._fundingSources].join(","));
   try {
-    const r = await fetch("/funding/signals?limit=100", {credentials:"include"});
+    const r = await fetch("/funding/signals?"+qs, {credentials:"include"});
     const list = r.ok ? await r.json() : [];
     renderFundingSignals(list);
   } catch(e){
     document.getElementById("fundingList").innerHTML = `<div class="savempty">⚠️ Fehler: ${e.message}</div>`;
   }
+}
+
+async function renderFundingFilterChips(){
+  const box = document.getElementById("fundingFilterChips");
+  if(!box) return;
+  let sources;
+  try {
+    const r = await fetch("/funding/sources", {credentials:"include"});
+    sources = r.ok ? await r.json() : [];
+  } catch(_){ sources = []; }
+  if(!sources.length){ box.innerHTML = ""; return; }
+  const allActive = _fundingSources.size === 0;
+  const chips = [
+    `<button type="button" class="chip${allActive ? " on" : ""}" onclick="setFundingFilter('')">Alle</button>`,
+    ...sources.map(s => {
+      const on = _fundingSources.has(s.key);
+      const cnt = s.count > 0 ? ` <span style="opacity:.6;font-size:11px;">(${s.count})</span>` : "";
+      return `<button type="button" class="chip${on ? " on" : ""}" onclick="toggleFundingFilter('${esc(s.key)}')">${esc(s.label)}${cnt}</button>`;
+    }),
+  ];
+  box.innerHTML = chips.join("");
+}
+
+function setFundingFilter(key){
+  // Leerer Key = "Alle" → Filter zurücksetzen.
+  _fundingSources.clear();
+  if(key) _fundingSources.add(key);
+  _persistFundingSources();
+  loadFundingSignals();
+}
+
+function toggleFundingFilter(key){
+  if(_fundingSources.has(key)) _fundingSources.delete(key);
+  else _fundingSources.add(key);
+  _persistFundingSources();
+  loadFundingSignals();
 }
 
 function renderFundingSignals(list){

@@ -3418,13 +3418,44 @@ _schedule_funding_checks()
 @login_required
 def funding_signals_list():
     limit = min(int(request.args.get("limit", 100) or 100), 500)
+    # source kann eine oder mehrere kommagetrennte Quellen sein (z.B. "deutsche-startups,tech.eu").
+    sources_raw = (request.args.get("source", "") or "").strip()
+    sources = [s.strip() for s in sources_raw.split(",") if s.strip()] if sources_raw else []
+    valid = {s for s, _ in FUNDING_FEEDS}
+    sources = [s for s in sources if s in valid]
+    sql = (
+        "SELECT id, source, title, url, company, summary, published_at, fetched_at "
+        "FROM funding_signals"
+    )
+    params = []
+    if sources:
+        placeholders = ",".join("?" for _ in sources)
+        sql += f" WHERE source IN ({placeholders})"
+        params.extend(sources)
+    sql += " ORDER BY COALESCE(published_at, fetched_at) DESC LIMIT ?"
+    params.append(limit)
+    with get_db() as db:
+        rows = db.execute(sql, params).fetchall()
+    return jsonify([dict(r) for r in rows])
+
+
+@app.route("/funding/sources", methods=["GET", "OPTIONS"])
+@login_required
+def funding_sources():
+    """Liefert die konfigurierten Quellen + Anzahl Signale pro Quelle (für Filter-UI)."""
     with get_db() as db:
         rows = db.execute(
-            "SELECT id, source, title, url, company, summary, published_at, fetched_at "
-            "FROM funding_signals ORDER BY COALESCE(published_at, fetched_at) DESC LIMIT ?",
-            [limit]
+            "SELECT source, COUNT(*) AS n FROM funding_signals GROUP BY source"
         ).fetchall()
-    return jsonify([dict(r) for r in rows])
+    counts = {r["source"]: r["n"] for r in rows}
+    return jsonify([
+        {"key": key, "label": label, "count": counts.get(key, 0)}
+        for key, label in [
+            ("deutsche-startups", "deutsche-startups.de"),
+            ("eu-startups",       "EU-Startups"),
+            ("tech.eu",           "tech.eu"),
+        ]
+    ])
 
 
 @app.route("/funding/check", methods=["POST", "OPTIONS"])
