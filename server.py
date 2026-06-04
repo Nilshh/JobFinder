@@ -519,8 +519,14 @@ def _send_watch_notification(user_id, new_jobs, force=False):
     if not SMTP_HOST or not SMTP_USER:
         return
     with get_db() as db:
-        user = db.execute("SELECT email, username, watch_notify_enabled FROM users WHERE id = ?", [user_id]).fetchone()
-    if not user or not user["email"] or not user["watch_notify_enabled"]:
+        user = db.execute(
+            "SELECT email, notify_email, username, watch_notify_enabled FROM users WHERE id = ?",
+            [user_id]
+        ).fetchone()
+    if not user or not user["watch_notify_enabled"]:
+        return
+    recipient = (user["notify_email"] or "").strip() or (user["email"] or "").strip()
+    if not recipient:
         return
     # Throttle pro (Kanal, User): max 1x pro Stunde — Watch und Alert haben getrennte Buckets.
     throttle_key = ("watch", user_id)
@@ -553,15 +559,15 @@ def _send_watch_notification(user_id, new_jobs, force=False):
     msg = MIMEMultipart("alternative")
     msg["Subject"] = f"JobPipeline – {len(new_jobs)} neue Stellen gefunden"
     msg["From"]    = SMTP_FROM
-    msg["To"]      = user["email"]
+    msg["To"]      = recipient
     msg.attach(MIMEText(body, "html"))
     try:
         with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as smtp:
             smtp.ehlo()
             smtp.starttls()
             smtp.login(SMTP_USER, SMTP_PASS)
-            smtp.sendmail(SMTP_FROM, user["email"], msg.as_string())
-        print(f"[Notify] E-Mail an {user['username']} gesendet ({len(new_jobs)} Jobs)", flush=True)
+            smtp.sendmail(SMTP_FROM, recipient, msg.as_string())
+        print(f"[Notify] E-Mail an {user['username']} → {recipient} ({len(new_jobs)} Jobs)", flush=True)
     except Exception as e:
         print(f"[Notify] E-Mail-Fehler für {user['username']}: {e}", flush=True)
     # Zusätzlich Web-Push (falls aktiviert)
@@ -689,6 +695,7 @@ def init_db():
             ("watch_notify_enabled",    "INTEGER NOT NULL DEFAULT 1"),
             ("watch_notify_frequency",  "TEXT DEFAULT 'instant'"),
             ("watch_last_digest_at",    "TEXT"),
+            ("notify_email",            "TEXT DEFAULT ''"),
             ("profile_summary",         "TEXT DEFAULT ''"),
         ]:
             try:
@@ -1207,13 +1214,20 @@ def change_password():
 def get_notifications():
     with get_db() as db:
         row = db.execute(
-            "SELECT watch_notify_enabled, watch_notify_frequency FROM users WHERE id = ?",
+            "SELECT watch_notify_enabled, watch_notify_frequency, notify_email, email FROM users WHERE id = ?",
             [session["user_id"]]
         ).fetchone()
     return jsonify({
-        "enabled":   bool(row["watch_notify_enabled"]) if row else True,
-        "frequency": row["watch_notify_frequency"] if row else "instant",
+        "enabled":      bool(row["watch_notify_enabled"]) if row else True,
+        "frequency":    row["watch_notify_frequency"] if row else "instant",
+        # Explizit gesetzte Alternative; leerer String = nicht gesetzt → Account-Mail nutzen.
+        "notify_email": (row["notify_email"] or "") if row else "",
+        # Account-Mail zum Anzeigen als Default-Hinweis im UI.
+        "account_email": (row["email"] or "") if row else "",
     })
+
+
+_EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
 
 @app.route("/user/notifications", methods=["PATCH"])
@@ -1225,6 +1239,12 @@ def update_notifications():
         updates["watch_notify_enabled"] = 1 if data["enabled"] else 0
     if "frequency" in data and data["frequency"] in ("instant", "daily", "weekly"):
         updates["watch_notify_frequency"] = data["frequency"]
+    if "notify_email" in data:
+        val = (data["notify_email"] or "").strip()
+        # Leerstring = explizit zurücksetzen (Account-Mail nutzen). Sonst grobe Format-Prüfung.
+        if val and not _EMAIL_RE.match(val):
+            return jsonify({"error": "Ungültige E-Mail-Adresse"}), 400
+        updates["notify_email"] = val
     if not updates:
         return jsonify({"error": "Keine gültigen Felder"}), 400
     set_clause = ", ".join(f"{k} = ?" for k in updates)
@@ -1963,8 +1983,14 @@ def _send_alert_notification(user_id, search_name, new_jobs, search_id=None, for
     if not SMTP_HOST or not SMTP_USER:
         return
     with get_db() as db:
-        user = db.execute("SELECT email, username, watch_notify_enabled FROM users WHERE id = ?", [user_id]).fetchone()
-    if not user or not user["email"] or not user["watch_notify_enabled"]:
+        user = db.execute(
+            "SELECT email, notify_email, username, watch_notify_enabled FROM users WHERE id = ?",
+            [user_id]
+        ).fetchone()
+    if not user or not user["watch_notify_enabled"]:
+        return
+    recipient = (user["notify_email"] or "").strip() or (user["email"] or "").strip()
+    if not recipient:
         return
     throttle_key = ("alert", user_id, search_id)
     now = time.time()
@@ -1996,13 +2022,13 @@ def _send_alert_notification(user_id, search_name, new_jobs, search_id=None, for
     msg = MIMEMultipart("alternative")
     msg["Subject"] = f"JobPipeline – {len(new_jobs)} neue Treffer für „{search_name}\""
     msg["From"]    = SMTP_FROM
-    msg["To"]      = user["email"]
+    msg["To"]      = recipient
     msg.attach(MIMEText(body, "html"))
     try:
         with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as smtp:
             smtp.ehlo(); smtp.starttls(); smtp.login(SMTP_USER, SMTP_PASS)
-            smtp.sendmail(SMTP_FROM, user["email"], msg.as_string())
-        print(f"[Alert] E-Mail an {user['username']} ({len(new_jobs)} Jobs für „{search_name}\")", flush=True)
+            smtp.sendmail(SMTP_FROM, recipient, msg.as_string())
+        print(f"[Alert] E-Mail an {user['username']} → {recipient} ({len(new_jobs)} Jobs für „{search_name}\")", flush=True)
     except Exception as e:
         print(f"[Alert] E-Mail-Fehler: {e}", flush=True)
     _send_push(user_id, f"🔔 {len(new_jobs)} neue Treffer", f"Alert „{search_name}\" hat neue Stellen gefunden.", "/")
@@ -3503,10 +3529,16 @@ def _send_weekly_report():
     if not SMTP_HOST or not SMTP_USER:
         return
     since = (datetime.now(timezone.utc) - timedelta(days=7)).isoformat()
+    # Nutzer mit aktiver Notification UND mindestens einer Empfänger-Adresse
+    # (notify_email oder Account-Mail). COALESCE/NULLIF spannt den Fallback auf.
     with get_db() as db:
-        users = [dict(r) for r in db.execute(
-            "SELECT id, username, email FROM users WHERE email IS NOT NULL AND email != '' AND watch_notify_enabled = 1"
-        ).fetchall()]
+        users = [dict(r) for r in db.execute("""
+            SELECT id, username, email, notify_email,
+                   COALESCE(NULLIF(TRIM(notify_email),''), TRIM(email)) AS recipient
+            FROM users
+            WHERE watch_notify_enabled = 1
+              AND COALESCE(NULLIF(TRIM(notify_email),''), TRIM(email)) != ''
+        """).fetchall()]
     for u in users:
         with get_db() as db:
             watch_n = db.execute(
@@ -3542,12 +3574,12 @@ def _send_weekly_report():
             msg = MIMEMultipart("alternative")
             msg["Subject"] = f"JobPipeline – {total} neue Stellen diese Woche"
             msg["From"]    = SMTP_FROM
-            msg["To"]      = u["email"]
+            msg["To"]      = u["recipient"]
             msg.attach(MIMEText(body, "html"))
             with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as smtp:
                 smtp.ehlo(); smtp.starttls(); smtp.login(SMTP_USER, SMTP_PASS)
-                smtp.sendmail(SMTP_FROM, u["email"], msg.as_string())
-            print(f"[Weekly] Report an {u['username']}", flush=True)
+                smtp.sendmail(SMTP_FROM, u["recipient"], msg.as_string())
+            print(f"[Weekly] Report an {u['username']} → {u['recipient']}", flush=True)
         except Exception as e:
             print(f"[Weekly] Fehler: {e}", flush=True)
 

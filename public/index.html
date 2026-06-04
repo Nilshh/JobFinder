@@ -707,6 +707,11 @@
         <option value="weekly">Wöchentliche Zusammenfassung</option>
       </select>
     </div>
+    <div class="mfield">
+      <label class="lbl" for="notifyEmail">Alternative E-Mail-Adresse <span style="font-weight:400;color:#6b6b80;font-size:11px;">(optional)</span></label>
+      <input type="email" class="inp" id="notifyEmail" placeholder="" autocomplete="email">
+      <div style="font-size:11px;color:#6b6b80;margin-top:6px;" id="notifyEmailHint">Wenn gesetzt, gehen alle Job-Mails (Karriere-Monitor, Search-Alerts, Wochenreport) an diese Adresse statt an die Account-Mail. Leer lassen = Account-Mail.</div>
+    </div>
     <div id="notifyStatus" class="mstatus"></div>
     <div class="mactions" style="justify-content:flex-end;">
       <button type="button" class="mcancelbtn" onclick="enablePushNotifications()" style="border-color:rgba(0,189,253,.3);color:#00bdfd;">🔔 Browser-Push aktivieren</button>

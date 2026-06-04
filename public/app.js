@@ -2904,19 +2904,26 @@ async function loadNotifySettings(){
     const d = await r.json();
     document.getElementById("notifyEnabled").checked    = d.enabled;
     document.getElementById("notifyFrequency").value    = d.frequency || "instant";
+    const mailInput = document.getElementById("notifyEmail");
+    if(mailInput){
+      mailInput.value = d.notify_email || "";
+      // Account-Mail als Placeholder einblenden, damit klar ist was der Fallback ist.
+      if(d.account_email) mailInput.placeholder = d.account_email + " (Account-Mail)";
+    }
   } catch(e){}
 }
 
 async function saveNotifySettings(){
-  const enabled   = document.getElementById("notifyEnabled").checked;
-  const frequency = document.getElementById("notifyFrequency").value;
-  const status    = document.getElementById("notifyStatus");
+  const enabled      = document.getElementById("notifyEnabled").checked;
+  const frequency    = document.getElementById("notifyFrequency").value;
+  const notify_email = (document.getElementById("notifyEmail")?.value || "").trim();
+  const status       = document.getElementById("notifyStatus");
   status.innerHTML = '<span style="color:#6b6b80">Wird gespeichert…</span>';
   try {
     const r = await fetch("/user/notifications", {
       method:"PATCH", credentials:"include",
       headers:{"Content-Type":"application/json"},
-      body: JSON.stringify({enabled, frequency})
+      body: JSON.stringify({enabled, frequency, notify_email})
     });
     if(r.ok){
       status.innerHTML = '<span style="color:#22c55e">✓ Gespeichert.</span>';
