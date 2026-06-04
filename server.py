@@ -333,6 +333,85 @@ def _try_wp_job_manager(url, kw_lower, found, seen):
     return True
 
 
+def _dismiss_cookie_banners(pw_page):
+    """Versucht, gängige Cookie-Consent-Banner zu schließen, damit nachfolgende
+    Klicks (z.B. 'Mehr laden') nicht von einem Modal-Backdrop abgefangen werden.
+
+    Strategie: erst klassische 'Akzeptieren'-Buttons klicken, dann übrig
+    bleibende Overlay-/Backdrop-DIVs per JS aus dem DOM entfernen."""
+    # 1. Bekannte Accept-Button-Selektoren probieren.
+    button_selectors = [
+        # Borlabs Cookie (apriori.de, viele DACH-WP-Seiten)
+        ".brlbs-btn-accept-all",  "#BorlabsCookieBoxBtnAcceptAll",
+        # CookieYes
+        ".cky-btn-accept",
+        # Cookiebot
+        "#CybotCookiebotDialogBodyButtonAccept",
+        "#CybotCookiebotDialogBodyLevelButtonAccept",
+        # Complianz
+        ".cmplz-accept", "#cmplz-accept-all",
+        # OneTrust
+        "#onetrust-accept-btn-handler",
+        # Google Funding Choices / consent.cookiebot.com
+        ".fc-cta-consent",
+        # Usercentrics
+        "button[data-testid='uc-accept-all-button']",
+    ]
+    for sel in button_selectors:
+        try:
+            el = pw_page.query_selector(sel)
+            if el and el.is_visible():
+                el.click(timeout=2000)
+                pw_page.wait_for_timeout(400)
+                break
+        except Exception:
+            pass
+
+    # 2. Text-basierter Fallback: Button mit "Akzeptieren"/"Accept"-Text.
+    accept_texts = ("akzeptieren", "alle akzeptieren", "zustimmen",
+                    "accept all", "accept", "agree", "ok, verstanden")
+    try:
+        for el in pw_page.query_selector_all("button, [role='button']"):
+            if not el.is_visible():
+                continue
+            label = (el.inner_text() or "").strip().lower()
+            if not label or len(label) > 40:
+                continue
+            if any(t == label or label.startswith(t) for t in accept_texts):
+                try:
+                    el.click(timeout=2000)
+                    pw_page.wait_for_timeout(400)
+                    break
+                except Exception:
+                    pass
+    except Exception:
+        pass
+
+    # 3. Backdrops/Overlays per JS entfernen, falls noch sichtbar.
+    # Greift alles ab, was per fixed positioning den Seiteninhalt blockiert.
+    try:
+        pw_page.evaluate("""() => {
+            const kill = [
+                '#BorlabsDialogBackdrop', '.brlbs-cmpnt-dialog-backdrop',
+                '.cky-overlay', '.cky-consent-container',
+                '#CybotCookiebotDialog', '#CybotCookiebotDialogBodyUnderlay',
+                '#cmplz-cookybanner', '.cmplz-cookybanner',
+                '#onetrust-banner-sdk', '.onetrust-pc-dark-filter',
+                '.fc-consent-root',
+                '#usercentrics-root', '#uc-banner-container',
+                '[class*="cookie"][class*="backdrop"]',
+                '[class*="cookie"][class*="overlay"]',
+                '[id*="cookie"][class*="overlay"]',
+            ];
+            document.querySelectorAll(kill.join(',')).forEach(el => el.remove());
+            // body-Scroll-Lock aufheben (manche Plugins setzen overflow:hidden)
+            document.documentElement.style.overflow = '';
+            document.body.style.overflow = '';
+        }""")
+    except Exception:
+        pass
+
+
 def _scrape_career_page(url, keywords):
     """Rendert Karriereseiten mit Playwright inkl. Pagination + Load-More und extrahiert Treffer."""
     kw_lower = [k.strip().lower() for k in keywords if k.strip()]
@@ -355,6 +434,13 @@ def _scrape_career_page(url, keywords):
         )
         page = ctx.new_page()
         page.goto(url, wait_until="networkidle", timeout=30000)
+
+        # Cookie-Consent-Banner dismissen. Viele europäische WordPress-Seiten
+        # (Borlabs, CookieYes, Cookiebot, Complianz, OneTrust …) legen einen
+        # vollflächigen Backdrop über die Seite, der spätere Klicks auf
+        # "Mehr laden" abfängt. Zuerst Accept-Button suchen, dann generisch
+        # alle Overlay-Container per JS entfernen.
+        _dismiss_cookie_banners(page)
 
         # User-Interaktion simulieren, um "Delay JavaScript Execution"-Plugins
         # (z.B. WP Rocket) zu entfesseln, die Scripts erst nach mousemove/scroll/keydown laden.
