@@ -538,9 +538,9 @@ def _send_watch_notification(user_id, new_jobs, force=False):
         f'<tr><td style="padding:8px 12px;border-bottom:1px solid #1e1e30;">'
         f'<a href="{j["url"]}" style="color:#ff4d6d;text-decoration:none;font-weight:600;">{j["title"]}</a>'
         f'<br><span style="color:#6b6b80;font-size:12px;">{j.get("company_name", "")}</span></td></tr>'
-        for j in new_jobs[:20]
+        for j in new_jobs
     )
-    more = f'<tr><td style="padding:8px 12px;color:#6b6b80;font-size:12px;">… und {len(new_jobs)-20} weitere</td></tr>' if len(new_jobs) > 20 else ""
+    more = ""
     body = f"""
 <div style="font-family:'Segoe UI',sans-serif;max-width:520px;margin:0 auto;background:#0a0a0f;color:#f0f0f5;border-radius:14px;padding:32px 28px;">
   <div style="font-size:22px;font-weight:900;margin-bottom:4px;background:linear-gradient(135deg,#ff4d6d,#ffd166);-webkit-background-clip:text;-webkit-text-fill-color:transparent;">JobPipeline</div>
@@ -593,7 +593,7 @@ def _notify_after_watch_check(user_id, new_count, force=False):
                 FROM watch_jobs j
                 JOIN company_watches w ON w.id = j.company_id
                 WHERE w.user_id = ? AND j.is_new = 1
-                ORDER BY j.found_at DESC LIMIT 30
+                ORDER BY j.found_at DESC LIMIT 500
             """, [user_id]).fetchall()]
         if jobs:
             _send_watch_notification(user_id, jobs, force=force)
@@ -622,7 +622,7 @@ def _run_digest():
                 FROM watch_jobs j
                 JOIN company_watches w ON w.id = j.company_id
                 WHERE w.user_id = ? AND j.is_new = 1
-                ORDER BY j.found_at DESC LIMIT 30
+                ORDER BY j.found_at DESC LIMIT 500
             """, [u["id"]]).fetchall()]
         if not jobs:
             continue
@@ -2001,9 +2001,9 @@ def _send_alert_notification(user_id, search_name, new_jobs, search_id=None, for
         f'<tr><td style="padding:8px 12px;border-bottom:1px solid #1e1e30;">'
         f'<a href="{j.get("url", "#")}" style="color:#ca98ff;text-decoration:none;font-weight:600;">{j.get("title", "")}</a>'
         f'<br><span style="color:#c1a0cb;font-size:12px;">{j.get("company", "")} · {j.get("source", "")}</span></td></tr>'
-        for j in new_jobs[:20]
+        for j in new_jobs
     )
-    more = f'<tr><td style="padding:8px 12px;color:#c1a0cb;font-size:12px;">… und {len(new_jobs)-20} weitere</td></tr>' if len(new_jobs) > 20 else ""
+    more = ""
     body = f"""
 <div style="font-family:'Inter',sans-serif;max-width:520px;margin:0 auto;background:#1a0425;color:#f9dcff;border-radius:14px;padding:32px 28px;">
   <div style="font-size:22px;font-weight:900;margin-bottom:4px;background:linear-gradient(135deg,#ca98ff,#00bdfd);-webkit-background-clip:text;-webkit-text-fill-color:transparent;">JobPipeline</div>
