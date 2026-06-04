@@ -66,7 +66,9 @@ Visueller Überblick über den Bewerbungsprozess:
 Deine Suchen werden im Hintergrund automatisch wiederholt und melden neue Treffer:
 - **Aus jeder Suche erstellbar** — Button **"🔔 Suche abonnieren"** im Ergebnis-Header
 - **Einstellbares Intervall** — Stündlich / alle 6 Stunden / täglich / wöchentlich
-- **E-Mail-Benachrichtigung** optional pro Alert — Throttle max. 1× pro Stunde
+- **E-Mail-Benachrichtigung** optional pro Alert — Throttle max. 1× pro Stunde **pro Alert** (mehrere fällige Alerts erzeugen mehrere Mails statt sich gegenseitig zu schlucken)
+- **Alle Treffer in der Mail** — keine Begrenzung auf die ersten 20, bis zu 500 neue Stellen pro Mail
+- **Manuelles „Jetzt prüfen" mailt direkt** — Force-Bypass des Stunden-Throttle, damit der Klick wirklich eine Mail erzeugt
 - **Alerts-Tab mit Badge** — Gesamtanzahl neuer Treffer über alle Alerts auf einen Blick
 - **Treffer-Feed pro Alert** — Aufklappbare Liste mit "💾 Speichern" und "✕ Entfernen"
 - **Synonym-Expansion serverseitig** — läuft automatisch bei jedem Alert-Durchlauf
@@ -89,6 +91,7 @@ Strukturierte APIs vieler Scale-ups und DACH-Mittelständler — schneller und z
 ### Verdeckter Stellenmarkt (Funding/News-Watcher)
 Firmen, die gerade eine Finanzierungsrunde closen, Standorte eröffnen oder ein Executive verlieren, stellen meist 4-8 Wochen später ein. Der Funding-Watcher liest stündlich RSS-Feeds und filtert auf Wachstumssignale:
 - **Quellen** — deutsche-startups.de, EU-Startups, tech.eu
+- **Quellen-Filter** — Multi-Select-Chips über der Liste mit Treffer-Counter pro Quelle; Auswahl bleibt im LocalStorage
 - **Filter** — Series A-D · Seed/Pre-Seed · Mio. Euro / Million Euro · raises / secures / sammelt / erhält / schließt Runde · Expansion / neuer Standort / eröffnet Büro
 - **Firmenname-Heuristik** — Aus dem Titel extrahiert (z. B. „Berlin-based Elephant raises €5M…" → `Elephant`)
 - **Übernehmen in Watch** — Per 👁-Button direkt zum Karriere-Monitor mit vorbefülltem Firmennamen
@@ -99,9 +102,13 @@ Firmen, die gerade eine Finanzierungsrunde closen, Standorte eröffnen oder ein 
 ### Karriere-Monitor
 Automatische Überwachung von Unternehmens-Karriereseiten auf neue passende Stellen:
 - **Seiten-Scraping** — Headless Chromium (Playwright) rendert auch JavaScript-lastige Karriereseiten
+- **Cookie-Consent-Dismiss** — Backdrops von Borlabs, CookieYes, Cookiebot, Complianz, OneTrust, Usercentrics u. a. werden vor dem Scraping automatisch entfernt, damit „Mehr laden"-Klicks nicht blockiert werden
 - **Keyword-Matching** — Konfigurierbare Suchbegriffe je Unternehmen (z. B. CTO, Head of IT)
 - **Automatische Prüfung** — Einstellbares Prüfintervall pro Unternehmen (Standard: 24h)
 - **E-Mail-Benachrichtigungen** — Sofort, täglich oder wöchentlich bei neuen Treffern (konfigurierbar im Profil)
+- **Manuelles „Jetzt prüfen" mailt direkt** — Force-Bypass des Stunden-Throttle
+- **Alle Treffer in der Mail** — bis zu 500 neue Stellen pro Mail ohne Abschneiden
+- **Read/Unread-Filter** — Chips „Alle / Ungelesen / Gelesen" mit Counter im „🔍 Gefundene Stellen"-Tab, Auswahl im LocalStorage
 - **Alle prüfen** — Manuell alle aktiven Watches sequenziell anstoßen mit Fortschrittsbalken
 - **Sub-Tab-Ansicht** — „🏢 Unternehmen" (Verwaltung) und „🔍 Gefundene Stellen" (Job-Feed) getrennt
 - **Neu-Badge** — Neufunde werden im Tab-Badge und in der Job-Liste hervorgehoben
@@ -109,7 +116,7 @@ Automatische Überwachung von Unternehmens-Karriereseiten auf neue passende Stel
 - **CRUD** — Einträge hinzufügen, bearbeiten, pausieren, alle aktivieren/deaktivieren, löschen
 - **Mehrfachauswahl** — Mehrere oder alle Einträge gleichzeitig markieren und löschen
 - **Globale Suchbegriffe** — Nutzerweite Keywords gelten für alle Unternehmen gleichzeitig; unternehmensspezifische Keywords kommen zusätzlich hinzu
-- **Pagination** — Folgt automatisch Weiter-Links über mehrere Ergebnisseiten (max. `WATCH_MAX_PAGES`, Standard: 10)
+- **Pagination** — Folgt automatisch Weiter-Links oder „Mehr laden"-Buttons über mehrere Ergebnisseiten (max. `WATCH_MAX_PAGES`, Standard: 10)
 - **Auf Merkzettel** — Gefundene Stellen per 💾-Button direkt ins Merkzettel übernehmen
 - **Rate-Limiting** — Konfigurierbare Pause zwischen Scrapes (`WATCH_SCRAPE_DELAY`), korrekter Bot-User-Agent
 - **Pro-Nutzer** — Jeder Benutzer verwaltet seine eigene Watchlist
@@ -384,7 +391,7 @@ Benutzerdaten werden serverseitig in einer **SQLite-Datenbank** gespeichert (per
 
 | Tabelle | Inhalt |
 |---|---|
-| `users` | Benutzerkonten (Passwort-Hash, E-Mail, Admin/Locked, Karriere-Monitor-Keywords, Benachrichtigungs-Einstellungen) |
+| `users` | Benutzerkonten (Passwort-Hash, E-Mail, optionale `notify_email` für Job-Mails, Admin/Locked, Karriere-Monitor-Keywords, Benachrichtigungs-Einstellungen) |
 | `user_data` | Gespeicherte Jobs & Jira-Konfiguration pro Benutzer |
 | `password_reset_tokens` | Temporäre Reset-Tokens (1 Stunde gültig) |
 | `company_watches` | Karriere-Monitor: überwachte Unternehmen pro Benutzer (URL, Keywords, Intervall, Status) |
@@ -456,11 +463,12 @@ Der Karriere-Monitor kann per E-Mail über neue Stellenfunde informieren. Voraus
 1. Im **Profil-Tab** den Abschnitt **Benachrichtigungen** öffnen
 2. E-Mail-Benachrichtigungen aktivieren
 3. Häufigkeit wählen:
-   - **Sofort** — E-Mail bei jedem Fund (max. 1x pro Stunde)
+   - **Sofort** — E-Mail bei jedem Fund (Throttle pro Quelle: max. 1× pro Stunde pro Watch bzw. Alert)
    - **Tägliche Zusammenfassung** — Einmal täglich alle neuen Treffer
    - **Wöchentliche Zusammenfassung** — Einmal pro Woche
+4. Optional: **Alternative E-Mail-Adresse** eintragen — wenn gesetzt, gehen alle Job-Mails (Karriere-Monitor, Search-Alerts, Wochenreport) dorthin statt an die Account-Mail. Leer lassen = Account-Mail als Fallback. Die Account-Mail wird als Placeholder im Feld eingeblendet, damit der Default klar ist.
 
-> Die E-Mail enthält die gefundenen Stellentitel mit Direktlinks und einen Button zur App.
+> Die E-Mail listet **alle** neuen Stellentitel mit Direktlinks (bis zu 500 pro Mail) und einen Button zur App.
 
 ---
 
