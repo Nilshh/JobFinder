@@ -510,21 +510,24 @@ def _schedule_watch_checks():
 
 # ── Watch-Benachrichtigungen ──────────────────────────────────────
 
-_notify_last_sent = {}   # user_id → timestamp (Throttle: max 1x/Stunde bei instant)
+_notify_last_sent = {}   # (kind, *key) → timestamp (Throttle: max 1x/Stunde pro Kanal)
+                         # kind="watch" key=(user_id,)  · kind="alert" key=(user_id, search_id)
 
-def _send_watch_notification(user_id, new_jobs):
-    """Sendet eine E-Mail mit neuen Watch-Treffern an den Nutzer."""
+def _send_watch_notification(user_id, new_jobs, force=False):
+    """Sendet eine E-Mail mit neuen Watch-Treffern an den Nutzer.
+    force=True umgeht den Stunden-Throttle (z.B. für manuelles 'Jetzt prüfen')."""
     if not SMTP_HOST or not SMTP_USER:
         return
     with get_db() as db:
         user = db.execute("SELECT email, username, watch_notify_enabled FROM users WHERE id = ?", [user_id]).fetchone()
     if not user or not user["email"] or not user["watch_notify_enabled"]:
         return
-    # Throttle: max 1x pro Stunde
+    # Throttle pro (Kanal, User): max 1x pro Stunde — Watch und Alert haben getrennte Buckets.
+    throttle_key = ("watch", user_id)
     now = time.time()
-    if user_id in _notify_last_sent and now - _notify_last_sent[user_id] < 3600:
+    if not force and throttle_key in _notify_last_sent and now - _notify_last_sent[throttle_key] < 3600:
         return
-    _notify_last_sent[user_id] = now
+    _notify_last_sent[throttle_key] = now
     job_rows = "".join(
         f'<tr><td style="padding:8px 12px;border-bottom:1px solid #1e1e30;">'
         f'<a href="{j["url"]}" style="color:#ff4d6d;text-decoration:none;font-weight:600;">{j["title"]}</a>'
@@ -565,8 +568,9 @@ def _send_watch_notification(user_id, new_jobs):
     _send_push(user_id, f"🔔 {len(new_jobs)} neue Stellen", f"Der Karriere-Monitor hat neue Treffer gefunden.", "/")
 
 
-def _notify_after_watch_check(user_id, new_count):
-    """Prüft Benachrichtigungs-Einstellung und sendet ggf. sofort eine E-Mail."""
+def _notify_after_watch_check(user_id, new_count, force=False):
+    """Prüft Benachrichtigungs-Einstellung und sendet ggf. sofort eine E-Mail.
+    force=True umgeht den Stunden-Throttle (für manuelles 'Jetzt prüfen')."""
     if new_count <= 0:
         return
     with get_db() as db:
@@ -586,7 +590,7 @@ def _notify_after_watch_check(user_id, new_count):
                 ORDER BY j.found_at DESC LIMIT 30
             """, [user_id]).fetchall()]
         if jobs:
-            _send_watch_notification(user_id, jobs)
+            _send_watch_notification(user_id, jobs, force=force)
 
 
 def _run_digest():
@@ -1767,7 +1771,7 @@ def watch_check_now(wid):
     try:
         jobs = _scrape_career_page(w["career_url"], merged_kw)
         new_count = _save_watch_results(wid, jobs)
-        _notify_after_watch_check(uid, new_count)
+        _notify_after_watch_check(uid, new_count, force=True)
         return jsonify({"ok": True, "total": len(jobs), "new": new_count})
     except Exception as e:
         _mark_watch_error(wid, e)
@@ -1951,18 +1955,22 @@ def _mark_alert_error(search_id, error):
         )
 
 
-def _send_alert_notification(user_id, search_name, new_jobs):
-    """Sendet eine E-Mail mit neuen Alert-Treffern."""
+def _send_alert_notification(user_id, search_name, new_jobs, search_id=None, force=False):
+    """Sendet eine E-Mail mit neuen Alert-Treffern.
+    force=True umgeht den Stunden-Throttle (z.B. für manuelles 'Jetzt prüfen').
+    Throttle ist pro (user_id, search_id) — fünf gleichzeitig fällige Alerts
+    können also auch fünf Mails erzeugen, statt sich gegenseitig zu schlucken."""
     if not SMTP_HOST or not SMTP_USER:
         return
     with get_db() as db:
         user = db.execute("SELECT email, username, watch_notify_enabled FROM users WHERE id = ?", [user_id]).fetchone()
     if not user or not user["email"] or not user["watch_notify_enabled"]:
         return
+    throttle_key = ("alert", user_id, search_id)
     now = time.time()
-    if user_id in _notify_last_sent and now - _notify_last_sent[user_id] < 3600:
+    if not force and throttle_key in _notify_last_sent and now - _notify_last_sent[throttle_key] < 3600:
         return
-    _notify_last_sent[user_id] = now
+    _notify_last_sent[throttle_key] = now
     job_rows = "".join(
         f'<tr><td style="padding:8px 12px;border-bottom:1px solid #1e1e30;">'
         f'<a href="{j.get("url", "#")}" style="color:#ca98ff;text-decoration:none;font-weight:600;">{j.get("title", "")}</a>'
@@ -2020,7 +2028,7 @@ def _run_alert_checks():
                         "SELECT title, company, url, source FROM alert_jobs WHERE search_id = ? AND is_new = 1 ORDER BY found_at DESC LIMIT 30",
                         [s["id"]]
                     ).fetchall()]
-                _send_alert_notification(s["user_id"], s["name"], new_jobs)
+                _send_alert_notification(s["user_id"], s["name"], new_jobs, s["id"])
         except Exception as e:
             _mark_alert_error(s["id"], e)
             print(f"[Alert] Fehler bei „{s['name']}\": {e}", flush=True)
@@ -2119,7 +2127,16 @@ def alerts_run_now(sid):
     try:
         jobs = _fetch_jobs_for_search(s)
         new_count = _save_alert_results(sid, jobs)
-        return jsonify({"ok": True, "total": len(jobs), "new": new_count})
+        mailed = False
+        if new_count > 0 and s.get("notify_enabled"):
+            with get_db() as db:
+                new_jobs = [dict(r) for r in db.execute(
+                    "SELECT title, company, url, source FROM alert_jobs WHERE search_id = ? AND is_new = 1 ORDER BY found_at DESC LIMIT 30",
+                    [sid]
+                ).fetchall()]
+            _send_alert_notification(s["user_id"], s["name"], new_jobs, sid, force=True)
+            mailed = True
+        return jsonify({"ok": True, "total": len(jobs), "new": new_count, "mailed": mailed})
     except Exception as e:
         _mark_alert_error(sid, e)
         return jsonify({"error": str(e)}), 500
