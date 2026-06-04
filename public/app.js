@@ -1295,6 +1295,11 @@ let _watchSelectMode = false;
 let _watchSubTab     = "companies";
 let _watchJobsMap        = {};   // id → job-Objekt für saveWatchJob
 let _watchCompanyFilter  = "all"; // "all" oder company_id für Filter im Pane "Gefundene Stellen"
+let _watchReadFilter     = (function(){
+  // "all" | "unread" | "read" — persistiert, damit die Auswahl beim Reload bleibt.
+  try { return localStorage.getItem("watchReadFilter") || "all"; }
+  catch(_){ return "all"; }
+})();
 let _watchJobsCache      = [];
 let _watchCompaniesCache = [];
 const _watchSelected = new Set();
@@ -1820,15 +1825,35 @@ function renderWatchJobs(jobs, companies){
       .map(c => `<option value="${c.id}"${String(_watchCompanyFilter)===String(c.id)?" selected":""}>${esc(c.name)} (${counts[c.id]})</option>`)
     ).join("");
 
+  // Gelesen/Ungelesen-Counts auf Basis der Unternehmens-Vorauswahl, damit der
+  // Chip-Counter sich sinnvoll an der Sicht orientiert.
+  const inCompany = j => _watchCompanyFilter === "all"
+    || String(j.company_id) === String(_watchCompanyFilter);
+  const unreadN = jobs.filter(j => inCompany(j) && j.is_new).length;
+  const readN   = jobs.filter(j => inCompany(j) && !j.is_new).length;
+
+  const chip = (key, label, n) => {
+    const on = _watchReadFilter === key;
+    return `<button type="button" class="chip${on?" on":""}" onclick="setWatchReadFilter('${key}')">${label} <span style="opacity:.6;font-size:11px;">(${n})</span></button>`;
+  };
+
   const filterHtml = `<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:0 0 14px;">
     <label style="font-size:12px;color:#6b6b80;text-transform:uppercase;letter-spacing:.06em;font-weight:600;">Filter:</label>
     <select class="inp" style="max-width:340px;min-width:200px;cursor:pointer;padding:6px 10px;" onchange="setWatchCompanyFilter(this.value)">${opts}</select>
+    <div class="chips" style="margin:0;">
+      ${chip("all", "Alle", unreadN+readN)}
+      ${chip("unread", "Ungelesen", unreadN)}
+      ${chip("read", "Gelesen", readN)}
+    </div>
   </div>`;
 
-  // Jobs nach gewähltem Unternehmen filtern
-  const filtered = _watchCompanyFilter === "all"
-    ? jobs
-    : jobs.filter(j => String(j.company_id) === String(_watchCompanyFilter));
+  // Jobs nach gewähltem Unternehmen + Read-State filtern
+  const filtered = jobs.filter(j => {
+    if(!inCompany(j)) return false;
+    if(_watchReadFilter === "unread" && !j.is_new) return false;
+    if(_watchReadFilter === "read"   &&  j.is_new) return false;
+    return true;
+  });
 
   if (!filtered.length) {
     box.innerHTML = filterHtml + `<div class="savempty" style="padding:50px 0">${
@@ -1868,6 +1893,12 @@ function renderWatchJobs(jobs, companies){
 
 function setWatchCompanyFilter(value){
   _watchCompanyFilter = value || "all";
+  renderWatchJobs(_watchJobsCache, _watchCompaniesCache);
+}
+
+function setWatchReadFilter(value){
+  _watchReadFilter = (value === "unread" || value === "read") ? value : "all";
+  try { localStorage.setItem("watchReadFilter", _watchReadFilter); } catch(_){}
   renderWatchJobs(_watchJobsCache, _watchCompaniesCache);
 }
 
