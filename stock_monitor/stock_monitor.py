@@ -523,8 +523,8 @@ HELP_TEXT = (
     "/check – jetzt alle Seiten prüfen und Status anzeigen\n"
     "/next – letzten und nächsten automatischen Check anzeigen\n"
     "/list – überwachte &amp; manuelle Seiten auflisten\n"
-    "/add &lt;link&gt; – neue Seite zur automatischen Prüfung hinzufügen\n"
-    "/link &lt;link&gt; – neue Seite nur als manuellen Link (wie MediaMarkt)\n"
+    "/add &lt;Name&gt; | &lt;link&gt; – neue Seite zur automatischen Prüfung (Name optional)\n"
+    "/link &lt;Name&gt; | &lt;link&gt; – neue Seite nur als manuellen Link (Name optional)\n"
     "/edit – Name/URL eines Eintrags über Auswahlmenü ändern\n"
     "/del – Eintrag über Auswahlmenü löschen\n"
     "/help – diese Hilfe\n\n"
@@ -535,8 +535,8 @@ BOT_COMMANDS = [
     {"command": "check", "description": "Jetzt alle Seiten prüfen"},
     {"command": "next", "description": "Letzten & nächsten Check anzeigen"},
     {"command": "list", "description": "Überwachte & manuelle Seiten anzeigen"},
-    {"command": "add", "description": "Seite zur Auto-Prüfung hinzufügen (/add <link>)"},
-    {"command": "link", "description": "Seite nur als manuellen Link (/link <link>)"},
+    {"command": "add", "description": "Auto-Prüfung: /add Name | <link>"},
+    {"command": "link", "description": "Manueller Link: /link Name | <link>"},
     {"command": "edit", "description": "Name/URL eines Eintrags ändern (Auswahlmenü)"},
     {"command": "del", "description": "Eintrag löschen (Auswahlmenü)"},
     {"command": "help", "description": "Hilfe anzeigen"},
@@ -559,6 +559,20 @@ def tg_send(text, reply_markup=None, chat_id=None):
 
 def is_valid_url(s):
     return s.startswith("http://") or s.startswith("https://")
+
+
+def parse_name_url(arg):
+    """Zerlegt '<Name> | <URL>' oder nur '<URL>' in (name, url).
+    Ohne Namen wird die Domain genommen. (None, None) bei ungültiger URL."""
+    arg = arg.strip()
+    if "|" in arg:
+        name, url = arg.split("|", 1)
+        name, url = name.strip(), url.strip()
+    else:
+        name, url = "", arg.strip()
+    if not is_valid_url(url):
+        return None, None
+    return (name or site_name(url)), url
 
 
 def _fmt_time(ts):
@@ -677,31 +691,31 @@ def handle_command(cmd, arg):
         tg_send(cmd_next())
 
     elif cmd in ("/add", "add"):
-        if not is_valid_url(arg):
-            tg_send("So geht's: <code>/add https://…</code>")
+        name, url = parse_name_url(arg)
+        if not url:
+            tg_send("So geht's: <code>/add Name | https://…</code>\n(oder nur die URL)")
             return
         t = load_targets()
-        if any(u == arg for _n, u in t["auto"]):
+        if any(u == url for _n, u in t["auto"]):
             tg_send("Diese Seite wird bereits überwacht.")
             return
-        name = site_name(arg)
-        t["auto"].append([name, arg])
+        t["auto"].append([name, url])
         save_targets(t)
-        log(f"[bot] /add {arg}")
-        tg_send(f"➕ Zur Auto-Prüfung hinzugefügt: <b>{name}</b>\nMit /check sofort testen, mit /edit umbenennen.")
+        log(f"[bot] /add {name} -> {url}")
+        tg_send(f"➕ Zur Auto-Prüfung hinzugefügt: <b>{name}</b>\nMit /check sofort testen.")
 
     elif cmd in ("/link", "link"):
-        if not is_valid_url(arg):
-            tg_send("So geht's: <code>/link https://…</code>")
+        name, url = parse_name_url(arg)
+        if not url:
+            tg_send("So geht's: <code>/link Name | https://…</code>\n(oder nur die URL)")
             return
         t = load_targets()
-        if any(u == arg for _n, u in t["manual"]):
+        if any(u == url for _n, u in t["manual"]):
             tg_send("Dieser manuelle Link existiert bereits.")
             return
-        name = site_name(arg)
-        t["manual"].append([name, arg])
+        t["manual"].append([name, url])
         save_targets(t)
-        log(f"[bot] /link {arg}")
+        log(f"[bot] /link {name} -> {url}")
         tg_send(f"✋ Als manuellen Link angelegt: <b>{name}</b>")
 
     elif cmd in ("/del", "del", "/delete"):

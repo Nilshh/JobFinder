@@ -131,8 +131,8 @@ Dann in Telegram an den Bot schreiben. Verfügbare Befehle:
 | `/check` | Jetzt alle Seiten prüfen und Status anzeigen |
 | `/next` | Letzten und nächsten automatischen Check anzeigen |
 | `/list` | Überwachte und manuelle Seiten auflisten |
-| `/add <link>` | Neue Seite zur **automatischen** Prüfung hinzufügen |
-| `/link <link>` | Neue Seite nur als **manuellen** Link (wie MediaMarkt) |
+| `/add <Name> \| <link>` | Neue Seite zur **automatischen** Prüfung (Name optional, sonst Domain) |
+| `/link <Name> \| <link>` | Neue Seite nur als **manuellen** Link (Name optional) |
 | `/edit` | Name/URL eines Eintrags ändern (Auswahlmenü, dann `Name \| URL` schicken) |
 | `/del` | Eintrag über ein Auswahlmenü (Knöpfe) löschen |
 | `/help` | Hilfe anzeigen |
