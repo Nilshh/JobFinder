@@ -6,13 +6,16 @@ Artikel wieder bestellbar ist.
 
 Eigenständig, unabhängig vom JobFinder. Liegt nur der Ordnung halber im selben Repo.
 
-Automatisch überwacht:
-- OBI · expert · Bauhaus
+Alle Seiten stehen in der Auto-Liste und werden jede Stunde **versucht**:
 
-Nur als Link (manuell): MediaMarkt – dessen Seite blockt fremde Server-IPs per
-Cloudflare-CAPTCHA, lässt sich also nicht zuverlässig automatisch prüfen. Der
-Link hängt deshalb am Ende jeder Telegram-Nachricht zum manuellen Nachsehen.
-(Liste `MANUAL_URLS` in `stock_monitor.py`.)
+- Kommt eine Seite durch → normaler Status, bei „bestellbar" sofort Alarm.
+- Ist sie durch eine **Cloudflare-Challenge blockiert** (z.B. MediaMarkt/Bauhaus
+  von Rechenzentrums-IPs) → sie erscheint automatisch unter „✋ bitte manuell
+  prüfen", statt als Fehler. **Selbstheilend**: sobald Cloudflare die IP wieder
+  durchlässt, wird die Seite von allein wieder normal geprüft.
+
+Zusätzlich kann man über `/link` Seiten anlegen, die *immer* nur als manueller
+Link erscheinen (ohne Auto-Versuch).
 
 ## Warum ein echter Browser?
 

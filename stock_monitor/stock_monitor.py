@@ -81,7 +81,8 @@ def get_manual_urls():
 # Status-Werte
 AVAILABLE = "AVAILABLE"      # online bestellbar
 UNAVAILABLE = "UNAVAILABLE"  # nicht bestellbar (ausverkauft / nur Markt)
-UNKNOWN = "UNKNOWN"          # konnte nicht ermittelt werden (Block/Fehler)
+UNKNOWN = "UNKNOWN"          # Seite kam durch, aber kein eindeutiges Signal
+BLOCKED = "BLOCKED"          # Cloudflare-Challenge -> automatisch zu „manuell prüfen"
 
 
 # --------------------------------------------------------------------------- #
@@ -308,6 +309,8 @@ def detect_status(url, html):
     """Bestimmt den Bestell-Status einer Seite. Gibt (status, detail) zurück."""
     if not html:
         return UNKNOWN, "kein Inhalt (blockiert/Fehler)"
+    if is_challenge(html):
+        return BLOCKED, "Cloudflare-Challenge"
 
     host = urllib.parse.urlparse(url).netloc.lower()
     avails = jsonld_availabilities(html)
@@ -378,16 +381,17 @@ def check_all():
             {"url": url, "name": site_name(url), "status": status, "detail": detail}
         )
 
-    # Zweiter Versuch für unklare Seiten (transiente Cloudflare-/Ladeaussetzer,
-    # z.B. Bauhaus). Nur die UNKNOWN-Seiten erneut abrufen.
-    retry_urls = [r["url"] for r in results if r["status"] == UNKNOWN]
+    # Zweiter Versuch für unklare/blockierte Seiten (transiente Cloudflare-/
+    # Ladeaussetzer, z.B. Bauhaus). Vielleicht kommt der Re-Check durch.
+    retry_urls = [r["url"] for r in results if r["status"] in (UNKNOWN, BLOCKED)]
     if retry_urls:
-        log(f"Re-Check für {len(retry_urls)} unklare Seite(n) …")
+        log(f"Re-Check für {len(retry_urls)} unklare/blockierte Seite(n) …")
         pages2 = fetch_pages(retry_urls)
         for r in results:
             if r["url"] in retry_urls and pages2.get(r["url"]):
                 status, detail = detect_status(r["url"], pages2[r["url"]])
-                if status != UNKNOWN:
+                # Nur übernehmen, wenn der zweite Versuch ein klares Ergebnis bringt.
+                if status in (AVAILABLE, UNAVAILABLE):
                     r["status"], r["detail"] = status, detail
 
     return results
@@ -400,25 +404,37 @@ STATUS_LABEL = {
 }
 
 
-def manual_footer():
-    """Links der nicht automatisch prüfbaren Seiten (manuell checken)."""
-    manual = get_manual_urls()
-    if not manual:
+def manual_footer(results=None):
+    """„Bitte manuell prüfen": konfigurierte manuelle Links + aktuell blockierte
+    (Cloudflare) Auto-Seiten. Letztere wandern automatisch hier rein, solange sie
+    geblockt sind – kommen sie wieder durch, erscheinen sie wieder als Status."""
+    items = list(get_manual_urls())
+    if results:
+        for r in results:
+            if r["status"] == BLOCKED:
+                items.append([r["name"], r["url"]])
+    if not items:
         return ""
-    lines = [f'<a href="{url}">{name}</a>' for name, url in manual]
+    seen = set()
+    lines = []
+    for name, url in items:
+        if url in seen:
+            continue
+        seen.add(url)
+        lines.append(f'<a href="{url}">{name}</a>')
     return "\n\n— ✋ <b>bitte manuell prüfen</b> —\n" + "\n".join(lines)
 
 
 def format_results(results):
+    # Blockierte Seiten nicht als Status zeigen – sie stehen im manuellen Block.
     lines = []
     for r in results:
+        if r["status"] == BLOCKED:
+            continue
         label = STATUS_LABEL.get(r["status"], r["status"])
         lines.append(f"<b>{r['name']}</b> – {label}\n<a href=\"{r['url']}\">zur Seite</a>")
-    return (
-        "🛒 <b>Klimaanlage – aktueller Status</b>\n\n"
-        + "\n\n".join(lines)
-        + manual_footer()
-    )
+    body = "\n\n".join(lines) if lines else "(keine automatisch prüfbaren Seiten)"
+    return "🛒 <b>Klimaanlage – aktueller Status</b>\n\n" + body + manual_footer(results)
 
 
 def run(test_mode=False):
@@ -458,7 +474,7 @@ def run(test_mode=False):
     if alerts:
         header = "🛒 <b>Klimaanlage – Verfügbarkeit</b>\n\n"
         try:
-            send_telegram(header + "\n\n".join(alerts) + manual_footer())
+            send_telegram(header + "\n\n".join(alerts) + manual_footer(results))
             log(f"Telegram-Meldung gesendet ({len(alerts)} Treffer).")
         except Exception as exc:  # noqa: BLE001
             log(f"Konnte Telegram nicht senden: {exc}")
