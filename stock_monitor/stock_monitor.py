@@ -21,6 +21,7 @@ import json
 import os
 import re
 import sys
+import threading
 import time
 import urllib.parse
 import urllib.request
@@ -630,14 +631,38 @@ def _entry_keyboard(action, prompt):
     return {"inline_keyboard": rows}, prompt
 
 
-def handle_command(cmd, arg):
-    """Verarbeitet einen Textbefehl. Gibt nichts zurück (sendet selbst)."""
-    if cmd in ("/check", "/status", "check", "status"):
-        tg_send("⏳ Prüfe alle Seiten …")
+_check_busy = False  # läuft gerade ein /check im Hintergrund?
+
+
+def _run_check_async():
+    """Führt einen Check aus und schickt das Ergebnis – im Hintergrund-Thread,
+    damit der Bot während der ~1 min Prüfdauer weiter auf Befehle reagiert."""
+    global _check_busy
+    try:
         results = check_all()
         for r in results:
             log(f"[bot] {r['name']:12s} {r['status']}")
         tg_send(format_results(results))
+    except Exception as exc:  # noqa: BLE001
+        log(f"/check-Fehler: {exc}")
+        try:
+            tg_send(f"⚠️ Fehler bei der Prüfung: {exc}")
+        except Exception:
+            pass
+    finally:
+        _check_busy = False
+
+
+def handle_command(cmd, arg):
+    """Verarbeitet einen Textbefehl. Gibt nichts zurück (sendet selbst)."""
+    global _check_busy
+    if cmd in ("/check", "/status", "check", "status"):
+        if _check_busy:
+            tg_send("⏳ Eine Prüfung läuft schon – das Ergebnis kommt gleich.")
+            return
+        _check_busy = True
+        tg_send("⏳ Prüfe alle Seiten … Ergebnis folgt in Kürze.")
+        threading.Thread(target=_run_check_async, daemon=True).start()
 
     elif cmd in ("/list", "list"):
         tg_send(cmd_list())
