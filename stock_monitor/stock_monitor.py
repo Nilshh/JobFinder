@@ -426,6 +426,12 @@ STATUS_LABEL = {
 }
 
 
+def monitor_title():
+    """Überschrift der Telegram-Nachrichten. Per .env (MONITOR_TITLE) anpassbar,
+    da nicht mehr nur Klimaanlagen überwacht werden."""
+    return os.environ.get("MONITOR_TITLE", "Verfügbarkeits-Check").strip() or "Verfügbarkeits-Check"
+
+
 def manual_footer(results=None):
     """„Bitte manuell prüfen": konfigurierte manuelle Links + aktuell blockierte
     (Cloudflare) Auto-Seiten. Letztere wandern automatisch hier rein, solange sie
@@ -456,7 +462,7 @@ def format_results(results):
         label = STATUS_LABEL.get(r["status"], r["status"])
         lines.append(f"<b>{r['name']}</b> – {label}\n<a href=\"{r['url']}\">zur Seite</a>")
     body = "\n\n".join(lines) if lines else "(keine automatisch prüfbaren Seiten)"
-    return "🛒 <b>Klimaanlage – aktueller Status</b>\n\n" + body + manual_footer(results)
+    return f"🛒 <b>{monitor_title()} – aktueller Status</b>\n\n" + body + manual_footer(results)
 
 
 def run(test_mode=False):
@@ -494,7 +500,7 @@ def run(test_mode=False):
     save_state(state)
 
     if alerts:
-        header = "🛒 <b>Klimaanlage – Verfügbarkeit</b>\n\n"
+        header = f"🛒 <b>{monitor_title()} – Verfügbarkeit</b>\n\n"
         try:
             send_telegram(header + "\n\n".join(alerts) + manual_footer(results))
             log(f"Telegram-Meldung gesendet ({len(alerts)} Treffer).")

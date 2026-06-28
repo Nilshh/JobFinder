@@ -1,8 +1,12 @@
 # Stock-Monitor (Zusatz-Tool)
 
-Prüft stündlich vier Produktseiten der **Midea PortaSplit Klimaanlage** auf
-**Online-Bestellbarkeit** und schickt eine **Telegram-Nachricht**, sobald ein
-Artikel wieder bestellbar ist.
+Prüft stündlich beliebige Produktseiten auf **Online-Bestellbarkeit** und schickt
+eine **Telegram-Nachricht**, sobald ein Artikel wieder bestellbar ist.
+
+Die Erkennung ist generisch (schema.org `availability` + Text-Heuristik), du
+kannst also **jeden Artikel** überwachen – per `/add <link>` hinzufügen, mit
+`/edit` einen sprechenden Namen vergeben (z.B. „PS5 MediaMarkt"). Die Überschrift
+der Nachrichten ist über `MONITOR_TITLE` in der `.env` anpassbar.
 
 Eigenständig, unabhängig vom JobFinder. Liegt nur der Ordnung halber im selben Repo.
 
