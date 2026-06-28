@@ -437,6 +437,8 @@ def run(test_mode=False):
     if test_mode:
         return
 
+    # Zeitpunkt des letzten automatischen Laufs merken (für /next).
+    state["_meta"] = {"last_run": int(time.time())}
     save_state(state)
 
     if alerts:
@@ -461,6 +463,7 @@ HELP_TEXT = (
     "🤖 <b>Stock-Monitor Bot</b>\n\n"
     "<b>Befehle:</b>\n"
     "/check – jetzt alle Seiten prüfen und Status anzeigen\n"
+    "/next – letzten und nächsten automatischen Check anzeigen\n"
     "/list – überwachte &amp; manuelle Seiten auflisten\n"
     "/add &lt;link&gt; – neue Seite zur automatischen Prüfung hinzufügen\n"
     "/link &lt;link&gt; – neue Seite nur als manuellen Link (wie MediaMarkt)\n"
@@ -471,6 +474,7 @@ HELP_TEXT = (
 
 BOT_COMMANDS = [
     {"command": "check", "description": "Jetzt alle Seiten prüfen"},
+    {"command": "next", "description": "Letzten & nächsten Check anzeigen"},
     {"command": "list", "description": "Überwachte & manuelle Seiten anzeigen"},
     {"command": "add", "description": "Seite zur Auto-Prüfung hinzufügen (/add <link>)"},
     {"command": "link", "description": "Seite nur als manuellen Link (/link <link>)"},
@@ -495,6 +499,52 @@ def tg_send(text, reply_markup=None, chat_id=None):
 
 def is_valid_url(s):
     return s.startswith("http://") or s.startswith("https://")
+
+
+def _fmt_time(ts):
+    return time.strftime("%d.%m.%Y %H:%M", time.localtime(ts))
+
+
+def _human_delta(sec):
+    sec = abs(int(sec))
+    if sec < 60:
+        return f"{sec} Sek"
+    if sec < 3600:
+        return f"{sec // 60} Min"
+    if sec < 86400:
+        return f"{sec // 3600} Std {(sec % 3600) // 60} Min"
+    return f"{sec // 86400} Tg"
+
+
+def next_check_ts():
+    """Nächster geplanter Cron-Lauf (stündlich zur Minute CRON_MINUTE, Default 0)."""
+    minute = int(os.environ.get("CRON_MINUTE", "0"))
+    now = time.time()
+    lt = time.localtime(now)
+    cand = time.struct_time(
+        (lt.tm_year, lt.tm_mon, lt.tm_mday, lt.tm_hour, minute, 0,
+         lt.tm_wday, lt.tm_yday, lt.tm_isdst)
+    )
+    cand_sec = time.mktime(cand)
+    if cand_sec <= now:
+        cand_sec += 3600
+    return cand_sec
+
+
+def cmd_next():
+    """Zeigt letzten und nächsten automatischen Check."""
+    st = load_state()
+    last = st.get("_meta", {}).get("last_run")
+    now = time.time()
+    lines = ["🕒 <b>Check-Zeiten</b>"]
+    if last:
+        lines.append(f"Letzter Lauf: {_fmt_time(last)}  (vor {_human_delta(now - last)})")
+    else:
+        lines.append("Letzter Lauf: noch keiner (oder Cron läuft noch nicht)")
+    nxt = next_check_ts()
+    lines.append(f"Nächster Lauf: {_fmt_time(nxt)}  (in {_human_delta(nxt - now)})")
+    lines.append("\n<i>Plan: stündlich. Falls dein Cron anders läuft, mit CRON_MINUTE anpassen.</i>")
+    return "\n".join(lines)
 
 
 def cmd_list():
@@ -538,6 +588,9 @@ def handle_command(cmd, arg):
 
     elif cmd in ("/list", "list"):
         tg_send(cmd_list())
+
+    elif cmd in ("/next", "next", "/zeit", "zeit"):
+        tg_send(cmd_next())
 
     elif cmd in ("/add", "add"):
         if not is_valid_url(arg):
