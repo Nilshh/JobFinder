@@ -11,7 +11,13 @@ echo "==> Abhängigkeiten installieren"
 ./.venv/bin/pip install -r requirements.txt
 
 echo "==> Chromium für Playwright installieren"
-./.venv/bin/python -m playwright install chromium
+# Auf Linux zusätzlich die System-Bibliotheken mitinstallieren (--with-deps).
+# Auf macOS wird das nicht unterstützt -> ohne Flag.
+if [ "$(uname -s)" = "Linux" ]; then
+  ./.venv/bin/python -m playwright install --with-deps chromium
+else
+  ./.venv/bin/python -m playwright install chromium
+fi
 
 if [ ! -f .env ]; then
   cp .env.example .env
