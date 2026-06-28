@@ -89,6 +89,39 @@ Zeile einfügen (Pfad ggf. anpassen):
 
 ---
 
+## 5. Sofort-Prüfung per Telegram (`/check`)
+
+Zusätzlich zum stündlichen Auto-Alarm kann der Bot **auf Befehle reagieren**.
+Du schickst ihm `/check` und bekommst sofort den aktuellen Status aller vier
+Seiten zurück.
+
+Dafür muss ein dauerhafter Prozess laufen (Long-Polling). Manuell zum Testen:
+
+```bash
+./run.sh --bot
+```
+
+Dann in Telegram `/check` (oder `/help`) an den Bot schicken.
+
+### Als Dienst (systemd, empfohlen auf dem Server)
+
+```bash
+sudo cp stock-monitor-bot.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now stock-monitor-bot
+sudo systemctl status stock-monitor-bot      # läuft?
+journalctl -u stock-monitor-bot -f           # Live-Log
+```
+
+Der Bot-Dienst (getUpdates) und der Cron-Alarm (sendMessage) stören sich nicht –
+beide dürfen parallel laufen.
+
+> Hinweis: `--get-chat-id` und der Bot-Dienst können **nicht gleichzeitig** laufen
+> (Telegram erlaubt nur einen getUpdates-Abnehmer). Chat-ID also vor dem Start des
+> Dienstes ermitteln, oder den Dienst kurz stoppen.
+
+---
+
 ## Dateien
 
 | Datei | Zweck |

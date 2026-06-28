@@ -1,0 +1,14 @@
+[Unit]
+Description=Stock-Monitor Telegram-Bot (lauscht auf /check)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/root/JobFinder/stock_monitor
+ExecStart=/root/JobFinder/stock_monitor/run.sh --bot
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

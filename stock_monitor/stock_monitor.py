@@ -72,14 +72,14 @@ def log(msg):
 # --------------------------------------------------------------------------- #
 # Telegram
 # --------------------------------------------------------------------------- #
-def telegram_api(method, params):
+def telegram_api(method, params, timeout=30):
     token = os.environ.get("TELEGRAM_BOT_TOKEN", "").strip()
     if not token:
         raise RuntimeError("TELEGRAM_BOT_TOKEN ist nicht gesetzt (.env).")
     url = f"https://api.telegram.org/bot{token}/{method}"
     data = urllib.parse.urlencode(params).encode("utf-8")
     req = urllib.request.Request(url, data=data)
-    with urllib.request.urlopen(req, timeout=30) as resp:
+    with urllib.request.urlopen(req, timeout=timeout) as resp:
         return json.loads(resp.read().decode("utf-8"))
 
 
@@ -269,14 +269,40 @@ def site_name(url):
 # --------------------------------------------------------------------------- #
 # Hauptlauf
 # --------------------------------------------------------------------------- #
-def run(test_mode=False):
-    state = {} if test_mode else load_state()
+def check_all():
+    """Prüft alle URLs und gibt eine Liste mit {url,name,status,detail} zurück."""
     pages = fetch_pages(URLS)
-    alerts = []
-
+    results = []
     for url in URLS:
         status, detail = detect_status(url, pages.get(url, ""))
-        name = site_name(url)
+        results.append(
+            {"url": url, "name": site_name(url), "status": status, "detail": detail}
+        )
+    return results
+
+
+STATUS_LABEL = {
+    AVAILABLE: "✅ bestellbar",
+    UNAVAILABLE: "⛔️ nicht bestellbar",
+    UNKNOWN: "❓ nicht prüfbar",
+}
+
+
+def format_results(results):
+    lines = []
+    for r in results:
+        label = STATUS_LABEL.get(r["status"], r["status"])
+        lines.append(f"<b>{r['name']}</b> – {label}\n<a href=\"{r['url']}\">zur Seite</a>")
+    return "🛒 <b>Klimaanlage – aktueller Status</b>\n\n" + "\n\n".join(lines)
+
+
+def run(test_mode=False):
+    state = {} if test_mode else load_state()
+    results = check_all()
+    alerts = []
+
+    for r in results:
+        url, name, status, detail = r["url"], r["name"], r["status"], r["detail"]
         prev = state.get(url, {}).get("status", UNKNOWN)
         log(f"{name:12s} {status:12s} ({detail})")
 
@@ -313,9 +339,80 @@ def run(test_mode=False):
         log("Keine neue Verfügbarkeit – keine Meldung.")
 
 
+HELP_TEXT = (
+    "🤖 <b>Stock-Monitor Bot</b>\n\n"
+    "Befehle:\n"
+    "/check – jetzt alle vier Seiten prüfen und Status anzeigen\n"
+    "/help – diese Hilfe\n\n"
+    "Außerdem melde ich mich automatisch, sobald ein Artikel wieder bestellbar wird."
+)
+
+
+def run_bot():
+    """Long-Polling-Loop: lauscht auf Telegram-Befehle wie /check."""
+    allow = os.environ.get("TELEGRAM_CHAT_ID", "").strip()
+    if not allow:
+        raise RuntimeError("TELEGRAM_CHAT_ID muss gesetzt sein (.env).")
+    log("Bot gestartet – warte auf Befehle (/check, /help).")
+    try:
+        send_telegram("🤖 Stock-Monitor Bot ist online. Schick /check für eine Sofort-Prüfung.")
+    except Exception as exc:  # noqa: BLE001
+        log(f"Start-Nachricht fehlgeschlagen: {exc}")
+
+    offset = None
+    while True:
+        try:
+            params = {"timeout": 50}
+            if offset is not None:
+                params["offset"] = offset
+            res = telegram_api("getUpdates", params, timeout=70)
+        except Exception as exc:  # noqa: BLE001
+            log(f"getUpdates-Fehler: {exc}")
+            time.sleep(5)
+            continue
+
+        for upd in res.get("result", []):
+            offset = upd["update_id"] + 1
+            msg = upd.get("message") or upd.get("edited_message") or {}
+            chat = msg.get("chat", {})
+            chat_id = str(chat.get("id", ""))
+            text = (msg.get("text") or "").strip().lower()
+            # /command@botname -> command
+            cmd = text.split()[0].split("@")[0] if text else ""
+
+            if chat_id != allow:
+                log(f"Ignoriere Nachricht von fremdem Chat {chat_id}.")
+                continue
+
+            if cmd in ("/check", "/status", "check", "status"):
+                try:
+                    telegram_api(
+                        "sendMessage",
+                        {"chat_id": allow, "text": "⏳ Prüfe alle vier Seiten …"},
+                    )
+                    results = check_all()
+                    for r in results:
+                        log(f"[bot] {r['name']:12s} {r['status']}")
+                    send_telegram(format_results(results))
+                except Exception as exc:  # noqa: BLE001
+                    log(f"/check-Fehler: {exc}")
+                    try:
+                        send_telegram(f"⚠️ Fehler bei der Prüfung: {exc}")
+                    except Exception:
+                        pass
+            elif cmd in ("/start", "/help", "help", "start"):
+                send_telegram(HELP_TEXT)
+            elif cmd:
+                send_telegram("Unbekannter Befehl. /check oder /help")
+
+
 def main():
     load_env()
     args = set(sys.argv[1:])
+
+    if "--bot" in args:
+        run_bot()
+        return
 
     if "--get-chat-id" in args:
         get_chat_id()
