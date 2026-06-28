@@ -259,29 +259,23 @@ if (_q) {
 }
 """
 
-CHALLENGE_MARKERS = [
-    "nur einen moment",
-    "just a moment",
-    "checking your browser",
-    "challenge-platform",
-    "/cdn-cgi/challenge",
-    "cf-chl",
-]
-
-
 def is_challenge(html):
-    """Erkennt eine Cloudflare-Interstitial-/Challenge-Seite (statt echtem Inhalt).
+    """Erkennt die Cloudflare-Interstitial-/Warteseite (statt echtem Inhalt).
 
-    Größenunabhängig: die Challenge-Seite hat den Titel „Nur einen Moment…"
-    bzw. lädt das Cloudflare-Challenge-Script – das ist das zuverlässige Signal.
+    Nur der Seitentitel ist zuverlässig: die Warteseite heißt „Nur einen Moment…"
+    bzw. „Just a moment…". Generische Marker wie 'challenge-platform' oder
+    '/cdn-cgi/' stehen auch auf ECHTEN Cloudflare-Seiten (z.B. expert.de) und
+    taugen daher nicht zur Erkennung.
     """
     if not html:
         return False
     low = html.lower()
-    # Sehr starkes Signal: Titel der Cloudflare-Wartesseite.
-    if "<title>nur einen moment" in low or "<title>just a moment" in low:
-        return True
-    return any(m in low for m in CHALLENGE_MARKERS)
+    return (
+        "<title>nur einen moment" in low
+        or "<title>just a moment" in low
+        or "<title>einen moment" in low
+        or "checking your browser before accessing" in low
+    )
 
 
 def dismiss_cookies(page):
