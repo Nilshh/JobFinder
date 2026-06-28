@@ -88,6 +88,9 @@ Zeile einfügen (Pfad ggf. anpassen):
 
 `0 * * * *` = jede volle Stunde. (Tipp zum Testen alle 15 Min: `*/15 * * * *`.)
 
+Möchtest du z. B. immer **5 Minuten nach voll** prüfen, nimm `5 * * * *` und setze
+zusätzlich `CRON_MINUTE=5` in der `.env`, damit `/next` die richtige Zeit anzeigt.
+
 **Lebenszeichen:** Standardmäßig meldet sich der Job nur, wenn etwas bestellbar
 wird. Möchtest du stündlich auch dann eine kurze Status-Übersicht (um zu sehen,
 dass er läuft), setze in `.env`:
