@@ -150,7 +150,11 @@ def fetch_pages(urls):
     with sync_playwright() as p:
         browser = p.chromium.launch(
             headless=True,
-            args=["--disable-blink-features=AutomationControlled"],
+            args=[
+                "--disable-blink-features=AutomationControlled",
+                "--no-sandbox",
+                "--disable-dev-shm-usage",
+            ],
         )
         context = browser.new_context(
             user_agent=(
@@ -158,8 +162,18 @@ def fetch_pages(urls):
                 "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
             ),
             locale="de-DE",
+            timezone_id="Europe/Berlin",
             viewport={"width": 1366, "height": 900},
+            extra_http_headers={
+                "Accept-Language": "de-DE,de;q=0.9,en;q=0.8",
+                "sec-ch-ua": '"Chromium";v="124", "Google Chrome";v="124", "Not-A.Brand";v="99"',
+                "sec-ch-ua-mobile": "?0",
+                "sec-ch-ua-platform": '"macOS"',
+            },
         )
+        # Stealth: typische Headless-Merkmale verstecken, damit Cloudflare die
+        # JS-Challenge automatisch durchlässt statt CAPTCHA zu zeigen.
+        context.add_init_script(STEALTH_JS)
         page = context.new_page()
         for url in urls:
             try:
@@ -172,12 +186,56 @@ def fetch_pages(urls):
                 except Exception:
                     pass
                 page.wait_for_timeout(1500)
-                results[url] = page.content()
+                html = page.content()
+                # Cloudflare-„Nur einen Moment…"-Challenge aussitzen: sie löst sich
+                # bei einem echt wirkenden Browser nach ein paar Sekunden selbst.
+                waited = 0
+                while is_challenge(html) and waited < 35000:
+                    page.wait_for_timeout(5000)
+                    waited += 5000
+                    dismiss_cookies(page)
+                    html = page.content()
+                if is_challenge(html):
+                    log(f"Challenge nicht überwunden: {url}")
+                results[url] = html
             except Exception as exc:  # noqa: BLE001
                 log(f"Abruf-Fehler {url}: {exc}")
                 results[url] = ""
         browser.close()
     return results
+
+
+# Init-Script gegen Bot-Erkennung (vor jedem Seitenaufbau injiziert).
+STEALTH_JS = """
+Object.defineProperty(navigator, 'webdriver', {get: () => undefined});
+Object.defineProperty(navigator, 'languages', {get: () => ['de-DE','de','en']});
+Object.defineProperty(navigator, 'plugins', {get: () => [1,2,3,4,5]});
+window.chrome = { runtime: {} };
+const _q = window.navigator.permissions && window.navigator.permissions.query;
+if (_q) {
+  window.navigator.permissions.query = (p) =>
+    p && p.name === 'notifications'
+      ? Promise.resolve({state: Notification.permission})
+      : _q(p);
+}
+"""
+
+CHALLENGE_MARKERS = [
+    "nur einen moment",
+    "just a moment",
+    "checking your browser",
+    "challenge-platform",
+    "/cdn-cgi/challenge",
+    "cf-chl",
+]
+
+
+def is_challenge(html):
+    """Erkennt eine Cloudflare-Interstitial-/Challenge-Seite (statt echtem Inhalt)."""
+    if not html:
+        return False
+    low = html.lower()
+    return len(html) < 60000 and any(m in low for m in CHALLENGE_MARKERS)
 
 
 def dismiss_cookies(page):
