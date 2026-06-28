@@ -114,7 +114,20 @@ Dafür muss ein dauerhafter Prozess laufen (Long-Polling). Manuell zum Testen:
 ./run.sh --bot
 ```
 
-Dann in Telegram `/check` (oder `/help`) an den Bot schicken.
+Dann in Telegram an den Bot schreiben. Verfügbare Befehle:
+
+| Befehl | Funktion |
+|---|---|
+| `/check` | Jetzt alle Seiten prüfen und Status anzeigen |
+| `/list` | Überwachte und manuelle Seiten auflisten |
+| `/add <link>` | Neue Seite zur **automatischen** Prüfung hinzufügen |
+| `/link <link>` | Neue Seite nur als **manuellen** Link (wie MediaMarkt) |
+| `/del` | Eintrag über ein Auswahlmenü (Knöpfe) löschen |
+| `/help` | Hilfe anzeigen |
+
+Die Listen werden in `targets.json` gespeichert (nicht im Git). Der stündliche
+Cron-Lauf liest dieselbe Datei – Änderungen per Bot wirken also sofort auch auf
+die automatischen Prüfungen.
 
 ### Als Dienst (systemd, empfohlen auf dem Server)
 

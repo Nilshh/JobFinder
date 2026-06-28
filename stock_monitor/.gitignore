@@ -1,4 +1,6 @@
 .env
 state.json
+targets.json
 monitor.log
+debug-*.html
 .venv/
