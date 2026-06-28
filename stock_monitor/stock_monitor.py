@@ -222,18 +222,18 @@ def fetch_pages(urls):
                 dismiss_cookies(page)
                 # kurz auf Nachladen warten
                 try:
-                    page.wait_for_load_state("networkidle", timeout=8000)
+                    page.wait_for_load_state("networkidle", timeout=5000)
                 except Exception:
                     pass
-                page.wait_for_timeout(1500)
+                page.wait_for_timeout(800)
                 html = page.content()
-                # Cloudflare-„Nur einen Moment…"-Challenge aussitzen: sie löst sich
-                # bei einem echt wirkenden Browser nach ein paar Sekunden selbst.
+                # Cloudflare-„Nur einen Moment…"-Challenge kurz aussitzen: löst sich
+                # nur, wenn überhaupt, in wenigen Sekunden. Harte Blocks lösen sich
+                # nie -> nicht ewig warten (sonst dauert /check Minuten).
                 waited = 0
-                while is_challenge(html) and waited < 35000:
-                    page.wait_for_timeout(5000)
-                    waited += 5000
-                    dismiss_cookies(page)
+                while is_challenge(html) and waited < 12000:
+                    page.wait_for_timeout(4000)
+                    waited += 4000
                     html = page.content()
                 if is_challenge(html):
                     log(f"Challenge nicht überwunden: {url}")
@@ -381,11 +381,12 @@ def check_all():
             {"url": url, "name": site_name(url), "status": status, "detail": detail}
         )
 
-    # Zweiter Versuch für unklare/blockierte Seiten (transiente Cloudflare-/
-    # Ladeaussetzer, z.B. Bauhaus). Vielleicht kommt der Re-Check durch.
-    retry_urls = [r["url"] for r in results if r["status"] in (UNKNOWN, BLOCKED)]
+    # Zweiter Versuch nur für unklare Seiten (Seite kam durch, aber kein Signal –
+    # oft ein Ladeaussetzer). BLOCKED-Seiten werden NICHT erneut versucht: das
+    # Aussitzen wurde gerade schon gemacht und verdoppelt sonst nur die Wartezeit.
+    retry_urls = [r["url"] for r in results if r["status"] == UNKNOWN]
     if retry_urls:
-        log(f"Re-Check für {len(retry_urls)} unklare/blockierte Seite(n) …")
+        log(f"Re-Check für {len(retry_urls)} unklare Seite(n) …")
         pages2 = fetch_pages(retry_urls)
         for r in results:
             if r["url"] in retry_urls and pages2.get(r["url"]):
