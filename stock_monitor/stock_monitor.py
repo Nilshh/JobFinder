@@ -376,6 +376,19 @@ def check_all():
         results.append(
             {"url": url, "name": site_name(url), "status": status, "detail": detail}
         )
+
+    # Zweiter Versuch für unklare Seiten (transiente Cloudflare-/Ladeaussetzer,
+    # z.B. Bauhaus). Nur die UNKNOWN-Seiten erneut abrufen.
+    retry_urls = [r["url"] for r in results if r["status"] == UNKNOWN]
+    if retry_urls:
+        log(f"Re-Check für {len(retry_urls)} unklare Seite(n) …")
+        pages2 = fetch_pages(retry_urls)
+        for r in results:
+            if r["url"] in retry_urls and pages2.get(r["url"]):
+                status, detail = detect_status(r["url"], pages2[r["url"]])
+                if status != UNKNOWN:
+                    r["status"], r["detail"] = status, detail
+
     return results
 
 
