@@ -31,12 +31,18 @@ STATE_FILE = BASE_DIR / "state.json"
 ENV_FILE = BASE_DIR / ".env"
 LOG_FILE = BASE_DIR / "monitor.log"
 
-# Zu überwachende Produktseiten.
+# Automatisch überwachte Produktseiten.
 URLS = [
     "https://www.obi.de/p/8620890/midea-mobile-split-klimaanlage-portasplit?preselectedKp=true",
     "https://www.expert.de/shop/unsere-produkte/haushalt-kuche/wohnklima/klimagerate/32750011559-portasplit-mobile-split-klimaanlage.html",
     "https://www.bauhaus.info/klimaanlagen/midea-klimasplitgeraet-portasplit/p/31934233",
-    "https://www.mediamarkt.de/de/product/_midea-portasplit-cool-split-klimaanlage-weissgrau-max-raumgrosse-70-m-3035466.html",
+]
+
+# Seiten, die NICHT automatisch geprüft werden können (z.B. MediaMarkt: blockt
+# die Server-IP per Cloudflare-CAPTCHA). Ihr Link wird ans Ende jeder
+# Telegram-Nachricht gehängt, damit du sie manuell prüfen kannst.
+MANUAL_URLS = [
+    ("MediaMarkt", "https://www.mediamarkt.de/de/product/_midea-portasplit-cool-split-klimaanlage-weissgrau-max-raumgrosse-70-m-3035466.html"),
 ]
 
 # Status-Werte
@@ -346,12 +352,24 @@ STATUS_LABEL = {
 }
 
 
+def manual_footer():
+    """Links der nicht automatisch prüfbaren Seiten (manuell checken)."""
+    if not MANUAL_URLS:
+        return ""
+    lines = [f'<a href="{url}">{name}</a>' for name, url in MANUAL_URLS]
+    return "\n\n— ✋ <b>bitte manuell prüfen</b> —\n" + "\n".join(lines)
+
+
 def format_results(results):
     lines = []
     for r in results:
         label = STATUS_LABEL.get(r["status"], r["status"])
         lines.append(f"<b>{r['name']}</b> – {label}\n<a href=\"{r['url']}\">zur Seite</a>")
-    return "🛒 <b>Klimaanlage – aktueller Status</b>\n\n" + "\n\n".join(lines)
+    return (
+        "🛒 <b>Klimaanlage – aktueller Status</b>\n\n"
+        + "\n\n".join(lines)
+        + manual_footer()
+    )
 
 
 def run(test_mode=False):
@@ -389,7 +407,7 @@ def run(test_mode=False):
     if alerts:
         header = "🛒 <b>Klimaanlage – Verfügbarkeit</b>\n\n"
         try:
-            send_telegram(header + "\n\n".join(alerts))
+            send_telegram(header + "\n\n".join(alerts) + manual_footer())
             log(f"Telegram-Meldung gesendet ({len(alerts)} Treffer).")
         except Exception as exc:  # noqa: BLE001
             log(f"Konnte Telegram nicht senden: {exc}")

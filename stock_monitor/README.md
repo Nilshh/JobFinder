@@ -6,8 +6,13 @@ Artikel wieder bestellbar ist.
 
 Eigenständig, unabhängig vom JobFinder. Liegt nur der Ordnung halber im selben Repo.
 
-Überwacht:
-- OBI · expert · Bauhaus · MediaMarkt
+Automatisch überwacht:
+- OBI · expert · Bauhaus
+
+Nur als Link (manuell): MediaMarkt – dessen Seite blockt fremde Server-IPs per
+Cloudflare-CAPTCHA, lässt sich also nicht zuverlässig automatisch prüfen. Der
+Link hängt deshalb am Ende jeder Telegram-Nachricht zum manuellen Nachsehen.
+(Liste `MANUAL_URLS` in `stock_monitor.py`.)
 
 ## Warum ein echter Browser?
 
