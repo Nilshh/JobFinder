@@ -802,7 +802,12 @@ def handle_callback(cb, allow):
         else:
             note = "Eintrag nicht mehr vorhanden (Liste hat sich geändert)."
 
-    telegram_api("answerCallbackQuery", {"callback_query_id": cb_id})
+    # Beide Aufrufe fehlertolerant: eine „zu alte" Callback-Query (HTTP 400) darf
+    # die Bearbeitung (ist bereits gespeichert) nicht als Fehler hochblasen.
+    try:
+        telegram_api("answerCallbackQuery", {"callback_query_id": cb_id})
+    except Exception:
+        pass
     if msg_id is not None:
         try:
             telegram_api(
