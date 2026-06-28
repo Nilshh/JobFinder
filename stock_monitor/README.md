@@ -8,6 +8,14 @@ kannst also **jeden Artikel** überwachen – per `/add <link>` hinzufügen, mit
 `/edit` einen sprechenden Namen vergeben (z.B. „PS5 MediaMarkt"). Die Überschrift
 der Nachrichten ist über `MONITOR_TITLE` in der `.env` anpassbar.
 
+Weitere Features:
+- **Preis** wird mitgelesen und im Status angezeigt; per `/price` lässt sich ein
+  **Maximalpreis** je Eintrag setzen → Meldung, sobald der Preis darunter fällt.
+- **Sofort-Prüfung** direkt nach `/add` (du siehst gleich, ob die Seite prüfbar ist).
+- Seiten werden **parallel** geladen (`CHECK_WORKERS`, Default 4) – schneller `/check`.
+- **Ruhezeiten**: das Heartbeat-Lebenszeichen pausiert nachts (`HEARTBEAT_FROM`/
+  `HEARTBEAT_TO`, Default 8–22); echte Alarme kommen immer durch.
+
 Eigenständig, unabhängig vom JobFinder. Liegt nur der Ordnung halber im selben Repo.
 
 Alle Seiten stehen in der Auto-Liste und werden jede Stunde **versucht**:
@@ -134,6 +142,7 @@ Dann in Telegram an den Bot schreiben. Verfügbare Befehle:
 | `/add <Name> \| <link>` | Neue Seite zur **automatischen** Prüfung (Name optional, sonst Domain) |
 | `/link <Name> \| <link>` | Neue Seite nur als **manuellen** Link (Name optional) |
 | `/edit` | Name/URL eines Eintrags ändern (Auswahlmenü, dann `Name \| URL` schicken) |
+| `/price` | Preisalarm setzen (Auswahlmenü, dann Maximalpreis; `0` = aus) |
 | `/del` | Eintrag über ein Auswahlmenü (Knöpfe) löschen |
 | `/help` | Hilfe anzeigen |
 

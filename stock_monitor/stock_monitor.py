@@ -67,17 +67,23 @@ def _normalize_pairs(items):
 
 
 def load_targets():
-    """Liest auto/manual-Listen aus targets.json (legt sie bei Bedarf an)."""
+    """Liest auto/manual-Listen aus targets.json (legt sie bei Bedarf an).
+    price_max: {url: float} – optionale Preisschwellen für den Preisalarm."""
     if TARGETS_FILE.exists():
         try:
             d = json.loads(TARGETS_FILE.read_text(encoding="utf-8"))
             return {
                 "auto": _normalize_pairs(d.get("auto", [])),
                 "manual": _normalize_pairs(d.get("manual", [])),
+                "price_max": dict(d.get("price_max", {})),
             }
         except (json.JSONDecodeError, OSError):
             pass
-    d = {"auto": [list(x) for x in DEFAULT_AUTO], "manual": [list(x) for x in DEFAULT_MANUAL]}
+    d = {
+        "auto": [list(x) for x in DEFAULT_AUTO],
+        "manual": [list(x) for x in DEFAULT_MANUAL],
+        "price_max": {},
+    }
     save_targets(d)
     return d
 
@@ -202,8 +208,9 @@ def save_state(state):
 # --------------------------------------------------------------------------- #
 # Seiten abrufen (Playwright) + Status erkennen
 # --------------------------------------------------------------------------- #
-def fetch_pages(urls):
-    """Rendert alle URLs mit einem Headless-Chromium und gibt {url: html} zurück."""
+def _fetch_chunk(urls):
+    """Rendert eine Teilmenge URLs mit EINEM Headless-Chromium (eigene Playwright-
+    Instanz, damit es thread-sicher parallel laufen kann). Gibt {url: html} zurück."""
     from playwright.sync_api import sync_playwright
 
     results = {}
@@ -265,6 +272,30 @@ def fetch_pages(urls):
     return results
 
 
+def fetch_pages(urls):
+    """Lädt alle URLs und gibt {url: html} zurück. Mehrere Seiten werden parallel
+    in mehreren Browsern geladen (Anzahl via CHECK_WORKERS, Standard 4)."""
+    urls = list(urls)
+    if not urls:
+        return {}
+    try:
+        max_workers = max(1, int(os.environ.get("CHECK_WORKERS", "4")))
+    except ValueError:
+        max_workers = 4
+    if len(urls) == 1 or max_workers == 1:
+        return _fetch_chunk(urls)
+
+    from concurrent.futures import ThreadPoolExecutor
+
+    n = min(max_workers, len(urls))
+    chunks = [urls[i::n] for i in range(n)]  # gleichmäßig verteilen
+    results = {}
+    with ThreadPoolExecutor(max_workers=n) as ex:
+        for part in ex.map(_fetch_chunk, chunks):
+            results.update(part)
+    return results
+
+
 # Init-Script gegen Bot-Erkennung (vor jedem Seitenaufbau injiziert).
 STEALTH_JS = """
 Object.defineProperty(navigator, 'webdriver', {get: () => undefined});
@@ -323,6 +354,29 @@ def jsonld_availabilities(html):
     """Alle schema.org-availability-Werte aus dem HTML (JSON-LD + inline JSON)."""
     vals = re.findall(r'"availability"\s*:\s*"([^"]+)"', html)
     return [v.split("/")[-1].lower() for v in vals]  # z.B. 'instock', 'outofstock'
+
+
+def extract_price(html):
+    """Versucht, den Preis aus dem HTML zu lesen (schema.org 'price'/'lowPrice').
+    Gibt einen float (in der Shop-Währung, i.d.R. EUR) zurück oder None."""
+    if not html:
+        return None
+    candidates = []
+    for key in ("price", "lowPrice", "highPrice"):
+        for m in re.findall(rf'"{key}"\s*:\s*"?([0-9]+(?:[.,][0-9]{{1,2}})?)"?', html):
+            try:
+                candidates.append(float(m.replace(",", ".")))
+            except ValueError:
+                continue
+    # Plausible Preise (>0); kleinster Treffer ist meist der Artikelpreis
+    candidates = [c for c in candidates if c > 0]
+    return min(candidates) if candidates else None
+
+
+def fmt_price(price):
+    if price is None:
+        return ""
+    return f"{price:.2f} €".replace(".", ",")
 
 
 def detect_status(url, html):
@@ -397,9 +451,11 @@ def check_all():
     pages = fetch_pages(urls)
     results = []
     for name, url in auto:
-        status, detail = detect_status(url, pages.get(url, ""))
+        html = pages.get(url, "")
+        status, detail = detect_status(url, html)
         results.append(
-            {"url": url, "name": name, "status": status, "detail": detail}
+            {"url": url, "name": name, "status": status, "detail": detail,
+             "price": extract_price(html)}
         )
 
     # Zweiter Versuch nur für unklare Seiten (Seite kam durch, aber kein Signal –
@@ -415,6 +471,7 @@ def check_all():
                 # Nur übernehmen, wenn der zweite Versuch ein klares Ergebnis bringt.
                 if status in (AVAILABLE, UNAVAILABLE):
                     r["status"], r["detail"] = status, detail
+                    r["price"] = extract_price(pages2[r["url"]])
 
     return results
 
@@ -430,6 +487,22 @@ def monitor_title():
     """Überschrift der Telegram-Nachrichten. Per .env (MONITOR_TITLE) anpassbar,
     da nicht mehr nur Klimaanlagen überwacht werden."""
     return os.environ.get("MONITOR_TITLE", "Verfügbarkeits-Check").strip() or "Verfügbarkeits-Check"
+
+
+def in_heartbeat_window():
+    """True, wenn die aktuelle Stunde im Heartbeat-Fenster liegt (Ruhezeiten).
+    Konfiguriert über HEARTBEAT_FROM/HEARTBEAT_TO (lokale Stunden, Default 8–22).
+    Echte Verfügbarkeits-Alarme sind davon NICHT betroffen – nur das Lebenszeichen."""
+    try:
+        start = int(os.environ.get("HEARTBEAT_FROM", "8"))
+        end = int(os.environ.get("HEARTBEAT_TO", "22"))
+    except ValueError:
+        start, end = 8, 22
+    hour = time.localtime().tm_hour
+    if start <= end:
+        return start <= hour <= end
+    # über Mitternacht, z.B. 22–6
+    return hour >= start or hour <= end
 
 
 def manual_footer(results=None):
@@ -455,12 +528,21 @@ def manual_footer(results=None):
 
 def format_results(results):
     # Blockierte Seiten nicht als Status zeigen – sie stehen im manuellen Block.
+    price_max = load_targets().get("price_max", {})
     lines = []
     for r in results:
         if r["status"] == BLOCKED:
             continue
         label = STATUS_LABEL.get(r["status"], r["status"])
-        lines.append(f"<b>{r['name']}</b> – {label}\n<a href=\"{r['url']}\">zur Seite</a>")
+        extra = ""
+        price = r.get("price")
+        if price is not None:
+            extra = f" · {fmt_price(price)}"
+            limit = price_max.get(r["url"])
+            if limit is not None:
+                hit = "✅" if price <= float(limit) else "↧"
+                extra += f" (Ziel {fmt_price(float(limit))} {hit})"
+        lines.append(f"<b>{r['name']}</b> – {label}{extra}\n<a href=\"{r['url']}\">zur Seite</a>")
     body = "\n\n".join(lines) if lines else "(keine automatisch prüfbaren Seiten)"
     return f"🛒 <b>{monitor_title()} – aktueller Status</b>\n\n" + body + manual_footer(results)
 
@@ -468,19 +550,37 @@ def format_results(results):
 def run(test_mode=False):
     state = {} if test_mode else load_state()
     results = check_all()
+    price_max = load_targets().get("price_max", {})
     alerts = []
 
     for r in results:
         url, name, status, detail = r["url"], r["name"], r["status"], r["detail"]
-        prev = state.get(url, {}).get("status", UNKNOWN)
-        log(f"{name:12s} {status:12s} ({detail})")
+        price = r.get("price")
+        st_prev = state.get(url, {})
+        prev = st_prev.get("status", UNKNOWN)
+        prev_price = st_prev.get("price")
+        log(f"{name:12s} {status:12s} ({detail})" + (f" {fmt_price(price)}" if price else ""))
 
         if test_mode:
             continue
 
         # Alarm nur beim Übergang nach AVAILABLE (verhindert Dauer-Spam)
         if status == AVAILABLE and prev != AVAILABLE:
-            alerts.append(f"✅ <b>{name}</b> ist jetzt bestellbar!\n{url}")
+            line = f"✅ <b>{name}</b> ist jetzt bestellbar!"
+            if price is not None:
+                line += f" ({fmt_price(price)})"
+            alerts.append(line + f"\n{url}")
+
+        # Preisalarm: Preis fällt auf/unter die gesetzte Schwelle (Übergang).
+        limit = price_max.get(url)
+        if limit is not None and price is not None:
+            below = price <= float(limit)
+            was_below = prev_price is not None and prev_price <= float(limit)
+            if below and not was_below:
+                alerts.append(
+                    f"💶 <b>{name}</b> ist im Preis gefallen: {fmt_price(price)} "
+                    f"(Ziel {fmt_price(float(limit))})\n{url}"
+                )
 
         # Optional: dauerhafte Fehler melden
         if (
@@ -490,7 +590,8 @@ def run(test_mode=False):
         ):
             alerts.append(f"⚠️ <b>{name}</b> nicht prüfbar ({detail})\n{url}")
 
-        state[url] = {"status": status, "detail": detail, "ts": int(time.time())}
+        state[url] = {"status": status, "detail": detail, "price": price,
+                      "ts": int(time.time())}
 
     if test_mode:
         return
@@ -506,7 +607,7 @@ def run(test_mode=False):
             log(f"Telegram-Meldung gesendet ({len(alerts)} Treffer).")
         except Exception as exc:  # noqa: BLE001
             log(f"Konnte Telegram nicht senden: {exc}")
-    elif os.environ.get("HEARTBEAT") == "1":
+    elif os.environ.get("HEARTBEAT") == "1" and in_heartbeat_window():
         # Lebenszeichen: bestätigt, dass der Job läuft, auch wenn nichts neu ist.
         try:
             send_telegram("🫀 Stündlicher Check – nichts Neues.\n\n" + format_results(results))
@@ -526,9 +627,11 @@ HELP_TEXT = (
     "/add &lt;Name&gt; | &lt;link&gt; – neue Seite zur automatischen Prüfung (Name optional)\n"
     "/link &lt;Name&gt; | &lt;link&gt; – neue Seite nur als manuellen Link (Name optional)\n"
     "/edit – Name/URL eines Eintrags über Auswahlmenü ändern\n"
+    "/price – Preisalarm setzen (Auswahlmenü, dann Maximalpreis)\n"
     "/del – Eintrag über Auswahlmenü löschen\n"
     "/help – diese Hilfe\n\n"
-    "Außerdem melde ich mich automatisch, sobald ein Artikel wieder bestellbar wird."
+    "Außerdem melde ich mich automatisch, sobald ein Artikel wieder bestellbar wird "
+    "oder im Preis unter dein Ziel fällt."
 )
 
 BOT_COMMANDS = [
@@ -538,6 +641,7 @@ BOT_COMMANDS = [
     {"command": "add", "description": "Auto-Prüfung: /add Name | <link>"},
     {"command": "link", "description": "Manueller Link: /link Name | <link>"},
     {"command": "edit", "description": "Name/URL eines Eintrags ändern (Auswahlmenü)"},
+    {"command": "price", "description": "Preisalarm setzen (Auswahlmenü)"},
     {"command": "del", "description": "Eintrag löschen (Auswahlmenü)"},
     {"command": "help", "description": "Hilfe anzeigen"},
 ]
@@ -673,6 +777,54 @@ def _run_check_async():
         _check_busy = False
 
 
+def _check_one_async(name, url):
+    """Prüft eine einzelne Seite (für die Sofort-Rückmeldung nach /add)."""
+    try:
+        html = fetch_pages([url]).get(url, "")
+        status, detail = detect_status(url, html)
+        price = extract_price(html)
+        label = STATUS_LABEL.get(status, status)
+        if status == BLOCKED:
+            tg_send(
+                f"✋ <b>{name}</b>: Seite ist durch Cloudflare blockiert – sie wird "
+                "automatisch unter „manuell prüfen“ geführt (selbstheilend)."
+            )
+        elif status == UNKNOWN:
+            tg_send(
+                f"⚠️ <b>{name}</b>: Verfügbarkeit nicht erkennbar ({detail}). "
+                "Wird trotzdem stündlich erneut versucht."
+            )
+        else:
+            extra = f" · {fmt_price(price)}" if price is not None else ""
+            tg_send(f"🔎 <b>{name}</b>: {label}{extra}")
+    except Exception as exc:  # noqa: BLE001
+        log(f"/add-Sofortcheck-Fehler: {exc}")
+
+
+def apply_price(pending, value):
+    """Setzt/entfernt die Preisschwelle für einen Eintrag. value: Zahl oder 0/aus."""
+    kind, idx = pending
+    t = load_targets()
+    lst = t["auto"] if kind == "a" else t["manual"]
+    if not (0 <= idx < len(lst)):
+        return "Eintrag nicht mehr vorhanden (Liste hat sich geändert)."
+    name, url = lst[idx]
+    raw = value.strip().lower().replace("€", "").replace(",", ".").strip()
+    if raw in ("0", "-", "aus", "off", "none", ""):
+        t["price_max"].pop(url, None)
+        save_targets(t)
+        log(f"[bot] Preisalarm entfernt: {name}")
+        return f"🔕 Preisalarm für <b>{name}</b> entfernt."
+    try:
+        v = float(raw)
+    except ValueError:
+        return "Bitte eine Zahl schicken, z.B. <code>999</code> oder <code>999,00</code> (0 = aus)."
+    t["price_max"][url] = v
+    save_targets(t)
+    log(f"[bot] Preisalarm gesetzt: {name} <= {v}")
+    return f"💶 Preisalarm gesetzt: <b>{name}</b> ≤ {fmt_price(v)}\nMeldung, sobald der Preis das erreicht."
+
+
 def handle_command(cmd, arg):
     """Verarbeitet einen Textbefehl. Gibt nichts zurück (sendet selbst)."""
     global _check_busy
@@ -702,7 +854,8 @@ def handle_command(cmd, arg):
         t["auto"].append([name, url])
         save_targets(t)
         log(f"[bot] /add {name} -> {url}")
-        tg_send(f"➕ Zur Auto-Prüfung hinzugefügt: <b>{name}</b>\nMit /check sofort testen.")
+        tg_send(f"➕ Zur Auto-Prüfung hinzugefügt: <b>{name}</b>\n⏳ Teste die Seite einmal …")
+        threading.Thread(target=_check_one_async, args=(name, url), daemon=True).start()
 
     elif cmd in ("/link", "link"):
         name, url = parse_name_url(arg)
@@ -729,6 +882,13 @@ def handle_command(cmd, arg):
         kb, prompt = _entry_keyboard("edit", "Welchen Eintrag möchtest du bearbeiten?")
         if kb is None:
             tg_send("Es gibt keine Einträge zum Bearbeiten.")
+        else:
+            tg_send(prompt, reply_markup=kb)
+
+    elif cmd in ("/price", "price", "/preis", "preis"):
+        kb, prompt = _entry_keyboard("price", "Für welchen Eintrag einen Preisalarm setzen?")
+        if kb is None:
+            tg_send("Es gibt keine Einträge.")
         else:
             tg_send(prompt, reply_markup=kb)
 
@@ -802,7 +962,7 @@ def handle_callback(cb, allow):
         lst = t["auto"] if kind == "a" else t["manual"]
         if 0 <= idx < len(lst):
             name, url = lst[idx]
-            pending = (kind, idx)
+            pending = ("edit", kind, idx)
             note = (
                 f"✏️ <b>{name}</b> bearbeiten.\n\n"
                 "Schick mir jetzt den neuen Eintrag als:\n"
@@ -811,11 +971,27 @@ def handle_callback(cb, allow):
             )
         else:
             note = "Eintrag nicht mehr vorhanden (Liste hat sich geändert)."
+    elif action == "price":
+        t = load_targets()
+        lst = t["auto"] if kind == "a" else t["manual"]
+        if 0 <= idx < len(lst):
+            name, url = lst[idx]
+            pending = ("price", kind, idx)
+            cur = t.get("price_max", {}).get(url)
+            cur_txt = f"\n(aktuell: ≤ {fmt_price(float(cur))})" if cur is not None else ""
+            note = (
+                f"💶 Preisalarm für <b>{name}</b>.{cur_txt}\n\n"
+                "Schick mir jetzt den <b>Maximalpreis</b> als Zahl (z.B. <code>999</code> "
+                "oder <code>999,00</code>).\n<code>0</code> = Preisalarm aus."
+            )
+        else:
+            note = "Eintrag nicht mehr vorhanden (Liste hat sich geändert)."
     else:  # del
         t = load_targets()
         lst = t["auto"] if kind == "a" else t["manual"]
         if 0 <= idx < len(lst):
             removed = lst.pop(idx)
+            t.get("price_max", {}).pop(removed[1], None)  # ggf. Preisalarm mitlöschen
             save_targets(t)
             note = f"🗑 Gelöscht: {removed[0]}"
             log(f"[bot] gelöscht ({kind}): {removed}")
@@ -856,7 +1032,7 @@ def run_bot():
         log(f"Start-Nachricht fehlgeschlagen: {exc}")
 
     offset = None
-    pending_edit = None  # ('a'|'m', idx) während einer /edit-Folgeeingabe
+    pending = None  # ('edit'|'price', 'a'|'m', idx) während einer Folgeeingabe
     while True:
         try:
             params = {"timeout": 50}
@@ -874,7 +1050,7 @@ def run_bot():
             cb = upd.get("callback_query")
             if cb:
                 try:
-                    pending_edit = handle_callback(cb, allow) or pending_edit
+                    pending = handle_callback(cb, allow) or pending
                 except Exception as exc:  # noqa: BLE001
                     log(f"Callback-Fehler: {exc}")
                 continue
@@ -889,17 +1065,21 @@ def run_bot():
             if not raw:
                 continue
 
-            # Folgeeingabe einer ausstehenden /edit-Bearbeitung (kein Befehl)?
-            if pending_edit and not raw.startswith("/"):
+            # Folgeeingabe einer ausstehenden /edit- oder /price-Aktion (kein Befehl)?
+            if pending and not raw.startswith("/"):
+                action, kind, idx = pending
                 try:
-                    tg_send(apply_edit(pending_edit, raw))
+                    if action == "price":
+                        tg_send(apply_price((kind, idx), raw))
+                    else:
+                        tg_send(apply_edit((kind, idx), raw))
                 except Exception as exc:  # noqa: BLE001
-                    log(f"Edit-Fehler: {exc}")
-                    tg_send(f"⚠️ Fehler beim Ändern: {exc}")
-                pending_edit = None
+                    log(f"Folgeeingabe-Fehler: {exc}")
+                    tg_send(f"⚠️ Fehler: {exc}")
+                pending = None
                 continue
 
-            pending_edit = None  # ein echter Befehl bricht eine offene Bearbeitung ab
+            pending = None  # ein echter Befehl bricht eine offene Aktion ab
             parts = raw.split(maxsplit=1)
             cmd = parts[0].lower().split("@")[0]
             arg = parts[1].strip() if len(parts) > 1 else ""
