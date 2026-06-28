@@ -36,11 +36,11 @@ LOG_FILE = BASE_DIR / "monitor.log"
 # diesen Defaults erzeugt.
 TARGETS_FILE = BASE_DIR / "targets.json"
 
-# Automatisch überwachte Produktseiten (Standard beim ersten Start).
+# Auto/Manual-Einträge sind Paare [Name, URL]. Standard beim ersten Start:
 DEFAULT_AUTO = [
-    "https://www.obi.de/p/8620890/midea-mobile-split-klimaanlage-portasplit?preselectedKp=true",
-    "https://www.expert.de/shop/unsere-produkte/haushalt-kuche/wohnklima/klimagerate/32750011559-portasplit-mobile-split-klimaanlage.html",
-    "https://www.bauhaus.info/klimaanlagen/midea-klimasplitgeraet-portasplit/p/31934233",
+    ["OBI", "https://www.obi.de/p/8620890/midea-mobile-split-klimaanlage-portasplit?preselectedKp=true"],
+    ["expert", "https://www.expert.de/shop/unsere-produkte/haushalt-kuche/wohnklima/klimagerate/32750011559-portasplit-mobile-split-klimaanlage.html"],
+    ["Bauhaus", "https://www.bauhaus.info/klimaanlagen/midea-klimasplitgeraet-portasplit/p/31934233"],
 ]
 
 # Seiten, die NICHT automatisch geprüft werden können (z.B. MediaMarkt: blockt
@@ -51,18 +51,32 @@ DEFAULT_MANUAL = [
 ]
 
 
+def _normalize_pairs(items):
+    """Wandelt Einträge in [Name, URL]-Paare. Alte Form (nur URL-String) wird
+    automatisch zu [abgeleiteter Name, URL] migriert."""
+    pairs = []
+    for item in items:
+        if isinstance(item, str):
+            pairs.append([site_name(item), item])
+        elif item:
+            name = item[0] if len(item) > 0 else ""
+            url = item[1] if len(item) > 1 else ""
+            pairs.append([name or site_name(url), url])
+    return pairs
+
+
 def load_targets():
     """Liest auto/manual-Listen aus targets.json (legt sie bei Bedarf an)."""
     if TARGETS_FILE.exists():
         try:
             d = json.loads(TARGETS_FILE.read_text(encoding="utf-8"))
             return {
-                "auto": list(d.get("auto", [])),
-                "manual": [list(x) for x in d.get("manual", [])],
+                "auto": _normalize_pairs(d.get("auto", [])),
+                "manual": _normalize_pairs(d.get("manual", [])),
             }
         except (json.JSONDecodeError, OSError):
             pass
-    d = {"auto": list(DEFAULT_AUTO), "manual": [list(x) for x in DEFAULT_MANUAL]}
+    d = {"auto": [list(x) for x in DEFAULT_AUTO], "manual": [list(x) for x in DEFAULT_MANUAL]}
     save_targets(d)
     return d
 
@@ -71,8 +85,13 @@ def save_targets(d):
     TARGETS_FILE.write_text(json.dumps(d, indent=2, ensure_ascii=False), encoding="utf-8")
 
 
-def get_auto_urls():
+def get_auto():
+    """Auto-Einträge als [Name, URL]-Paare."""
     return load_targets()["auto"]
+
+
+def get_auto_urls():
+    return [url for _name, url in load_targets()["auto"]]
 
 
 def get_manual_urls():
@@ -372,13 +391,14 @@ def site_name(url):
 # --------------------------------------------------------------------------- #
 def check_all():
     """Prüft alle URLs und gibt eine Liste mit {url,name,status,detail} zurück."""
-    urls = get_auto_urls()
+    auto = get_auto()  # [[name, url], ...]
+    urls = [url for _n, url in auto]
     pages = fetch_pages(urls)
     results = []
-    for url in urls:
+    for name, url in auto:
         status, detail = detect_status(url, pages.get(url, ""))
         results.append(
-            {"url": url, "name": site_name(url), "status": status, "detail": detail}
+            {"url": url, "name": name, "status": status, "detail": detail}
         )
 
     # Zweiter Versuch nur für unklare Seiten (Seite kam durch, aber kein Signal –
@@ -498,6 +518,7 @@ HELP_TEXT = (
     "/list – überwachte &amp; manuelle Seiten auflisten\n"
     "/add &lt;link&gt; – neue Seite zur automatischen Prüfung hinzufügen\n"
     "/link &lt;link&gt; – neue Seite nur als manuellen Link (wie MediaMarkt)\n"
+    "/edit – Name/URL eines Eintrags über Auswahlmenü ändern\n"
     "/del – Eintrag über Auswahlmenü löschen\n"
     "/help – diese Hilfe\n\n"
     "Außerdem melde ich mich automatisch, sobald ein Artikel wieder bestellbar wird."
@@ -509,6 +530,7 @@ BOT_COMMANDS = [
     {"command": "list", "description": "Überwachte & manuelle Seiten anzeigen"},
     {"command": "add", "description": "Seite zur Auto-Prüfung hinzufügen (/add <link>)"},
     {"command": "link", "description": "Seite nur als manuellen Link (/link <link>)"},
+    {"command": "edit", "description": "Name/URL eines Eintrags ändern (Auswahlmenü)"},
     {"command": "del", "description": "Eintrag löschen (Auswahlmenü)"},
     {"command": "help", "description": "Hilfe anzeigen"},
 ]
@@ -583,7 +605,7 @@ def cmd_list():
     t = load_targets()
     parts = ["📋 <b>Überwachte Seiten</b>"]
     if t["auto"]:
-        parts += [f"🔎 <b>{site_name(u)}</b>\n<a href=\"{u}\">{u}</a>" for u in t["auto"]]
+        parts += [f"🔎 <b>{n}</b>\n<a href=\"{u}\">{u}</a>" for n, u in t["auto"]]
     else:
         parts.append("(keine)")
     parts.append("\n✋ <b>Nur manueller Link</b>")
@@ -594,18 +616,18 @@ def cmd_list():
     return "\n\n".join(parts)
 
 
-def cmd_del_keyboard():
-    """Inline-Keyboard zum Löschen einzelner Einträge."""
+def _entry_keyboard(action, prompt):
+    """Inline-Keyboard mit allen Einträgen für eine Aktion (del/edit)."""
     t = load_targets()
     rows = []
-    for i, u in enumerate(t["auto"]):
-        rows.append([{"text": f"🔎 {site_name(u)} (auto)", "callback_data": f"del:a:{i}"}])
+    for i, (n, _u) in enumerate(t["auto"]):
+        rows.append([{"text": f"🔎 {n} (auto)", "callback_data": f"{action}:a:{i}"}])
     for i, (n, _u) in enumerate(t["manual"]):
-        rows.append([{"text": f"✋ {n} (manuell)", "callback_data": f"del:m:{i}"}])
+        rows.append([{"text": f"✋ {n} (manuell)", "callback_data": f"{action}:m:{i}"}])
     if not rows:
-        return None
-    rows.append([{"text": "✖️ Abbrechen", "callback_data": "del:x:0"}])
-    return {"inline_keyboard": rows}
+        return None, None
+    rows.append([{"text": "✖️ Abbrechen", "callback_data": f"{action}:x:0"}])
+    return {"inline_keyboard": rows}, prompt
 
 
 def handle_command(cmd, arg):
@@ -628,13 +650,14 @@ def handle_command(cmd, arg):
             tg_send("So geht's: <code>/add https://…</code>")
             return
         t = load_targets()
-        if arg in t["auto"]:
+        if any(u == arg for _n, u in t["auto"]):
             tg_send("Diese Seite wird bereits überwacht.")
             return
-        t["auto"].append(arg)
+        name = site_name(arg)
+        t["auto"].append([name, arg])
         save_targets(t)
         log(f"[bot] /add {arg}")
-        tg_send(f"➕ Zur Auto-Prüfung hinzugefügt: <b>{site_name(arg)}</b>\nMit /check sofort testen.")
+        tg_send(f"➕ Zur Auto-Prüfung hinzugefügt: <b>{name}</b>\nMit /check sofort testen, mit /edit umbenennen.")
 
     elif cmd in ("/link", "link"):
         if not is_valid_url(arg):
@@ -651,11 +674,18 @@ def handle_command(cmd, arg):
         tg_send(f"✋ Als manuellen Link angelegt: <b>{name}</b>")
 
     elif cmd in ("/del", "del", "/delete"):
-        kb = cmd_del_keyboard()
+        kb, prompt = _entry_keyboard("del", "Welchen Eintrag möchtest du löschen?")
         if kb is None:
             tg_send("Es gibt keine Einträge zum Löschen.")
         else:
-            tg_send("Welchen Eintrag möchtest du löschen?", reply_markup=kb)
+            tg_send(prompt, reply_markup=kb)
+
+    elif cmd in ("/edit", "edit"):
+        kb, prompt = _entry_keyboard("edit", "Welchen Eintrag möchtest du bearbeiten?")
+        if kb is None:
+            tg_send("Es gibt keine Einträge zum Bearbeiten.")
+        else:
+            tg_send(prompt, reply_markup=kb)
 
     elif cmd in ("/start", "/help", "help", "start"):
         tg_send(HELP_TEXT)
@@ -664,8 +694,43 @@ def handle_command(cmd, arg):
         tg_send("Unbekannter Befehl. /help zeigt alle Befehle.")
 
 
+def apply_edit(pending, value):
+    """Wendet eine ausstehende Bearbeitung an. value: 'Name | URL', nur Name
+    oder nur URL. Gibt eine Status-Nachricht zurück."""
+    kind, idx = pending
+    t = load_targets()
+    lst = t["auto"] if kind == "a" else t["manual"]
+    if not (0 <= idx < len(lst)):
+        return "Eintrag nicht mehr vorhanden (Liste hat sich geändert)."
+
+    name, url = lst[idx]
+    value = value.strip()
+    if "|" in value:
+        new_name, new_url = value.split("|", 1)
+        new_name, new_url = new_name.strip(), new_url.strip()
+        if new_name:
+            name = new_name
+        if new_url:
+            if not is_valid_url(new_url):
+                return "URL muss mit http:// oder https:// beginnen. Nichts geändert."
+            url = new_url
+    elif is_valid_url(value):
+        url = value
+    elif value:
+        name = value  # nur Name geändert
+
+    lst[idx] = [name, url]
+    save_targets(t)
+    log(f"[bot] bearbeitet ({kind}): {name} -> {url}")
+    return f"✏️ Geändert: <b>{name}</b>\n<a href=\"{url}\">{url}</a>"
+
+
 def handle_callback(cb, allow):
-    """Verarbeitet einen Knopfdruck aus dem /del-Auswahlmenü."""
+    """Verarbeitet einen Knopfdruck (Auswahlmenü von /del und /edit).
+
+    Rückgabe: bei /edit ein ('a'|'m', idx)-Tupel als ausstehende Bearbeitung,
+    sonst None.
+    """
     cb_id = cb.get("id")
     data = cb.get("data", "")
     message = cb.get("message", {})
@@ -674,38 +739,55 @@ def handle_callback(cb, allow):
 
     if chat_id != allow:
         telegram_api("answerCallbackQuery", {"callback_query_id": cb_id})
-        return
+        return None
 
-    note = "Nichts geändert."
     try:
-        _, kind, idx = data.split(":")
+        action, kind, idx = data.split(":")
         idx = int(idx)
     except ValueError:
-        kind, idx = "x", 0
+        action, kind, idx = "del", "x", 0
+
+    pending = None
+    note = "Nichts geändert."
 
     if kind == "x":
         note = "Abgebrochen."
-    else:
+    elif action == "edit":
+        t = load_targets()
+        lst = t["auto"] if kind == "a" else t["manual"]
+        if 0 <= idx < len(lst):
+            name, url = lst[idx]
+            pending = (kind, idx)
+            note = (
+                f"✏️ <b>{name}</b> bearbeiten.\n\n"
+                "Schick mir jetzt den neuen Eintrag als:\n"
+                "<code>Name | https://…</code>\n\n"
+                "Oder nur eine neue URL, oder nur einen neuen Namen."
+            )
+        else:
+            note = "Eintrag nicht mehr vorhanden (Liste hat sich geändert)."
+    else:  # del
         t = load_targets()
         lst = t["auto"] if kind == "a" else t["manual"]
         if 0 <= idx < len(lst):
             removed = lst.pop(idx)
             save_targets(t)
-            name = site_name(removed) if kind == "a" else removed[0]
-            note = f"🗑 Gelöscht: {name}"
+            note = f"🗑 Gelöscht: {removed[0]}"
             log(f"[bot] gelöscht ({kind}): {removed}")
         else:
             note = "Eintrag nicht mehr vorhanden (Liste hat sich geändert)."
 
-    telegram_api("answerCallbackQuery", {"callback_query_id": cb_id, "text": note})
+    telegram_api("answerCallbackQuery", {"callback_query_id": cb_id})
     if msg_id is not None:
         try:
             telegram_api(
                 "editMessageText",
-                {"chat_id": chat_id, "message_id": msg_id, "text": note, "parse_mode": "HTML"},
+                {"chat_id": chat_id, "message_id": msg_id, "text": note,
+                 "parse_mode": "HTML", "disable_web_page_preview": "true"},
             )
         except Exception:
             pass
+    return pending
 
 
 def run_bot():
@@ -724,6 +806,7 @@ def run_bot():
         log(f"Start-Nachricht fehlgeschlagen: {exc}")
 
     offset = None
+    pending_edit = None  # ('a'|'m', idx) während einer /edit-Folgeeingabe
     while True:
         try:
             params = {"timeout": 50}
@@ -741,7 +824,7 @@ def run_bot():
             cb = upd.get("callback_query")
             if cb:
                 try:
-                    handle_callback(cb, allow)
+                    pending_edit = handle_callback(cb, allow) or pending_edit
                 except Exception as exc:  # noqa: BLE001
                     log(f"Callback-Fehler: {exc}")
                 continue
@@ -755,6 +838,18 @@ def run_bot():
             raw = (msg.get("text") or "").strip()
             if not raw:
                 continue
+
+            # Folgeeingabe einer ausstehenden /edit-Bearbeitung (kein Befehl)?
+            if pending_edit and not raw.startswith("/"):
+                try:
+                    tg_send(apply_edit(pending_edit, raw))
+                except Exception as exc:  # noqa: BLE001
+                    log(f"Edit-Fehler: {exc}")
+                    tg_send(f"⚠️ Fehler beim Ändern: {exc}")
+                pending_edit = None
+                continue
+
+            pending_edit = None  # ein echter Befehl bricht eine offene Bearbeitung ab
             parts = raw.split(maxsplit=1)
             cmd = parts[0].lower().split("@")[0]
             arg = parts[1].strip() if len(parts) > 1 else ""

@@ -129,6 +129,7 @@ Dann in Telegram an den Bot schreiben. Verfügbare Befehle:
 | `/list` | Überwachte und manuelle Seiten auflisten |
 | `/add <link>` | Neue Seite zur **automatischen** Prüfung hinzufügen |
 | `/link <link>` | Neue Seite nur als **manuellen** Link (wie MediaMarkt) |
+| `/edit` | Name/URL eines Eintrags ändern (Auswahlmenü, dann `Name \| URL` schicken) |
 | `/del` | Eintrag über ein Auswahlmenü (Knöpfe) löschen |
 | `/help` | Hilfe anzeigen |
 
