@@ -270,11 +270,18 @@ CHALLENGE_MARKERS = [
 
 
 def is_challenge(html):
-    """Erkennt eine Cloudflare-Interstitial-/Challenge-Seite (statt echtem Inhalt)."""
+    """Erkennt eine Cloudflare-Interstitial-/Challenge-Seite (statt echtem Inhalt).
+
+    Größenunabhängig: die Challenge-Seite hat den Titel „Nur einen Moment…"
+    bzw. lädt das Cloudflare-Challenge-Script – das ist das zuverlässige Signal.
+    """
     if not html:
         return False
     low = html.lower()
-    return len(html) < 60000 and any(m in low for m in CHALLENGE_MARKERS)
+    # Sehr starkes Signal: Titel der Cloudflare-Wartesseite.
+    if "<title>nur einen moment" in low or "<title>just a moment" in low:
+        return True
+    return any(m in low for m in CHALLENGE_MARKERS)
 
 
 def dismiss_cookies(page):
