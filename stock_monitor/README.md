@@ -83,6 +83,14 @@ Zeile einfügen (Pfad ggf. anpassen):
 
 `0 * * * *` = jede volle Stunde. (Tipp zum Testen alle 15 Min: `*/15 * * * *`.)
 
+**Lebenszeichen:** Standardmäßig meldet sich der Job nur, wenn etwas bestellbar
+wird. Möchtest du stündlich auch dann eine kurze Status-Übersicht (um zu sehen,
+dass er läuft), setze in `.env`:
+
+```
+HEARTBEAT=1
+```
+
 > Hinweis macOS: Cron läuft nur, wenn der Rechner an ist. Soll es auch im
 > Ruhezustand/zuverlässig laufen, sag Bescheid – dann liefere ich eine
 > `launchd`-Variante (.plist).

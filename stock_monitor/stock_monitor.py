@@ -335,6 +335,13 @@ def run(test_mode=False):
             log(f"Telegram-Meldung gesendet ({len(alerts)} Treffer).")
         except Exception as exc:  # noqa: BLE001
             log(f"Konnte Telegram nicht senden: {exc}")
+    elif os.environ.get("HEARTBEAT") == "1":
+        # Lebenszeichen: bestätigt, dass der Job läuft, auch wenn nichts neu ist.
+        try:
+            send_telegram("🫀 Stündlicher Check – nichts Neues.\n\n" + format_results(results))
+            log("Heartbeat-Meldung gesendet (nichts Neues).")
+        except Exception as exc:  # noqa: BLE001
+            log(f"Konnte Heartbeat nicht senden: {exc}")
     else:
         log("Keine neue Verfügbarkeit – keine Meldung.")
 
@@ -412,6 +419,16 @@ def main():
 
     if "--bot" in args:
         run_bot()
+        return
+    if "--debug" in args:
+        pages = fetch_pages(URLS)
+        for url in URLS:
+            html = pages.get(url, "")
+            status, detail = detect_status(url, html)
+            name = site_name(url)
+            out = BASE_DIR / f"debug-{name}.html"
+            out.write_text(html, encoding="utf-8")
+            print(f"{name:12s} {status:12s} ({detail})  [{len(html)} Bytes -> {out.name}]")
         return
 
     if "--get-chat-id" in args:
