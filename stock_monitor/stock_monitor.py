@@ -520,14 +520,25 @@ def in_heartbeat_window():
 
 
 def manual_footer(results=None):
-    """„Bitte manuell prüfen": konfigurierte manuelle Links + aktuell blockierte
-    (Cloudflare) Auto-Seiten. Letztere wandern automatisch hier rein, solange sie
-    geblockt sind – kommen sie wieder durch, erscheinen sie wieder als Status."""
-    items = list(get_manual_urls())
+    """„Bitte manuell prüfen": rein manuelle Links + aktuell blockierte Auto-Seiten.
+    Auto-Seiten, die NICHT blockiert sind, erscheinen hier nie (sie stehen oben als
+    Status) – auch wenn versehentlich ein doppelter manueller Eintrag existiert."""
+    auto_urls = {url for _n, url in get_auto()}
+    blocked_urls = {r["url"] for r in (results or []) if r["status"] == BLOCKED}
+
+    items = []
+    # Konfigurierte manuelle Links – aber keine, die als Auto-Seite gerade
+    # normal (nicht blockiert) geprüft werden (verhindert Doppelanzeige).
+    for name, url in get_manual_urls():
+        if url in auto_urls and url not in blocked_urls:
+            continue
+        items.append([name, url])
+    # Aktuell blockierte Auto-Seiten.
     if results:
         for r in results:
             if r["status"] == BLOCKED:
                 items.append([r["name"], r["url"]])
+
     if not items:
         return ""
     seen = set()
@@ -536,7 +547,9 @@ def manual_footer(results=None):
         if url in seen:
             continue
         seen.add(url)
-        lines.append(f'<a href="{url}">{name}</a>')
+        # Falls der Name fehlt oder selbst eine URL ist: Domain als Bezeichnung.
+        label = name if (name and not name.startswith("http")) else site_name(url)
+        lines.append(f'<a href="{url}">{label}</a>')
     return "\n\n— ✋ <b>bitte manuell prüfen</b> —\n" + "\n".join(lines)
 
 
