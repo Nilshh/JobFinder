@@ -98,17 +98,19 @@ crontab -e
 Zeile einfügen (Pfad ggf. anpassen):
 
 ```cron
-0 * * * * /Users/nils/Documents/GitHub/JobFinder/JobFinder/stock_monitor/run.sh >> /Users/nils/Documents/GitHub/JobFinder/JobFinder/stock_monitor/cron.log 2>&1
+*/10 * * * * /root/JobFinder/stock_monitor/run.sh >> /root/JobFinder/stock_monitor/cron.log 2>&1
 ```
 
-`0 * * * *` = jede volle Stunde. (Tipp zum Testen alle 15 Min: `*/15 * * * *`.)
+`*/10 * * * *` = alle 10 Minuten. Häufiger (z.B. `*/5` oder `*/3`) = schneller bei
+Restocks, aber etwas mehr Last/Block-Risiko. Setze passend dazu
+`CHECK_INTERVAL_MINUTES=10` in der `.env`, damit `/next` die richtige Zeit anzeigt.
 
-Möchtest du z. B. immer **5 Minuten nach voll** prüfen, nimm `5 * * * *` und setze
-zusätzlich `CRON_MINUTE=5` in der `.env`, damit `/next` die richtige Zeit anzeigt.
+**Wiederhol-Alarm:** Sobald etwas bestellbar wird, kommt bei *jedem* Lauf erneut
+eine Meldung, bis du dem Bot `/seen` schickst – so verpasst du es nicht, falls du
+einen einzelnen Ping übersiehst.
 
 **Lebenszeichen:** Standardmäßig meldet sich der Job nur, wenn etwas bestellbar
-wird. Möchtest du stündlich auch dann eine kurze Status-Übersicht (um zu sehen,
-dass er läuft), setze in `.env`:
+wird. Für eine regelmäßige Status-Übersicht (Heartbeat) setze in `.env`:
 
 ```
 HEARTBEAT=1
@@ -143,6 +145,7 @@ Dann in Telegram an den Bot schreiben. Verfügbare Befehle:
 | `/link <Name> \| <link>` | Neue Seite nur als **manuellen** Link (Name optional) |
 | `/edit` | Name/URL eines Eintrags ändern (Auswahlmenü, dann `Name \| URL` schicken) |
 | `/price` | Preisalarm setzen (Auswahlmenü, dann Maximalpreis; `0` = aus) |
+| `/seen` | Wiederhol-Alarme quittieren/stoppen |
 | `/del` | Eintrag über ein Auswahlmenü (Knöpfe) löschen |
 | `/help` | Hilfe anzeigen |
 

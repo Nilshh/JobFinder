@@ -564,9 +564,15 @@ def run(test_mode=False):
         if test_mode:
             continue
 
-        # Alarm nur beim Übergang nach AVAILABLE (verhindert Dauer-Spam)
-        if status == AVAILABLE and prev != AVAILABLE:
-            line = f"✅ <b>{name}</b> ist jetzt bestellbar!"
+        # Verfügbarkeits-Alarm: beim Wechsel auf bestellbar – und danach bei JEDEM
+        # Lauf erneut (Wiederhol-Alarm), bis du /seen schickst. So verpasst du es
+        # nicht, falls du einen Ping übersiehst. „ack" = quittiert.
+        ack = st_prev.get("ack", False) if (status == AVAILABLE and prev == AVAILABLE) else False
+        if status == AVAILABLE and not ack:
+            if prev == AVAILABLE:
+                line = f"🔁 <b>{name}</b> ist weiterhin bestellbar – /seen zum Stoppen"
+            else:
+                line = f"✅ <b>{name}</b> ist jetzt bestellbar!"
             if price is not None:
                 line += f" ({fmt_price(price)})"
             alerts.append(line + f"\n{url}")
@@ -591,7 +597,7 @@ def run(test_mode=False):
             alerts.append(f"⚠️ <b>{name}</b> nicht prüfbar ({detail})\n{url}")
 
         state[url] = {"status": status, "detail": detail, "price": price,
-                      "ts": int(time.time())}
+                      "ack": ack, "ts": int(time.time())}
 
     if test_mode:
         return
@@ -628,10 +634,11 @@ HELP_TEXT = (
     "/link &lt;Name&gt; | &lt;link&gt; – neue Seite nur als manuellen Link (Name optional)\n"
     "/edit – Name/URL eines Eintrags über Auswahlmenü ändern\n"
     "/price – Preisalarm setzen (Auswahlmenü, dann Maximalpreis)\n"
+    "/seen – Wiederhol-Alarme quittieren (stoppen)\n"
     "/del – Eintrag über Auswahlmenü löschen\n"
     "/help – diese Hilfe\n\n"
-    "Außerdem melde ich mich automatisch, sobald ein Artikel wieder bestellbar wird "
-    "oder im Preis unter dein Ziel fällt."
+    "Sobald ein Artikel bestellbar wird, melde ich mich – und wiederhole die Meldung "
+    "bei jedem Lauf, bis du /seen schickst. Außerdem bei Preis unter deinem Ziel."
 )
 
 BOT_COMMANDS = [
@@ -642,6 +649,7 @@ BOT_COMMANDS = [
     {"command": "link", "description": "Manueller Link: /link Name | <link>"},
     {"command": "edit", "description": "Name/URL eines Eintrags ändern (Auswahlmenü)"},
     {"command": "price", "description": "Preisalarm setzen (Auswahlmenü)"},
+    {"command": "seen", "description": "Wiederhol-Alarme quittieren/stoppen"},
     {"command": "del", "description": "Eintrag löschen (Auswahlmenü)"},
     {"command": "help", "description": "Hilfe anzeigen"},
 ]
@@ -694,19 +702,23 @@ def _human_delta(sec):
     return f"{sec // 86400} Tg"
 
 
+def check_interval_minutes():
+    try:
+        return max(1, int(os.environ.get("CHECK_INTERVAL_MINUTES", "60")))
+    except ValueError:
+        return 60
+
+
 def next_check_ts():
-    """Nächster geplanter Cron-Lauf (stündlich zur Minute CRON_MINUTE, Default 0)."""
-    minute = int(os.environ.get("CRON_MINUTE", "0"))
+    """Nächster geplanter Lauf, abgeleitet aus dem Intervall (Slots ab Mitternacht).
+    Z.B. Intervall 10 -> :00, :10, :20 … Muss zur Crontab passen (*/10)."""
+    interval = check_interval_minutes()
     now = time.time()
     lt = time.localtime(now)
-    cand = time.struct_time(
-        (lt.tm_year, lt.tm_mon, lt.tm_mday, lt.tm_hour, minute, 0,
-         lt.tm_wday, lt.tm_yday, lt.tm_isdst)
-    )
-    cand_sec = time.mktime(cand)
-    if cand_sec <= now:
-        cand_sec += 3600
-    return cand_sec
+    mins_of_day = lt.tm_hour * 60 + lt.tm_min
+    next_slot = ((mins_of_day // interval) + 1) * interval
+    midnight = now - (mins_of_day * 60 + lt.tm_sec)
+    return midnight + next_slot * 60
 
 
 def cmd_next():
@@ -714,6 +726,7 @@ def cmd_next():
     st = load_state()
     last = st.get("_meta", {}).get("last_run")
     now = time.time()
+    interval = check_interval_minutes()
     lines = ["🕒 <b>Check-Zeiten</b>"]
     if last:
         lines.append(f"Letzter Lauf: {_fmt_time(last)}  (vor {_human_delta(now - last)})")
@@ -721,7 +734,7 @@ def cmd_next():
         lines.append("Letzter Lauf: noch keiner (oder Cron läuft noch nicht)")
     nxt = next_check_ts()
     lines.append(f"Nächster Lauf: {_fmt_time(nxt)}  (in {_human_delta(nxt - now)})")
-    lines.append("\n<i>Plan: stündlich. Falls dein Cron anders läuft, mit CRON_MINUTE anpassen.</i>")
+    lines.append(f"\n<i>Plan: alle {interval} Min. Muss zur Crontab passen (z.B. */{interval}).</i>")
     return "\n".join(lines)
 
 
@@ -891,6 +904,19 @@ def handle_command(cmd, arg):
             tg_send("Es gibt keine Einträge.")
         else:
             tg_send(prompt, reply_markup=kb)
+
+    elif cmd in ("/seen", "seen", "/gesehen", "gesehen"):
+        st = load_state()
+        n = 0
+        for v in st.values():
+            if isinstance(v, dict) and v.get("status") == AVAILABLE and not v.get("ack"):
+                v["ack"] = True
+                n += 1
+        save_state(st)
+        if n:
+            tg_send(f"✅ Quittiert – Wiederhol-Alarme für {n} Artikel gestoppt.")
+        else:
+            tg_send("Nichts zu quittieren (kein aktiver Bestellbar-Alarm).")
 
     elif cmd in ("/start", "/help", "help", "start"):
         tg_send(HELP_TEXT)
