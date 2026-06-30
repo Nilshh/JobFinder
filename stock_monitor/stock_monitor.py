@@ -775,16 +775,23 @@ def cmd_next():
 
 
 def cmd_list():
-    """Textübersicht aller Einträge."""
+    """Textübersicht aller Einträge inkl. gesetzter Preisschwelle."""
     t = load_targets()
+    pmax = t.get("price_max", {})
+
+    def entry(name, url, icon):
+        limit = pmax.get(url)
+        tag = f"  💶 ≤ {fmt_price(float(limit))}" if limit is not None else ""
+        return f"{icon} <b>{name}</b>{tag}\n<a href=\"{url}\">{url}</a>"
+
     parts = ["📋 <b>Überwachte Seiten</b>"]
     if t["auto"]:
-        parts += [f"🔎 <b>{n}</b>\n<a href=\"{u}\">{u}</a>" for n, u in t["auto"]]
+        parts += [entry(n, u, "🔎") for n, u in t["auto"]]
     else:
         parts.append("(keine)")
     parts.append("\n✋ <b>Nur manueller Link</b>")
     if t["manual"]:
-        parts += [f"<b>{n}</b>\n<a href=\"{u}\">{u}</a>" for n, u in t["manual"]]
+        parts += [entry(n, u, "✋") for n, u in t["manual"]]
     else:
         parts.append("(keine)")
     return "\n\n".join(parts)
