@@ -322,12 +322,17 @@ def is_challenge(html):
     if not html:
         return False
     low = html.lower()
-    return (
-        "<title>nur einen moment" in low
-        or "<title>just a moment" in low
-        or "<title>einen moment" in low
-        or "checking your browser before accessing" in low
+    title_markers = (
+        "<title>nur einen moment",   # Cloudflare DE
+        "<title>just a moment",      # Cloudflare EN
+        "<title>einen moment",
+        "<title>sicherheitscheck",   # z.B. prosatech.de
+        "<title>security check",
+        "<title>bot detection",
+        "<title>access denied",
+        "<title>zugriff verweigert",
     )
+    return any(m in low for m in title_markers) or "checking your browser before accessing" in low
 
 
 def dismiss_cookies(page):
