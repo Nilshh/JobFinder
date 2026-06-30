@@ -489,6 +489,15 @@ def monitor_title():
     return os.environ.get("MONITOR_TITLE", "Verfügbarkeits-Check").strip() or "Verfügbarkeits-Check"
 
 
+def heartbeat_interval_min():
+    """Mindestabstand zwischen zwei Heartbeat-Meldungen (Default 60 Min), damit
+    das Lebenszeichen nicht bei jedem Prüflauf (z.B. alle 10 Min) kommt."""
+    try:
+        return max(1, int(os.environ.get("HEARTBEAT_EVERY_MIN", "60")))
+    except ValueError:
+        return 60
+
+
 def in_heartbeat_window():
     """True, wenn die aktuelle Stunde im Heartbeat-Fenster liegt (Ruhezeiten).
     Konfiguriert über HEARTBEAT_FROM/HEARTBEAT_TO (lokale Stunden, Default 8–22).
@@ -602,9 +611,9 @@ def run(test_mode=False):
     if test_mode:
         return
 
-    # Zeitpunkt des letzten automatischen Laufs merken (für /next).
-    state["_meta"] = {"last_run": int(time.time())}
-    save_state(state)
+    now = int(time.time())
+    meta = state.get("_meta", {}) if isinstance(state.get("_meta"), dict) else {}
+    meta["last_run"] = now  # für /next
 
     if alerts:
         header = f"🛒 <b>{monitor_title()} – Verfügbarkeit</b>\n\n"
@@ -613,15 +622,24 @@ def run(test_mode=False):
             log(f"Telegram-Meldung gesendet ({len(alerts)} Treffer).")
         except Exception as exc:  # noqa: BLE001
             log(f"Konnte Telegram nicht senden: {exc}")
-    elif os.environ.get("HEARTBEAT") == "1" and in_heartbeat_window():
-        # Lebenszeichen: bestätigt, dass der Job läuft, auch wenn nichts neu ist.
+    elif (
+        os.environ.get("HEARTBEAT") == "1"
+        and in_heartbeat_window()
+        and now - meta.get("last_heartbeat", 0) >= heartbeat_interval_min() * 60
+    ):
+        # Lebenszeichen: bestätigt, dass der Job läuft – aber entkoppelt vom Prüf-
+        # Takt (höchstens alle HEARTBEAT_EVERY_MIN Minuten), nicht bei jedem Lauf.
         try:
-            send_telegram("🫀 Stündlicher Check – nichts Neues.\n\n" + format_results(results))
+            send_telegram("🫀 Status – nichts Neues.\n\n" + format_results(results))
+            meta["last_heartbeat"] = now
             log("Heartbeat-Meldung gesendet (nichts Neues).")
         except Exception as exc:  # noqa: BLE001
             log(f"Konnte Heartbeat nicht senden: {exc}")
     else:
         log("Keine neue Verfügbarkeit – keine Meldung.")
+
+    state["_meta"] = meta
+    save_state(state)
 
 
 HELP_TEXT = (
