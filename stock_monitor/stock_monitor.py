@@ -389,7 +389,7 @@ def detect_status(url, html):
     if not html:
         return UNKNOWN, "kein Inhalt (blockiert/Fehler)"
     if is_challenge(html):
-        return BLOCKED, "Cloudflare-Challenge"
+        return BLOCKED, "Bot-Sperre/Challenge"
 
     host = urllib.parse.urlparse(url).netloc.lower()
     avails = jsonld_availabilities(html)
