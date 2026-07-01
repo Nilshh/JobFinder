@@ -159,7 +159,9 @@ def send_telegram(text):
             "chat_id": chat_id,
             "text": text,
             "parse_mode": "HTML",
-            "disable_web_page_preview": "false",
+            # Keine Link-Vorschau-Karte (sonst hängt Telegram unten eine Vorschau
+            # des ersten Links an – wirkte wie ein Extra-Eintrag).
+            "disable_web_page_preview": "true",
         },
     )
     if not res.get("ok"):
